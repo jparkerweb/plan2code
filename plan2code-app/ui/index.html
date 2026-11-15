@@ -216,6 +216,42 @@
     #launch-start:hover { background: #357a5c; }
     #launch-start:disabled { background: #444; color: #888; cursor: not-allowed; }
 
+    /* The folder picker: full screen on a bare start, a dialog over the page
+       (with Cancel) from Change project. Choose a folder comes first; each
+       recent folder shows its name with the full path muted under it. */
+    #folder-picker {
+      position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+      background: #1e1e1e; padding: 24px; box-sizing: border-box;
+    }
+    #folder-picker[hidden] { display: none; }
+    #folder-picker.is-dialog { background: rgba(0, 0, 0, 0.55); }
+    #folder-picker-panel { display: flex; flex-direction: column; gap: 12px; width: min(440px, 100%); max-height: 100%; }
+    #folder-picker.is-dialog #folder-picker-panel {
+      background: var(--panel); border: 1px solid var(--rule-2); border-radius: 10px; padding: 18px; box-sizing: border-box;
+    }
+    #folder-picker h2 { margin: 0; font-size: 17px; text-align: center; }
+    #folder-picker-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+    .folder-picker-row {
+      appearance: none; width: 100%; text-align: left; font: inherit; cursor: pointer;
+      display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 8px;
+      border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink);
+    }
+    .folder-picker-row:hover:not(:disabled) { background: var(--panel-2); border-color: var(--accent-line); }
+    .folder-picker-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .folder-picker-row:disabled { opacity: 0.6; cursor: default; }
+    .folder-picker-row.is-browse { font-weight: 600; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .folder-picker-row.is-browse:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); filter: brightness(1.08); }
+    .folder-picker-label { font-size: 13.5px; }
+    .folder-picker-detail { font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+    #folder-picker-error { margin: 0; font-size: 12px; color: #d7ba7d; }
+    #folder-picker-error[hidden], #folder-picker-cancel[hidden] { display: none; }
+    #folder-picker-cancel {
+      align-self: center; appearance: none; font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 13px;
+      border-radius: 8px; cursor: pointer; border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink);
+    }
+    #folder-picker-cancel:hover { background: var(--panel-2); }
+    #folder-picker-cancel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
     #first-run {
       position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
       align-items: stretch; justify-content: center; gap: 14px; background: #1e1e1e;
@@ -358,6 +394,14 @@
           <button id="dashboard-state-button" hidden></button>
           <button id="dashboard-state-cancel" hidden>Cancel</button>
         </span>
+      </div>
+      <div id="folder-picker" hidden>
+        <div id="folder-picker-panel" role="dialog" aria-labelledby="folder-picker-title">
+          <h2 id="folder-picker-title">Open a project</h2>
+          <ul id="folder-picker-list"></ul>
+          <p id="folder-picker-error" role="alert" hidden></p>
+          <button id="folder-picker-cancel" type="button" hidden>Cancel</button>
+        </div>
       </div>
       <div id="first-run" hidden>
         <h2>Before you start</h2>

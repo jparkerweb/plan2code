@@ -36,7 +36,7 @@ file directly after checking it against the release's checksum list.
       launch card or checklist shown first, and New Session keeps them
 - [ ] `plan2code --classic` runs the agent in the terminal with the app installed
 - [ ] Linux only: with `DISPLAY` and `WAYLAND_DISPLAY` unset, `plan2code` runs the terminal flow
-- [ ] The desktop shortcut opens the folder picker and then the app
+- [ ] The desktop shortcut opens the folder menu (Choose a folder first, recent folders under it) and then the app
 - [ ] macOS: the first start is stopped by Gatekeeper, **Open Anyway** in System Settings (Privacy &
       Security) lets it through, and `docs/desktop-app.md` describes what you saw
 - [ ] macOS and Linux: start the app from the Dock, Finder or a `.desktop` file (not a terminal) on
@@ -75,7 +75,8 @@ file directly after checking it against the release's checksum list.
 - [ ] The top bar's project and agent menus open under their name, close on a click elsewhere (the
       console frame and the terminal included) or Escape, and are not cut off by the bar
 - [ ] **Change project** in the top bar's project menu, with an agent running: it asks first, then the folder
-      picker opens; canceling the picker leaves the running agent and its project untouched
+      picker (Choose a folder, then recent folders) opens; canceling the picker leaves the running agent and its project untouched
+- [ ] Start the app with no arguments: it shows the folder picker, not the last project; a recent folder opens in one click
 - [ ] Change project, pick a different folder: the old agent and console stop, the new folder opens
       on the launch card (or the checklist, if its own first run has not passed yet)
 - [ ] Reload the window (or navigate away and back) while an agent is running: the terminal redraws

@@ -48,7 +48,9 @@ You also need Node.js 18 or newer (the app checks at start and says what to inst
 Run `plan2code` in your project, as always. When the app is installed and a window can open,
 `plan2code` asks which agent and model (as before) and then opens the app on that folder instead of
 running the agent in your terminal. The desktop shortcut the installer can create runs the same
-command, so it opens the app too.
+command, so it opens the app too; it asks for the folder first, with **Choose a folder** at the top and the folders you opened lately under it (with none yet, it goes straight to the folder dialog).
+
+Start the app itself (from the Start menu, the Dock or a launcher) and it asks for a folder the same way: **Choose a folder** first, then your recent folders, newest first. It no longer reopens the last folder on its own.
 
 Three things keep today's terminal flow:
 
@@ -112,7 +114,7 @@ separate context-window meter of its own, so there is only ever one gauge to rea
 threshold is tuned. The terminal panel has its own toolbar: dock it to the bottom or the right, collapse
 it to a thin strip, or maximize it; its size is remembered. An "agent may need you" badge appears on a
 collapsed or small panel once the agent has sat quiet for a while. **Change project** (in the project
-menu) asks first if an agent is running, then stops it and the console before opening the new folder.
+menu) asks first if an agent is running, then stops it and the console before opening the new folder. It shows the same folder picker, with **Choose a folder** first and the recent folders under it (the one already open is left out); Cancel or Escape keeps the project as it is.
 
 If the console itself ever needs reconnecting (it stopped, or the skills were just updated), every path
 to that offers the same **Reconnect the console** button — never "Restart the console" in one place and

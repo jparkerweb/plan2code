@@ -37,8 +37,18 @@
  * Preferences in the web console) are listed after the built-ins and started the same way, with
  * `--cli <id>` or from the menu. Their rules are copied from src/web-console/agents.mjs below.
  *
- * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
- * project folder with a native folder picker first, starting on the folder picked last time.
+ * Folders: the launcher keeps the last 5 project folders opened, newest first, in
+ * ~/.plan2code/launcher.json (`recentFolders`, with `lastFolder` always its first entry; the
+ * desktop app reads and writes the same list by the same rule). At a terminal with recent folders
+ * to offer, it asks which folder to open in a numbered menu: the current folder first (Enter
+ * keeps it), the recent folders, then Choose another folder... for the native folder picker.
+ * With none to offer, or no terminal, it opens in the current folder without asking. A folder is
+ * added to the list only once it passes the project check.
+ *
+ * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) puts Choose a
+ * folder... first in that menu (Enter opens the native folder picker, starting on the folder
+ * opened last time, the first recent folder), with the recent folders under it; with none to
+ * offer it opens the picker straight away.
  *
  * When the desktop app is installed (~/.plan2code/app/) and a display exists, `plan2code` opens
  * the app on the chosen folder, agent and model instead of running the agent in this terminal.
@@ -714,7 +724,7 @@ function isDirectory(dir) {
   }
 }
 
-/** `~/.plan2code/launcher.json`: `{ lastFolder, lastCli, lastModels }`, any key possibly missing. */
+/** `~/.plan2code/launcher.json`: `{ lastFolder, recentFolders, lastCli, lastModels }`, any key possibly missing. */
 function readState() {
   try {
     const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -734,6 +744,104 @@ function saveState(changes) {
 function readLastFolder() {
   const { lastFolder } = readState();
   return lastFolder && isDirectory(lastFolder) ? lastFolder : os.homedir();
+}
+
+/** How many recent project folders the list keeps. */
+const RECENT_FOLDERS_MAX = 5;
+
+/** One trailing `\` or `/` off a path, but never off a root (`C:\` or `/`). */
+function trimFolder(p) {
+  if (p.length > 1 && /[\\/]$/.test(p) && !/^[A-Za-z]:[\\/]$/.test(p)) return p.slice(0, -1);
+  return p;
+}
+
+/**
+ * Whether two paths name the same folder: a trailing separator is ignored, and case is on
+ * Windows. The desktop app's `same_folder` (project.rs) holds the same rule, both to
+ * scripts/fixtures/recent-folders-cases.json.
+ */
+function sameFolder(a, b, platform = process.platform) {
+  const x = trimFolder(a);
+  const y = trimFolder(b);
+  return platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+
+/** The recent folders in `launcher.json`'s state: `recentFolders`, else `[lastFolder]`, else none. */
+function readRecent(state) {
+  const { recentFolders, lastFolder } = state || {};
+  if (Array.isArray(recentFolders)) {
+    return recentFolders.filter((x) => typeof x === 'string' && x !== '').slice(0, RECENT_FOLDERS_MAX);
+  }
+  return typeof lastFolder === 'string' && lastFolder !== '' ? [lastFolder] : [];
+}
+
+/** A new list with `dir` first, an earlier entry for the same folder removed, cut to the max. */
+function pushRecent(list, dir, platform = process.platform) {
+  return [dir, ...list.filter((x) => !sameFolder(x, dir, platform))].slice(0, RECENT_FOLDERS_MAX);
+}
+
+/** The folders of `list` worth offering: ones that still exist, minus the one in `exclude`. */
+function listRecent(list, { exists = isDirectory, exclude = null, platform = process.platform } = {}) {
+  return list.filter((x) => exists(x) && !(exclude && sameFolder(x, exclude, platform)));
+}
+
+/** Put `dir` at the top of the recent folders; `lastFolder` stays the newest entry. */
+function recordFolder(dir) {
+  const recentFolders = pushRecent(readRecent(readState()), dir);
+  saveState({ recentFolders, lastFolder: recentFolders[0] });
+}
+
+/**
+ * The rows of the folder menu. From the `plan2code` command: the current folder first (Enter
+ * keeps it), the recent folders, then a row to browse. From the desktop shortcut: the browse row
+ * first, then the recent folders. `recent` comes already filtered by listRecent.
+ */
+function folderMenuRows({ fromShortcut, cwd, recent }) {
+  const name = (dir) => path.basename(dir) || dir;
+  const folder = (dir, detail) => ({ kind: 'folder', dir, name: name(dir), detail, label: `${name(dir)}  ${detail}` });
+  const folders = recent.map((dir) => folder(dir, dir));
+  if (fromShortcut) return [{ kind: 'browse', label: 'Choose a folder...' }, ...folders];
+  return [
+    folder(cwd, `${cwd} (current folder)`),
+    ...folders,
+    { kind: 'browse', label: 'Choose another folder...' },
+  ];
+}
+
+/** The row an answer to the folder menu picks: Enter is row 1, a number its row, else null (ask again). */
+function folderMenuPick(rows, answer) {
+  const text = String(answer || '').trim();
+  if (!text) return rows[0];
+  if (!/^\d+$/.test(text)) return null;
+  const n = Number(text);
+  return n >= 1 && n <= rows.length ? rows[n - 1] : null;
+}
+
+/** One folder menu row as printed: the folder name plain, its path dimmed. */
+function folderMenuLine(row) {
+  if (row.kind !== 'folder') return row.label;
+  return `${row.name}  ${c.dim(row.detail)}`;
+}
+
+/**
+ * Ask which project folder to open, from the recent folders. `{ kind: 'folder', dir }` opens
+ * that folder; `{ kind: 'browse' }` asks with the folder picker. With no recent folders to offer
+ * or no terminal to ask on, nothing is printed and the answer is what it was before the menu:
+ * the current folder, or the picker from the shortcut.
+ */
+async function chooseFolder({ fromShortcut, cwd }) {
+  const recent = listRecent(readRecent(readState()), { exclude: fromShortcut ? null : cwd });
+  if (!recent.length || !process.stdin.isTTY) return { kind: fromShortcut ? 'browse' : 'folder', dir: cwd };
+  const rows = folderMenuRows({ fromShortcut, cwd, recent });
+  console.log('');
+  console.log(c.bright('Which project folder?'));
+  console.log('');
+  rows.forEach((row, i) => console.log(`  ${c.cyan(`${i + 1})`)} ${folderMenuLine(row)}`));
+  for (;;) {
+    const row = folderMenuPick(rows, await ask(`Choice ${c.green('[1]')}: `));
+    if (row) return row;
+    console.log(c.dim(`Type a number from 1 to ${rows.length}, or press Enter for row 1.`));
+  }
 }
 
 function ask(prompt) {
@@ -1437,24 +1545,37 @@ async function pickFolder() {
 }
 
 /**
- * The folder to open in, confirmed as a project: process.cwd(), or the shortcut's folder pick
- * plus the same check. `{ cwd }` to carry on; `{ exit }` with the code to leave on when the
- * person canceled, picked a non-folder, or declined the project check.
+ * The folder to open in, confirmed as a project: picked from the folder menu (chooseFolder: the
+ * current folder, a recent one, or the folder picker), plus the project check. The folder is
+ * recorded in the recent folders only once the check passes. `{ cwd }` to carry on; `{ exit }`
+ * with the code to leave on when the person canceled, picked a non-folder, or declined the
+ * project check.
  */
 async function projectCwd(fromShortcut) {
-  let cwd = process.cwd();
-  if (fromShortcut) {
+  const choice = await chooseFolder({ fromShortcut, cwd: process.cwd() });
+  let cwd;
+  if (choice.kind === 'browse') {
     const folder = await pickFolder();
     if (!folder) return { exit: 0 };
     if (!isDirectory(folder)) {
       console.error(`${ce.red('plan2code:')} ${folder} is not a folder.`);
       return { exit: 1 };
     }
-    saveState({ lastFolder: folder });
     cwd = folder;
     console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
+  } else {
+    cwd = choice.dir;
+    if (cwd !== process.cwd()) {
+      // A recent folder can be deleted between the menu listing it and the pick.
+      if (!isDirectory(cwd)) {
+        console.error(`${ce.red('plan2code:')} ${cwd} is not a folder.`);
+        return { exit: 1 };
+      }
+      console.log(`Opening Plan2Code in ${c.cyan(cwd)}`);
+    }
   }
   if (!(await confirmProject(cwd))) return { exit: 0 };
+  recordFolder(cwd);
   return { cwd };
 }
 
@@ -1726,4 +1847,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { bypassQuestion, normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd };
+module.exports = { bypassQuestion, normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd, sameFolder, readRecent, pushRecent, listRecent, recordFolder, folderMenuRows, folderMenuPick };

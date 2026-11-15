@@ -90,7 +90,7 @@ custom agent that has none; for Codex the question names its sandbox, which that
 launch and remembers no answer. `plan2code --keep-permissions` keeps the prompts without asking, and
 `plan2code --bypass-permissions` turns them off without asking. With no terminal to ask on (a script or a pipe) the
 prompts stay on unless `--bypass-permissions` is given. The installer then offers a desktop shortcut (answer `y`),
-which opens a folder picker first. Uninstalling (`U`, or `plan2code uninstall` from any terminal) removes both.
+which opens a folder menu first: Choose a folder, with the project folders you opened lately under it (with none yet, it goes straight to the folder dialog). In a terminal, `plan2code` offers the same recent folders as a numbered menu. Uninstalling (`U`, or `plan2code uninstall` from any terminal) removes both.
 </details>
 
 <details>

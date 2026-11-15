@@ -3,7 +3,7 @@
 // request) with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, helloRetryAction, retryLabel, RETRY_AFTER_SECONDS } from './meter.js';
+import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, folderPickerRows, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, helloRetryAction, retryLabel, RETRY_AFTER_SECONDS } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -57,6 +57,11 @@ const launchEffortEl = document.getElementById('launch-effort');
 const launchBypassEl = document.getElementById('launch-bypass');
 const launchBypassWarningEl = document.getElementById('launch-bypass-warning');
 const launchStartBtn = document.getElementById('launch-start');
+const folderPickerEl = document.getElementById('folder-picker');
+const folderPickerPanelEl = document.getElementById('folder-picker-panel');
+const folderPickerListEl = document.getElementById('folder-picker-list');
+const folderPickerErrorEl = document.getElementById('folder-picker-error');
+const folderPickerCancelBtn = document.getElementById('folder-picker-cancel');
 const firstRunEl = document.getElementById('first-run');
 const firstRunListEl = document.getElementById('first-run-list');
 const firstRunStartBtn = document.getElementById('first-run-start');
@@ -1361,25 +1366,138 @@ function setProjectDir(dir) {
   window.__TAURI__.window.getCurrentWindow().setTitle(windowTitleFor(dir)).catch(() => {});
 }
 
-// The state `main()` read at startup: `pickFolder()` and the first-run
+// The state `main()` read at startup: the folder picker and the first-run
 // checklist both need it once a folder lands, after the fact.
 let appState = null;
 
-// Opens the OS folder picker. A canceled pick (or a failed one) lands on the
-// "No project folder chosen" state with a button that tries again.
-async function pickFolder() {
-  try {
-    const dir = await invoke('pick_project_folder');
-    if (!dir) {
-      showState('No project folder chosen', 'Choose folder', pickFolder);
-      return;
-    }
-    setProjectDir(dir);
-    if (appState) appState.projectDir = dir;
-    afterProjectKnown();
-  } catch (error) {
-    showState(`Could not open the folder picker: ${error}`, 'Choose folder', pickFolder);
+// The open folder picker's way back to its caller (null while none is open).
+let folderPickerResolve = null;
+
+function hideFolderPicker() {
+  folderPickerEl.hidden = true;
+  folderPickerEl.classList.remove('is-dialog');
+  folderPickerListEl.replaceChildren();
+}
+
+function closeFolderPicker(dir) {
+  const resolve = folderPickerResolve;
+  folderPickerResolve = null;
+  hideFolderPicker();
+  if (resolve) resolve(dir);
+}
+
+function setFolderPickerError(text) {
+  folderPickerErrorEl.textContent = text || '';
+  folderPickerErrorEl.hidden = !text;
+}
+
+function folderPickerButtons() {
+  return [...folderPickerListEl.querySelectorAll('.folder-picker-row')];
+}
+
+// One picker for a bare start (`dialog: false`, full screen) and Change
+// project (`dialog: true`, over the page, with Cancel and Escape). Choose a
+// folder runs the OS dialog; a recent row opens that folder. Resolves with
+// the folder opened, or null when the person cancels the dialog. A canceled
+// OS dialog comes back here, and an error shows inline with the rows usable.
+async function showFolderPicker({ dialog }) {
+  if (folderPickerResolve) closeFolderPicker(null);
+  stopRetryCountdown();
+  stateBox.hidden = true;
+  if (!dialog) {
+    hideLaunchCard();
+    hideFirstRun();
   }
+  setFolderPickerError('');
+  folderPickerCancelBtn.hidden = !dialog;
+  folderPickerEl.classList.toggle('is-dialog', dialog);
+  if (dialog) folderPickerPanelEl.setAttribute('aria-modal', 'true');
+  else folderPickerPanelEl.removeAttribute('aria-modal');
+  // The project already open is left out by the command itself.
+  let recent = [];
+  try {
+    recent = (await invoke('recent_folders')) || [];
+  } catch (error) {
+    setFolderPickerError(`Could not read the recent folders: ${error}`);
+  }
+  folderPickerListEl.replaceChildren(
+    ...folderPickerRows(recent).map((row) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `folder-picker-row is-${row.kind}`;
+      const label = document.createElement('span');
+      label.className = 'folder-picker-label';
+      label.textContent = row.label;
+      button.append(label);
+      if (row.detail) {
+        const detail = document.createElement('span');
+        detail.className = 'folder-picker-detail';
+        detail.textContent = row.detail;
+        button.append(detail);
+      }
+      button.onclick = () => chooseFolderRow(row, button, dialog);
+      li.append(button);
+      return li;
+    })
+  );
+  folderPickerEl.hidden = false;
+  folderPickerButtons()[0].focus();
+  return new Promise((resolve) => {
+    folderPickerResolve = resolve;
+  });
+}
+
+// One row pressed: the OS dialog for Choose a folder (`change_project` from
+// Change project, which tears the old project down), else that recent
+// folder. Nothing chosen keeps the picker up, focus back on the row.
+async function chooseFolderRow(row, button, dialog) {
+  const buttons = folderPickerButtons();
+  buttons.forEach((b) => { b.disabled = true; });
+  folderPickerCancelBtn.disabled = true;
+  setFolderPickerError('');
+  let dir = null;
+  try {
+    if (row.kind === 'browse') dir = await invoke(dialog ? 'change_project' : 'pick_project_folder');
+    else dir = await invoke('open_recent_folder', { dir: row.dir });
+  } catch (error) {
+    setFolderPickerError(row.kind === 'browse' ? `Could not open the folder picker: ${error}` : `Could not open ${row.dir}: ${error}`);
+  }
+  buttons.forEach((b) => { b.disabled = false; });
+  folderPickerCancelBtn.disabled = false;
+  if (dir) {
+    closeFolderPicker(dir);
+    return;
+  }
+  button.focus();
+}
+
+folderPickerCancelBtn.onclick = () => closeFolderPicker(null);
+// Escape is heard on the document: a click on the backdrop or the heading
+// leaves focus on the page, where a listener on the picker never sees it.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || folderPickerEl.hidden) return;
+  if (folderPickerCancelBtn.hidden || folderPickerCancelBtn.disabled) return;
+  event.preventDefault();
+  closeFolderPicker(null);
+});
+folderPickerEl.addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  const buttons = folderPickerButtons();
+  const at = buttons.indexOf(document.activeElement);
+  if (at < 0) return;
+  event.preventDefault();
+  const next = event.key === 'ArrowDown' ? Math.min(at + 1, buttons.length - 1) : Math.max(at - 1, 0);
+  buttons[next].focus();
+});
+
+// A bare start: the picker, full screen, until a folder is opened.
+async function chooseStartFolder() {
+  const dir = await showFolderPicker({ dialog: false });
+  if (!dir) return;
+  setProjectDir(dir);
+  if (appState) appState.projectDir = dir;
+  afterProjectKnown();
 }
 
 // Once a project folder is known: the first-run checklist (once, until it
@@ -1392,17 +1510,19 @@ function afterProjectKnown() {
   }
 }
 
-// Switches to a folder picked fresh: the Rust side tears the old project's
-// agent and console down before the new one is remembered, so nothing from
-// it carries over. Picking nothing (canceled) leaves the current project as
-// it was.
+// Switches to a folder picked in the folder picker's dialog: the Rust side
+// tears the old project's agent and console down before the new one is
+// remembered, so nothing from it carries over. Cancel (or Escape) leaves
+// the current project as it was; the folder already open is not listed.
 async function doChangeProject() {
-  showState('Choose the new project folder...');
   try {
-    const dir = await invoke('change_project');
+    const dir = await showFolderPicker({ dialog: true });
     if (!dir) {
-      if (agentActive()) hideState();
+      // Cancel leaves the page as it was: a running agent gets the keyboard
+      // back, and a dashboard still on screen is never covered.
+      if (agentActive() || frameReady) hideState();
       else afterProjectKnown();
+      if (agentActive()) terminal.focus();
       return;
     }
     setProjectDir(dir);
@@ -1533,7 +1653,7 @@ async function main() {
     setProjectDir(state.projectDir);
     afterProjectKnown();
   } else {
-    pickFolder();
+    chooseStartFolder();
   }
 }
 

@@ -1,6 +1,7 @@
 // Hide the extra console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -812,8 +813,8 @@ async fn update_skills(
     Ok(UpdateOutcome { message, status })
 }
 
-/// The OS folder picker, shown when no folder is known; a choice becomes the
-/// launcher's remembered folder.
+/// The OS folder picker, the folder picker's Choose a folder row on a bare
+/// start; a choice goes to the top of the recent folders.
 #[tauri::command(async)]
 fn pick_project_folder(
     app: tauri::AppHandle,
@@ -884,6 +885,68 @@ fn change_project(
     let text = choice.dir.to_string_lossy().into_owned();
     *state.project.lock().map_err(|e| e.to_string())? = Some(choice);
     Ok(Some(text))
+}
+
+/// The recent project folders that still exist, newest first, for the page's
+/// folder picker: `{ dir, name }` each, `name` the folder's own name (the full
+/// path for a root, which has none). The project already open is left out
+/// (none on a bare start), since picking it would change nothing. Off the
+/// main thread: each row checks the disk, and a saved folder on an
+/// unreachable share must not freeze the window.
+#[tauri::command(async)]
+fn recent_folders(state: State<'_, AppState>) -> Vec<serde_json::Value> {
+    let current = state
+        .project
+        .lock()
+        .ok()
+        .and_then(|p| p.as_ref().map(|p| p.dir.clone()));
+    project::recent_folders(current.as_deref())
+        .into_iter()
+        .map(|dir| {
+            let full = dir.to_string_lossy().into_owned();
+            let name = dir
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| full.clone());
+            serde_json::json!({ "dir": full, "name": name })
+        })
+        .collect()
+}
+
+/// Whether opening `dir` must first tear the current project down: only when
+/// a project is set and it is a different folder (`same_folder`'s rule, so a
+/// trailing separator, and case on Windows, do not count).
+fn needs_teardown(current: Option<&Path>, dir: &Path, windows: bool) -> bool {
+    current.is_some_and(|cur| {
+        !project::same_folder(&cur.to_string_lossy(), &dir.to_string_lossy(), windows)
+    })
+}
+
+/// Open one of the recent folders from the folder picker. A different folder
+/// than the open project tears the old one down first (as `change_project`
+/// does) and goes to the top of the recent folders; the same folder is kept
+/// as it is, with nothing torn down.
+#[tauri::command(async)]
+fn open_recent_folder(state: State<'_, AppState>, dir: String) -> Result<Option<String>, String> {
+    refuse_while_looping(&state, "project")?;
+    let path = Path::new(&dir);
+    if !path.is_dir() {
+        return Err(format!("{dir} is not a folder"));
+    }
+    let current = state
+        .project
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|p| p.dir.clone());
+    match current {
+        Some(cur) if !needs_teardown(Some(&cur), path, cfg!(windows)) => return Ok(Some(dir)),
+        Some(_) => teardown_project(&state)?,
+        None => {}
+    }
+    let choice = project::remember_folder(path)?;
+    *state.project.lock().map_err(|e| e.to_string())? = Some(choice);
+    Ok(Some(dir))
 }
 
 /// The console the agent opened, alive and as it is now, or restarted on the
@@ -1362,6 +1425,8 @@ fn main() {
             check_new_release,
             update_skills,
             pick_project_folder,
+            recent_folders,
+            open_recent_folder,
             change_project,
             console_start,
             console_status,
@@ -1926,5 +1991,22 @@ mod tests {
             err.contains("has not opened the dashboard"),
             "unexpected message: {err:?}"
         );
+    }
+
+    #[test]
+    fn opening_a_recent_folder_tears_down_only_a_different_project() {
+        let dir = Path::new("/work/b");
+        // No project yet: nothing to tear down.
+        assert!(!needs_teardown(None, dir, false));
+        // The same folder, as written or with a trailing separator.
+        assert!(!needs_teardown(Some(Path::new("/work/b")), dir, false));
+        assert!(!needs_teardown(Some(Path::new("/work/b/")), dir, false));
+        // A different folder.
+        assert!(needs_teardown(Some(Path::new("/work/a")), dir, false));
+        // Case counts outside Windows, not on it.
+        assert!(needs_teardown(Some(Path::new("/work/B")), dir, false));
+        let win = Path::new(r"C:\Work\B");
+        assert!(!needs_teardown(Some(Path::new(r"c:\work\b\")), win, true));
+        assert!(needs_teardown(Some(Path::new(r"C:\Work\A")), win, true));
     }
 }

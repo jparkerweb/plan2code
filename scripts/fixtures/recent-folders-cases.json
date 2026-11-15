@@ -1,0 +1,208 @@
+{
+  "$comment": "The rule of the recent-folders list in ~/.plan2code/launcher.json (`recentFolders`, newest first, at most 5) as cases both writers' tests load: the launcher (src/launcher/plan2code.js) and the desktop app (plan2code-app/src-tauri/src/project.rs). A case may carry `platform`: `win32` or `posix`; it runs only with that platform's rule (a case with none runs under both). Paths are plain strings. read: `state` is the launcher.json object, `expect` the list. push: `list`, `dir`, `expect`. list: `list`, `exists` (the folders that exist), `exclude` (a folder or null), `expect`.",
+  "read": [
+    {
+      "name": "the list is used as it is",
+      "state": { "recentFolders": ["/b", "/a"], "lastFolder": "/z" },
+      "expect": ["/b", "/a"]
+    },
+    {
+      "name": "an empty list is used as it is, not replaced by the last folder",
+      "state": { "recentFolders": [], "lastFolder": "/a" },
+      "expect": []
+    },
+    {
+      "name": "no list falls back to the last folder",
+      "state": { "lastFolder": "/a" },
+      "expect": ["/a"]
+    },
+    {
+      "name": "neither key gives an empty list",
+      "state": { "lastCli": "claude" },
+      "expect": []
+    },
+    {
+      "name": "an empty state gives an empty list",
+      "state": {},
+      "expect": []
+    },
+    {
+      "name": "entries that are not strings or are empty are dropped",
+      "state": { "recentFolders": ["/a", 7, "", null, "/b", { "x": 1 }] },
+      "expect": ["/a", "/b"]
+    },
+    {
+      "name": "a list that is not an array falls back to the last folder",
+      "state": { "recentFolders": "/x", "lastFolder": "/a" },
+      "expect": ["/a"]
+    },
+    {
+      "name": "a list that is not an array and no last folder gives an empty list",
+      "state": { "recentFolders": { "0": "/x" } },
+      "expect": []
+    },
+    {
+      "name": "an empty last folder is no folder",
+      "state": { "lastFolder": "" },
+      "expect": []
+    },
+    {
+      "name": "more than 5 entries are cut to 5",
+      "state": { "recentFolders": ["/1", "/2", "/3", "/4", "/5", "/6", "/7"] },
+      "expect": ["/1", "/2", "/3", "/4", "/5"]
+    }
+  ],
+  "push": [
+    {
+      "name": "a new folder goes first",
+      "list": ["/b", "/a"],
+      "dir": "/c",
+      "expect": ["/c", "/b", "/a"]
+    },
+    {
+      "name": "a first folder starts the list",
+      "list": [],
+      "dir": "/a",
+      "expect": ["/a"]
+    },
+    {
+      "name": "an existing folder moves to the top without a duplicate",
+      "list": ["/c", "/b", "/a"],
+      "dir": "/a",
+      "expect": ["/a", "/c", "/b"]
+    },
+    {
+      "name": "a sixth folder drops the oldest",
+      "list": ["/5", "/4", "/3", "/2", "/1"],
+      "dir": "/6",
+      "expect": ["/6", "/5", "/4", "/3", "/2"]
+    },
+    {
+      "name": "a folder already first stays first",
+      "list": ["/a", "/b"],
+      "dir": "/a",
+      "expect": ["/a", "/b"]
+    },
+    {
+      "name": "a trailing slash matches the bare path",
+      "list": ["/b", "/a"],
+      "dir": "/a/",
+      "expect": ["/a/", "/b"]
+    },
+    {
+      "name": "a bare path matches a listed trailing slash",
+      "list": ["/b", "/a/"],
+      "dir": "/a",
+      "expect": ["/a", "/b"]
+    },
+    {
+      "name": "a trailing backslash matches the bare path",
+      "list": ["D:\\x", "C:\\a"],
+      "dir": "C:\\a\\",
+      "expect": ["C:\\a\\", "D:\\x"]
+    },
+    {
+      "name": "a drive root keeps its separator",
+      "list": ["C:\\", "C:\\a"],
+      "dir": "C:\\a\\",
+      "expect": ["C:\\a\\", "C:\\"]
+    },
+    {
+      "name": "the root of a posix tree is not stripped to nothing",
+      "list": ["/a"],
+      "dir": "/",
+      "expect": ["/", "/a"]
+    },
+    {
+      "name": "a drive root is not the bare drive",
+      "list": ["C:"],
+      "dir": "C:\\",
+      "expect": ["C:\\", "C:"]
+    },
+    {
+      "name": "a drive root with a slash is not the bare drive",
+      "list": ["C:"],
+      "dir": "C:/",
+      "expect": ["C:/", "C:"]
+    },
+    {
+      "name": "a drive root matches itself",
+      "list": ["C:\\"],
+      "dir": "C:\\",
+      "expect": ["C:\\"]
+    },
+    {
+      "name": "the posix root is not an empty path",
+      "list": ["/a", ""],
+      "dir": "/",
+      "expect": ["/", "/a", ""]
+    },
+    {
+      "platform": "win32",
+      "name": "windows ignores case and keeps the new spelling",
+      "list": ["D:\\x", "c:\\git\\a"],
+      "dir": "C:\\Git\\A",
+      "expect": ["C:\\Git\\A", "D:\\x"]
+    },
+    {
+      "platform": "posix",
+      "name": "posix tells case apart",
+      "list": ["/x", "/git/a"],
+      "dir": "/Git/A",
+      "expect": ["/Git/A", "/x", "/git/a"]
+    }
+  ],
+  "list": [
+    {
+      "name": "folders that are gone are skipped and the order is kept",
+      "list": ["/c", "/b", "/a"],
+      "exists": ["/a", "/c"],
+      "exclude": null,
+      "expect": ["/c", "/a"]
+    },
+    {
+      "name": "nothing existing gives an empty list",
+      "list": ["/b", "/a"],
+      "exists": [],
+      "exclude": null,
+      "expect": []
+    },
+    {
+      "name": "the excluded folder is removed",
+      "list": ["/c", "/b", "/a"],
+      "exists": ["/a", "/b", "/c"],
+      "exclude": "/b",
+      "expect": ["/c", "/a"]
+    },
+    {
+      "name": "the excluded folder matches past a trailing slash",
+      "list": ["/c", "/b", "/a"],
+      "exists": ["/a", "/b", "/c"],
+      "exclude": "/b/",
+      "expect": ["/c", "/a"]
+    },
+    {
+      "name": "excluding a drive root leaves the bare drive",
+      "list": ["C:", "C:\\"],
+      "exists": ["C:", "C:\\"],
+      "exclude": "C:\\",
+      "expect": ["C:"]
+    },
+    {
+      "platform": "win32",
+      "name": "windows excludes by folder, not by spelling",
+      "list": ["C:\\Git\\A", "D:\\x"],
+      "exists": ["C:\\Git\\A", "D:\\x"],
+      "exclude": "c:\\git\\a\\",
+      "expect": ["D:\\x"]
+    },
+    {
+      "platform": "posix",
+      "name": "posix keeps a folder that differs only in case",
+      "list": ["/Git/A", "/x"],
+      "exists": ["/Git/A", "/x"],
+      "exclude": "/git/a",
+      "expect": ["/Git/A", "/x"]
+    }
+  ]
+}

@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { helloRetryAction, retryLabel, RETRY_AFTER_SECONDS, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS, NEW_RELEASE_COMMAND } from "../plan2code-app/ui/meter.js";
+import { helloRetryAction, retryLabel, RETRY_AFTER_SECONDS, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, folderPickerRows, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS, NEW_RELEASE_COMMAND } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -132,6 +132,19 @@ test("the bar reads project menu, New Session, agent menu, with both menus outsi
   assert.ok(!row.includes('id="project-menu"') && !row.includes('id="agent-menu"'), "the menus are not inside #bar-row, whose overflow would clip them");
   assert.match(INDEX_HTML, /<div id="agent-menu"[\s\S]*?<button id="change-agent" role="menuitem" hidden>/, "Change agent lives in the agent menu");
   assert.match(INDEX_HTML, /<div id="project-menu"[\s\S]*?<button id="change-project" role="menuitem">/, "Change project lives in the project menu");
+});
+
+test("folderPickerRows puts Choose a folder first, then the recent folders in the order given", () => {
+  assert.deepEqual(folderPickerRows([]), [{ kind: "browse", label: "Choose a folder..." }]);
+  const rows = folderPickerRows([
+    { dir: "C:\\git\\b", name: "b" },
+    { dir: "/home/me/a", name: "a" },
+  ]);
+  assert.deepEqual(rows, [
+    { kind: "browse", label: "Choose a folder..." },
+    { kind: "folder", dir: "C:\\git\\b", label: "b", detail: "C:\\git\\b" },
+    { kind: "folder", dir: "/home/me/a", label: "a", detail: "/home/me/a" },
+  ]);
 });
 
 test("folderName shows the project folder's own name, or the whole path when it has none", () => {
@@ -530,7 +543,7 @@ test("main.rs guards the window's agent and project commands, and registers loop
     assert.ok(at > 0, `${name} exists`);
     return rust.slice(at, rust.indexOf("\n}\n", at));
   };
-  for (const [name, what] of [["agent_start", "agent"], ["agent_restart", "agent"], ["change_project", "project"], ["pick_project_folder", "project"]]) {
+  for (const [name, what] of [["agent_start", "agent"], ["agent_restart", "agent"], ["change_project", "project"], ["pick_project_folder", "project"], ["open_recent_folder", "project"]]) {
     assert.ok(body(name).includes(`refuse_while_looping(&state, "${what}")?;`), `${name} refuses while a loop runs`);
   }
   assert.ok(!body("agent_input").includes("refuse_while_looping"), "typing stays open for a trust or login prompt");

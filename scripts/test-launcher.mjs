@@ -131,6 +131,18 @@ function sandbox(clis, { installed, project = true, lookup = true, agents } = {}
 
 const NOTICE_LINE = /is out \(you have v/;
 
+/**
+ * The run's folder was recorded: first in `recentFolders` (compared by real path, since a temp
+ * folder can reach the launcher under another spelling), `lastFolder` equal to it, and `older`
+ * after it in order.
+ */
+function assertRecordedFirst({ recentFolders, lastFolder }, folder, older = []) {
+  assert.ok(Array.isArray(recentFolders), "recentFolders is written");
+  assert.equal(fs.realpathSync(recentFolders[0]), fs.realpathSync(folder));
+  assert.equal(lastFolder, recentFolders[0]);
+  assert.deepEqual(recentFolders.slice(1), older);
+}
+
 /** Write the console's cached release check, `ageMs` old. */
 function writeCache(box, latest, ageMs = 0) {
   fs.mkdirSync(path.dirname(box.cacheFile), { recursive: true });
@@ -307,11 +319,9 @@ test("launcher: a launched model is remembered per agent in launcher.json", (t) 
   assert.equal(box.run(["--cli", "claude", "--model", "opus"]).status, 0);
   assert.equal(box.run(["--cli", "codex", "-m", "x"]).status, 0);
   assert.equal(box.run(["--cli", "codex", "-my"]).status, 0);
-  assert.deepEqual(JSON.parse(fs.readFileSync(box.stateFile, "utf8")), {
-    lastFolder: box.home,
-    lastCli: "codex",
-    lastModels: { claude: "opus", codex: "y" },
-  });
+  const { recentFolders, lastFolder, ...rest } = JSON.parse(fs.readFileSync(box.stateFile, "utf8"));
+  assert.deepEqual(rest, { lastCli: "codex", lastModels: { claude: "opus", codex: "y" } });
+  assertRecordedFirst({ recentFolders, lastFolder }, box.dir, [box.home]);
 });
 
 test("launcher: --cli picks the CLI and is never forwarded; the pick is merged into launcher.json", (t) => {
@@ -326,7 +336,9 @@ test("launcher: --cli picks the CLI and is never forwarded; the pick is merged i
     assert.deepEqual(box.argsOf("devin"), ["--", "/plan2code"]);
   }
   assert.equal(box.argsOf("claude"), null);
-  assert.deepEqual(JSON.parse(fs.readFileSync(box.stateFile, "utf8")), { lastFolder: box.home, lastCli: "devin" });
+  const { recentFolders, lastFolder, ...rest } = JSON.parse(fs.readFileSync(box.stateFile, "utf8"));
+  assert.deepEqual(rest, { lastCli: "devin" });
+  assertRecordedFirst({ recentFolders, lastFolder }, box.dir, [box.home]);
 });
 
 test("launcher: with both installed and no terminal to ask in, the last pick wins", (t) => {
@@ -1318,4 +1330,137 @@ test("launcher setup: no agent and no display keeps the old 127 and install step
   assert.equal(result.status, 127);
   assert.match(result.stderr, /none was found/);
   assert.equal(box.appExists(), false);
+});
+
+// The recent-folders rule: the same cases the desktop app's project.rs loads (the fixture holds
+// both platforms' rules, so each runs on every OS: "win32" and "linux" are passed explicitly).
+const RECENT_CASES = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts", "fixtures", "recent-folders-cases.json"), "utf8"));
+const RECENT_PLATFORMS = { win32: "win32", posix: "linux" };
+
+/** The platform values ("win32" or "linux") a fixture case runs under. */
+function recentPlatforms(testCase) {
+  return testCase.platform ? [RECENT_PLATFORMS[testCase.platform]] : ["win32", "linux"];
+}
+
+test("launcher recent folders: readRecent follows the shared cases", () => {
+  const { readRecent } = require(LAUNCHER);
+  assert.ok(RECENT_CASES.read.length > 0);
+  for (const c of RECENT_CASES.read) assert.deepEqual(readRecent(c.state), c.expect, c.name);
+});
+
+test("launcher recent folders: pushRecent follows the shared cases", () => {
+  const { pushRecent } = require(LAUNCHER);
+  assert.ok(RECENT_CASES.push.length > 0);
+  for (const c of RECENT_CASES.push) {
+    for (const platform of recentPlatforms(c)) assert.deepEqual(pushRecent(c.list, c.dir, platform), c.expect, `${c.name} (${platform})`);
+  }
+});
+
+test("launcher recent folders: listRecent follows the shared cases", () => {
+  const { listRecent } = require(LAUNCHER);
+  assert.ok(RECENT_CASES.list.length > 0);
+  for (const c of RECENT_CASES.list) {
+    const exists = new Set(c.exists);
+    for (const platform of recentPlatforms(c)) {
+      assert.deepEqual(listRecent(c.list, { exists: (p) => exists.has(p), exclude: c.exclude, platform }), c.expect, `${c.name} (${platform})`);
+    }
+  }
+});
+
+test("launcher recent folders: pushRecent returns a new array and leaves its input alone", () => {
+  const { pushRecent } = require(LAUNCHER);
+  const list = ["/b", "/a"];
+  pushRecent(list, "/c", "linux");
+  assert.deepEqual(list, ["/b", "/a"]);
+});
+
+test("launcher recent folders: recordFolder writes both keys from a state with only lastFolder and keeps the rest", (t) => {
+  const box = sandbox([]);
+  t.after(box.cleanup);
+  fs.mkdirSync(path.dirname(box.stateFile), { recursive: true });
+  fs.writeFileSync(box.stateFile, JSON.stringify({ lastFolder: "/old", lastCli: "devin" }));
+  const picked = path.join(box.dir, "picked");
+  const script = `require(${JSON.stringify(LAUNCHER)}).recordFolder(${JSON.stringify(picked)});`;
+  const result = spawnSync(process.execPath, ["-e", script], {
+    encoding: "utf8",
+    env: { ...process.env, HOME: box.home, USERPROFILE: box.home },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(fs.readFileSync(box.stateFile, "utf8")), {
+    lastFolder: picked,
+    recentFolders: [picked, "/old"],
+    lastCli: "devin",
+  });
+});
+
+test("launcher folder menu: from the command, the current folder comes first, then the recents, then browse", () => {
+  const { folderMenuRows } = require(LAUNCHER);
+  const cwd = path.join(os.tmpdir(), "here");
+  const recent = [path.join(os.tmpdir(), "one"), path.join(os.tmpdir(), "two")];
+  assert.deepEqual(folderMenuRows({ fromShortcut: false, cwd, recent }), [
+    { kind: "folder", dir: cwd, name: "here", detail: `${cwd} (current folder)`, label: `here  ${cwd} (current folder)` },
+    { kind: "folder", dir: recent[0], name: "one", detail: recent[0], label: `one  ${recent[0]}` },
+    { kind: "folder", dir: recent[1], name: "two", detail: recent[1], label: `two  ${recent[1]}` },
+    { kind: "browse", label: "Choose another folder..." },
+  ]);
+});
+
+test("launcher folder menu: from the shortcut, browse comes first, then the recents", () => {
+  const { folderMenuRows } = require(LAUNCHER);
+  const recent = [path.join(os.tmpdir(), "one")];
+  assert.deepEqual(folderMenuRows({ fromShortcut: true, cwd: os.tmpdir(), recent }), [
+    { kind: "browse", label: "Choose a folder..." },
+    { kind: "folder", dir: recent[0], name: "one", detail: recent[0], label: `one  ${recent[0]}` },
+  ]);
+});
+
+test("launcher folder menu: a drive root keeps its full text as its name", () => {
+  const { folderMenuRows } = require(LAUNCHER);
+  const root = path.parse(process.cwd()).root;
+  const [row] = folderMenuRows({ fromShortcut: false, cwd: root, recent: [] });
+  assert.equal(row.label, `${root}  ${root} (current folder)`);
+  assert.equal(row.name, root);
+  assert.equal(row.detail, `${root} (current folder)`);
+});
+
+test("launcher folder menu: Enter picks row 1, a number its row, anything else asks again", () => {
+  const { folderMenuPick } = require(LAUNCHER);
+  const rows = [{ kind: "folder", dir: "/a", label: "a" }, { kind: "folder", dir: "/b", label: "b" }, { kind: "browse", label: "x" }];
+  assert.equal(folderMenuPick(rows, ""), rows[0]);
+  assert.equal(folderMenuPick(rows, "  "), rows[0]);
+  assert.equal(folderMenuPick(rows, "2"), rows[1]);
+  assert.equal(folderMenuPick(rows, " 3 "), rows[2]);
+  for (const answer of ["0", "9", "x", "1.5", "-1"]) assert.equal(folderMenuPick(rows, answer), null, answer);
+});
+
+test("launcher folder menu: with recent folders but no terminal, it starts in the current folder without a menu and records it", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const older = path.join(box.dir, "older");
+  fs.mkdirSync(older);
+  fs.mkdirSync(path.dirname(box.stateFile), { recursive: true });
+  fs.writeFileSync(box.stateFile, JSON.stringify({ recentFolders: [older], lastFolder: older, lastCli: "claude" }));
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /Which project folder\?/);
+  assert.doesNotMatch(result.stdout, /Opening Plan2Code in/);
+  assert.notEqual(box.argsOf("claude"), null);
+  const { recentFolders, lastFolder, ...rest } = JSON.parse(fs.readFileSync(box.stateFile, "utf8"));
+  assert.deepEqual(rest, { lastCli: "claude" });
+  assertRecordedFirst({ recentFolders, lastFolder }, box.dir, [older]);
+});
+
+test("launcher folder menu: a folder that fails the project check is not recorded", (t) => {
+  const box = sandbox(["claude"], { project: false });
+  t.after(box.cleanup);
+  const older = path.join(box.dir, "older");
+  fs.mkdirSync(older);
+  fs.mkdirSync(path.dirname(box.stateFile), { recursive: true });
+  const state = { recentFolders: [older], lastFolder: older, lastCli: "claude" };
+  fs.writeFileSync(box.stateFile, JSON.stringify(state));
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /doesn't look like a project/);
+  assert.equal(box.argsOf("claude"), null);
+  assert.deepEqual(JSON.parse(fs.readFileSync(box.stateFile, "utf8")), state);
 });

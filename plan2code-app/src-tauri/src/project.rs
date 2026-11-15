@@ -1,20 +1,24 @@
 //! Which project folder the app works on: the folder the launcher passes in,
-//! else the one the launcher remembers, else the person picks. The launcher's
-//! memory is `~/.plan2code/launcher.json` (`lastFolder`, `lastCli`), shared so
-//! the app and `plan2code` agree on both.
+//! else the one the person picks from the page's folder picker (the recent
+//! folders, or the OS dialog). The launcher's memory is
+//! `~/.plan2code/launcher.json` (`lastFolder`, `lastCli`), shared so the app
+//! and `plan2code` agree on both. `recentFolders` (newest first, at
+//! most 5) holds the folders worked on; `lastFolder` is always its first entry.
+//! The rule for that list is written twice, here and in `src/launcher/plan2code.js`,
+//! and both are held to `scripts/fixtures/recent-folders-cases.json`.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::agents;
 
-/// Where the project folder came from, in the order it is tried.
+/// Where the project folder came from: the launcher's argument, or the picker.
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectSource {
     Argument,
-    Remembered,
     Picked,
 }
 
@@ -36,17 +40,103 @@ fn launcher_file() -> Option<PathBuf> {
     )
 }
 
-fn read_launcher() -> serde_json::Map<String, serde_json::Value> {
-    launcher_file()
-        .and_then(|file| std::fs::read_to_string(file).ok())
+fn read_launcher_from(file: &Path) -> serde_json::Map<String, Value> {
+    std::fs::read_to_string(file)
+        .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
 
-/// The folder the launcher remembers, when it is still a directory.
-fn remembered_folder() -> Option<PathBuf> {
-    let dir = PathBuf::from(read_launcher().get("lastFolder")?.as_str()?);
-    dir.is_dir().then_some(dir)
+fn read_launcher() -> serde_json::Map<String, Value> {
+    launcher_file()
+        .map(|file| read_launcher_from(&file))
+        .unwrap_or_default()
+}
+
+/// How many recent project folders the list keeps.
+const RECENT_FOLDERS_MAX: usize = 5;
+
+/// One trailing `\` or `/` off a path, but never off a root (`C:\` or `/`).
+fn trim_folder(p: &str) -> &str {
+    let b = p.as_bytes();
+    let drive_root = b.len() == 3 && b[1] == b':' && b[0].is_ascii_alphabetic();
+    if b.len() > 1 && matches!(b[b.len() - 1], b'\\' | b'/') && !drive_root {
+        &p[..p.len() - 1]
+    } else {
+        p
+    }
+}
+
+/// Whether two paths name the same folder: a trailing separator is ignored,
+/// and case is on Windows. Twin of `sameFolder` in the launcher.
+pub fn same_folder(a: &str, b: &str, windows: bool) -> bool {
+    let (x, y) = (trim_folder(a), trim_folder(b));
+    if windows {
+        x.to_lowercase() == y.to_lowercase()
+    } else {
+        x == y
+    }
+}
+
+/// The recent folders in the launcher's state: `recentFolders`, else
+/// `[lastFolder]`, else none. Twin of `readRecent`.
+fn read_recent(state: &serde_json::Map<String, Value>) -> Vec<String> {
+    if let Some(Value::Array(items)) = state.get("recentFolders") {
+        return items
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .take(RECENT_FOLDERS_MAX)
+            .map(str::to_string)
+            .collect();
+    }
+    match state.get("lastFolder").and_then(Value::as_str) {
+        Some(last) if !last.is_empty() => vec![last.to_string()],
+        _ => Vec::new(),
+    }
+}
+
+/// A new list with `dir` first, an earlier entry for the same folder removed,
+/// cut to the max. Twin of `pushRecent`.
+fn push_recent(list: &[String], dir: &str, windows: bool) -> Vec<String> {
+    std::iter::once(dir.to_string())
+        .chain(
+            list.iter()
+                .filter(|x| !same_folder(x, dir, windows))
+                .cloned(),
+        )
+        .take(RECENT_FOLDERS_MAX)
+        .collect()
+}
+
+/// The folders of `list` worth offering: ones that still exist, minus the one
+/// in `exclude`. Twin of `listRecent`.
+fn list_recent(
+    list: &[String],
+    exists: impl Fn(&str) -> bool,
+    exclude: Option<&str>,
+    windows: bool,
+) -> Vec<String> {
+    list.iter()
+        .filter(|x| exists(x) && !exclude.is_some_and(|e| same_folder(x, e, windows)))
+        .cloned()
+        .collect()
+}
+
+/// The folders the person worked on lately that are still folders, newest
+/// first, minus `exclude` (the project already open, by `same_folder`'s
+/// rule). The page's folder picker draws them.
+pub fn recent_folders(exclude: Option<&Path>) -> Vec<PathBuf> {
+    let exclude = exclude.map(|p| p.to_string_lossy().into_owned());
+    list_recent(
+        &read_recent(&read_launcher()),
+        |p| Path::new(p).is_dir(),
+        exclude.as_deref(),
+        cfg!(windows),
+    )
+    .into_iter()
+    .map(PathBuf::from)
+    .collect()
 }
 
 /// The id of the agent the launcher last ran (it may be a custom one). The
@@ -127,39 +217,42 @@ pub fn launch_choice_in(args: &[String], agents_file: Option<&Path>) -> LaunchCh
     LaunchChoice { agent, model }
 }
 
-/// The folder to open on: the launcher's argument wins, then its memory, then
-/// nothing (the page asks with the folder picker).
+/// The folder to open on: only the launcher's argument. Without one the page
+/// shows its folder picker; the last folder is the picker's first recent row,
+/// never reopened silently.
 pub fn resolve(args: &[String]) -> Option<ProjectDir> {
-    if let Some(dir) = argument_folder(args) {
-        return Some(ProjectDir {
-            dir,
-            source: ProjectSource::Argument,
-        });
-    }
-    remembered_folder().map(|dir| ProjectDir {
+    argument_folder(args).map(|dir| ProjectDir {
         dir,
-        source: ProjectSource::Remembered,
+        source: ProjectSource::Argument,
     })
 }
 
-/// A folder the person picked becomes the remembered one, so the next start
-/// (app or launcher) opens on it. The launcher's other keys are kept.
+/// A folder the person picked goes to the top of the recent folders and
+/// becomes `lastFolder`, so the next start (app or launcher) lists it first.
+/// The launcher's other keys are kept.
 pub fn remember_folder(dir: &Path) -> Result<ProjectDir, String> {
     let file = launcher_file().ok_or("no home folder found")?;
-    let mut state = read_launcher();
-    state.insert(
-        "lastFolder".to_string(),
-        serde_json::Value::String(dir.to_string_lossy().into_owned()),
-    );
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(err)?;
-    }
-    let json = serde_json::to_string_pretty(&serde_json::Value::Object(state)).map_err(err)?;
-    crate::loop_driver::write_atomic(&file, &json)?;
+    remember_folder_in(&file, dir)?;
     Ok(ProjectDir {
         dir: dir.to_path_buf(),
         source: ProjectSource::Picked,
     })
+}
+
+/// `remember_folder`'s write, into `file`.
+fn remember_folder_in(file: &Path, dir: &Path) -> Result<(), String> {
+    let mut state = read_launcher_from(file);
+    let recent = push_recent(&read_recent(&state), &dir.to_string_lossy(), cfg!(windows));
+    state.insert("lastFolder".to_string(), Value::String(recent[0].clone()));
+    state.insert(
+        "recentFolders".to_string(),
+        Value::Array(recent.into_iter().map(Value::String).collect()),
+    );
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(err)?;
+    }
+    let json = serde_json::to_string_pretty(&Value::Object(state)).map_err(err)?;
+    crate::loop_driver::write_atomic(file, &json)
 }
 
 #[cfg(test)]
@@ -285,5 +378,113 @@ mod tests {
         let found = argument_folder(&args(&["--project", &named, "--agent", "codex"]));
         assert_eq!(found, Some(cwd.join("codex")));
         let _ = std::fs::remove_dir_all(&cwd);
+    }
+
+    const CASES: &str = include_str!("../../../scripts/fixtures/recent-folders-cases.json");
+
+    /// Each case of the fixture group `group` with the platform values it runs under:
+    /// `true` for Windows. Both platform sets run on every OS; a case with none runs under both.
+    fn cases(group: &str) -> Vec<(Value, bool)> {
+        let all: Value = serde_json::from_str(CASES).unwrap();
+        let mut out = Vec::new();
+        for case in all[group].as_array().unwrap() {
+            let winds: &[bool] = match case.get("platform").and_then(Value::as_str) {
+                Some("win32") => &[true],
+                Some("posix") => &[false],
+                _ => &[true, false],
+            };
+            for &windows in winds {
+                out.push((case.clone(), windows));
+            }
+        }
+        assert!(!out.is_empty(), "no {group} cases");
+        out
+    }
+
+    fn strings(value: &Value) -> Vec<String> {
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn read_recent_follows_the_shared_cases() {
+        for (case, _) in cases("read") {
+            let state = case["state"].as_object().unwrap();
+            assert_eq!(
+                read_recent(state),
+                strings(&case["expect"]),
+                "{}",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn push_recent_follows_the_shared_cases() {
+        for (case, windows) in cases("push") {
+            let got = push_recent(
+                &strings(&case["list"]),
+                case["dir"].as_str().unwrap(),
+                windows,
+            );
+            assert_eq!(
+                got,
+                strings(&case["expect"]),
+                "{} (windows: {windows})",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn list_recent_follows_the_shared_cases() {
+        for (case, windows) in cases("list") {
+            let exists = strings(&case["exists"]);
+            let got = list_recent(
+                &strings(&case["list"]),
+                |p| exists.iter().any(|e| e == p),
+                case["exclude"].as_str(),
+                windows,
+            );
+            assert_eq!(
+                got,
+                strings(&case["expect"]),
+                "{} (windows: {windows})",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn remember_folder_keeps_the_other_keys_and_writes_both_lists() {
+        let home =
+            std::env::temp_dir().join(format!("p2c-project-remember-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let file = home.join(".plan2code").join("launcher.json");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(
+            &file,
+            r#"{"lastFolder":"/old","lastCli":"codex","lastModels":{"codex":"m1"}}"#,
+        )
+        .unwrap();
+
+        remember_folder_in(&file, Path::new("/new")).unwrap();
+        let state = read_launcher_from(&file);
+        assert_eq!(state["lastCli"], "codex");
+        assert_eq!(state["lastModels"]["codex"], "m1");
+        assert_eq!(state["lastFolder"], "/new");
+        assert_eq!(state["recentFolders"], serde_json::json!(["/new", "/old"]));
+
+        // Picking the older folder again moves it up, with no duplicate.
+        remember_folder_in(&file, Path::new("/old")).unwrap();
+        let state = read_launcher_from(&file);
+        assert_eq!(state["lastFolder"], "/old");
+        assert_eq!(state["recentFolders"], serde_json::json!(["/old", "/new"]));
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

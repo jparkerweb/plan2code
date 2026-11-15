@@ -280,6 +280,18 @@ export function folderName(dir) {
   return lastSegment(dir) || String(dir || "").trim();
 }
 
+/**
+ * The folder picker's rows: Choose a folder first (the OS dialog), then one
+ * row per recent folder from the `recent_folders` command, newest first,
+ * named by the folder with its full path as the detail.
+ */
+export function folderPickerRows(recent) {
+  return [
+    { kind: 'browse', label: 'Choose a folder...' },
+    ...(recent || []).map((r) => ({ kind: 'folder', dir: r.dir, label: r.name, detail: r.dir })),
+  ];
+}
+
 function lastSegment(dir) {
   return String(dir || "")
     .trim()
