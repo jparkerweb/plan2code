@@ -197,6 +197,39 @@
 .modal.lessons-dialog { width: min(720px, calc(100vw - 32px)); }
 .lessons-dialog .card { margin: 0; box-shadow: none; border: 0; padding: 0; }
 
-/* Switching Learning on or off: shown the moment the button is pressed. */
+/* The lessons dialog: closable (the corner ×, Not now, Escape), and locked
+   while Save lessons goes. */
+.lessons-dialog .modal-actions { align-items: center; justify-content: flex-end; }
+.lessons-dialog .modal-actions .btn { margin: 0; }
+.lessons-dialog .modal-actions .btn .spinner { margin-right: 8px; }
+.modal-x {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  border-radius: calc(var(--radius) * 0.5);
+  cursor: pointer;
+}
+.modal-x:hover:not(:disabled),
+.modal-x:focus-visible { color: var(--ink); background: var(--panel-2); }
+.modal-x:disabled { opacity: 0.4; cursor: default; }
+.lessons-dialog.is-saving .card { opacity: 0.6; }
+.lessons-unsaved { flex: 1 1 100%; padding: 10px 12px; border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: calc(var(--radius) * 0.5); }
+.lessons-unsaved .modal-actions { flex-wrap: wrap; }
+.lessons-unsaved .btn { white-space: nowrap; }
+.lessons-unsaved-text { margin: 0 0 8px; font-size: 13.5px; color: var(--ink); }
+
+/* Switching Learning on or off, opening Review, saving: shown the moment the
+   button is pressed. */
 .learn-busy { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.learn-banner.is-busy .dash-nudge-text { display: inline-flex; align-items: center; gap: 8px; }
 .learn-row.is-busy .learn-pill { opacity: 0.6; }

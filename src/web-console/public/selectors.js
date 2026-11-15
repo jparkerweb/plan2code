@@ -12,6 +12,31 @@ import { ASK_BUSY_MS, chatAnswering } from "./chat.js";
 
 export const WORKING_GRACE_MS = 5 * 60 * 1000;
 
+// How long a Learning action may show as working before the page gives up
+// waiting for the agent (it normally answers in a second or two).
+export const LEARNING_BUSY_MS = 30000;
+
+/**
+ * The Learning action the person just pressed while the agent works on it, or
+ * null. sendLearning() (dashboard.js) sets page.learningBusy the instant a
+ * button is pressed: `switch-on` and `switch-off` end when the scan shows a
+ * different state than `from`, `review` ends when its lessons card is open,
+ * and any of them ends after LEARNING_BUSY_MS. The agent finishing with
+ * nothing to show is ended by sendLearning()'s watcher, not here.
+ */
+export function learningBusyNow(state) {
+  const busy = page.learningBusy;
+  if (!busy) return null;
+  const end = () => {
+    page.learningBusy = null;
+    return null;
+  };
+  if (Date.now() - busy.at > LEARNING_BUSY_MS) return end();
+  if ((busy.what === "switch-on" || busy.what === "switch-off") && busy.from !== state) return end();
+  if (busy.what === "review" && ((page.S && page.S.items) || []).some((i) => i && i.kind === "lessons" && isOpen(i))) return end();
+  return busy;
+}
+
 // Two minutes with the agent mid-turn, three when it is merely meant to be
 // listening. The difference is the cost of being wrong: a working agent that
 // goes quiet is worth mentioning early, whereas the gap between `wait`

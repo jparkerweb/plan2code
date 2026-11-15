@@ -85,7 +85,7 @@ import { mountAgentsView } from "./agents-view.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
-export { launchSkill, sendLearning, wakeHoldsChime, wireDashboard } from "./dashboard.js";
+export { launchSkill, sendLearning, beginLearningSave, wakeHoldsChime, wireDashboard } from "./dashboard.js";
 export { renderLearningRow, learningBlocked, refreshLessonsSend } from "./learning-row.js";
 import { renderLessonsDialog } from "./learning-row.js";
 export { fillSky } from "./starting.js";

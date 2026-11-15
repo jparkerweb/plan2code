@@ -10,6 +10,8 @@ import {
   loadOverview,
   finish,
   loopDriving,
+  learningBusyNow,
+  LEARNING_BUSY_MS,
 } from "../selectors.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
 import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss, SVG_NS } from "../render.js";
@@ -1393,10 +1395,29 @@ async function sendDelete(spec) {
 // The Learning banner above the title, or null: only while lessons wait and
 // Learning is on or not set up. Review sends the __learning action.
 function learningBanner(sc) {
+  const state = sc && sc.learning && sc.learning.state;
+  const busy = learningBusyNow(state);
+  // Review pressed, or the choices just saved: the banner says what the agent
+  // is doing, in the same place, so the wait is never silent.
+  const working = busy && (busy.what === "review" || busy.what === "decide") ? busy : null;
   const text = learningBannerText(sc && sc.learning);
-  if (!text) return null;
+  if (!text && !working) return null;
   const banner = el("div", "dash-nudge learn-banner");
   banner.setAttribute("role", "status");
+  if (working) {
+    banner.classList.add("is-busy");
+    banner.setAttribute("aria-busy", "true");
+    const line = el("span", "dash-nudge-text learn-busy");
+    line.append(el("span", "spinner tiny"), document.createTextNode(working.what === "review" ? "Opening lessons…" : "Saving your lessons…"));
+    banner.appendChild(line);
+    if (working.what === "review") {
+      const review = el("button", "btn small primary", "Review");
+      review.type = "button";
+      review.disabled = true;
+      banner.appendChild(review);
+    }
+    return banner;
+  }
   banner.appendChild(el("span", "dash-nudge-text", text));
   const review = el("button", "btn small primary", "Review");
   review.type = "button";
@@ -1408,19 +1429,66 @@ function learningBanner(sc) {
   return banner;
 }
 
+// The agent finishing with nothing to show ends the wait early: a Review whose
+// card never came (the banner was stale) says so at once instead of spinning
+// to the limit, and a saved choice stops when the agent is back to waiting.
+// `seen` waits for the send to be picked up first (or three seconds), so the
+// gap before the agent collects it is not read as "finished".
+function watchLearningBusy(busy) {
+  const timer = setInterval(() => {
+    if (page.learningBusy !== busy) return clearInterval(timer);
+    if (Date.now() - busy.at > LEARNING_BUSY_MS) {
+      clearInterval(timer);
+      page.learningBusy = null;
+      redraw();
+      return;
+    }
+    if (page.pendingResult || agentWorking()) {
+      busy.seen = true;
+      return;
+    }
+    // Idle and never seen busy: the agent was quicker than the page's poll
+    // (or the send is a moment from being picked up), so give it three seconds.
+    if (!busy.seen && Date.now() - busy.at < 3000) return;
+    clearInterval(timer);
+    page.learningBusy = null;
+    if (busy.what === "review") {
+      hooks.banner("No lessons are waiting any more.", "info");
+      setTimeout(() => hooks.banner(null), 4000);
+    }
+    redraw();
+  }, 400);
+}
+
+/**
+ * The lessons dialog's Save lessons went through: the banner's place says
+ * "Saving your lessons…" until the agent is done with the choices.
+ */
+export function beginLearningSave() {
+  const sc = scan();
+  const busy = { what: "decide", from: sc && sc.learning && sc.learning.state, at: Date.now(), seen: false };
+  page.learningBusy = busy;
+  watchLearningBusy(busy);
+  setTimeout(redraw, LEARNING_BUSY_MS + 500);
+  redraw();
+}
+
 // A Learning control that changes the project: a __learning action to the
 // dashboard agent, posted the way sendDelete() posts. No hop: the agent runs
 // lessons.mjs, rescans and posts the menu again.
 export async function sendLearning(what) {
   if (hooks.learningBlocked()) return;
-  // Switching on or off shows as working at once, before the agent answers.
+  // Switching on or off, or opening Review, shows as working at once, before
+  // the agent answers.
   const sc = scan();
   const from = sc && sc.learning && sc.learning.state;
-  if ((what === "switch-on" || what === "switch-off") && from) {
-    page.learningBusy = { what, from, at: Date.now() };
+  if ((what === "switch-on" || what === "switch-off" || what === "review") && from) {
+    const busy = { what, from, at: Date.now(), seen: false };
+    page.learningBusy = busy;
     redraw();
-    // One redraw at the limit, so a switch the agent never answers stops spinning.
-    setTimeout(redraw, 30500);
+    // One redraw at the limit, so an action the agent never answers stops spinning.
+    setTimeout(redraw, LEARNING_BUSY_MS + 500);
+    if (what === "review") watchLearningBusy(busy);
   }
   try {
     const res = await fetch("/submit", {

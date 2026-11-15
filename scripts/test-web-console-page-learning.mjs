@@ -445,17 +445,17 @@ test("lessons card: Review on the banner leads to the card over the dashboard, w
   const dlg = s.page.locator("#lessons-modal");
   await dlg.locator(".lessons-row").waitFor();
   assert.equal(await main.getByRole("heading", { name: "What are we doing today?" }).count(), 1, "the menu stays under it");
-  assert.equal(await dlg.getByRole("button", { name: "Send to Plan2Code" }).isDisabled(), true, "nothing chosen yet");
+  assert.equal(await dlg.getByRole("button", { name: "Save lessons" }).isDisabled(), true, "nothing chosen yet");
   // An emptied Reword field holds the dialog's Send off, as the footer's Send is held elsewhere.
   await dlg.getByRole("button", { name: "Reword" }).click();
   const text = dlg.getByLabel("The lesson");
   await text.waitFor();
-  assert.equal(await dlg.getByRole("button", { name: "Send to Plan2Code" }).isDisabled(), false, "a reword ready to go");
+  assert.equal(await dlg.getByRole("button", { name: "Save lessons" }).isDisabled(), false, "a reword ready to go");
   await text.fill("");
-  await until(async () => await dlg.getByRole("button", { name: "Send to Plan2Code" }).isDisabled(), 3000);
+  await until(async () => await dlg.getByRole("button", { name: "Save lessons" }).isDisabled(), 3000);
   await dlg.getByRole("button", { name: "Keep" }).click();
   await dlg.getByRole("button", { name: "Keep", pressed: true }).waitFor();
-  await dlg.getByRole("button", { name: "Send to Plan2Code" }).click();
+  await dlg.getByRole("button", { name: "Save lessons" }).click();
   const sent = s.wait(10);
   assert.equal(sent.code, 0);
   assert.equal(sent.actions.some((a) => a.i === "__launch"), false, "no skill launched");
@@ -465,6 +465,139 @@ test("lessons card: Review on the banner leads to the card over the dashboard, w
   s.post({ menu: { note: "Kept 1 lesson." }, agent: { status: "waiting" } });
   await main.getByText("Kept 1 lesson.").waitFor();
   assert.equal(await dlg.isVisible(), false, "the answered card does not open again");
+});
+
+// The dashboard with one lesson waiting, Review pressed and the agent's card up.
+const LESSON_ID = "20261113-120000-eeeeee";
+async function reviewOpen(t) {
+  const { s, main } = await dashboard(t, PROJECT("on"), (p) =>
+    writeWaiting(p, { id: LESSON_ID, type: "lesson", text: "Run a page test alone first.", noted: new Date().toISOString() })
+  );
+  await main.locator(".learn-banner").getByRole("button", { name: "Review" }).click();
+  return { s, main, dlg: s.page.locator("#lessons-modal") };
+}
+const postCard = (s) => s.post({ items: [CARD([{ ...ROWS[0], id: LESSON_ID }])], agent: { status: "waiting" } });
+
+test("lessons card: Review shows working at once, and ends when the card opens", async (t) => {
+  const { s, main, dlg } = await reviewOpen(t);
+  const banner = main.locator(".learn-banner");
+  await banner.getByText("Opening lessons…").waitFor();
+  assert.equal(await banner.getAttribute("aria-busy"), "true");
+  assert.equal(await banner.getByRole("button", { name: "Review" }).isDisabled(), true, "no second press while it opens");
+  s.wait(10);
+  postCard(s);
+  await dlg.locator(".lessons-row").waitFor();
+  assert.equal(await banner.getByText("Opening lessons…").count(), 0, "the spinner is gone once the card is up");
+});
+
+test("lessons card: Review with nothing to show says so instead of spinning", async (t) => {
+  const { s, main } = await reviewOpen(t);
+  await main.locator(".learn-banner").getByText("Opening lessons…").waitFor();
+  s.wait(10);
+  s.post({ menu: { note: "Nothing is waiting." }, agent: { status: "working" } });
+  s.post({ agent: { status: "waiting" } });
+  await s.page.getByText("No lessons are waiting any more.").waitFor();
+  assert.equal(await main.locator(".learn-banner").getByText("Opening lessons…").count(), 0);
+});
+
+test("lessons card: Not now and the corner close leave every lesson waiting and tell the agent", async (t) => {
+  for (const how of ["Not now", "x", "Escape"]) {
+    const { s, dlg } = await reviewOpen(t);
+    s.wait(10);
+    postCard(s);
+    await dlg.locator(".lessons-row").waitFor();
+    assert.equal(await dlg.getByRole("button", { name: "Close without saving" }).count(), 1, "a corner close is there");
+    if (how === "Not now") await dlg.getByRole("button", { name: "Not now" }).click();
+    else if (how === "x") await dlg.getByRole("button", { name: "Close without saving" }).click();
+    else await s.page.keyboard.press("Escape");
+    const sent = s.wait(10);
+    assert.equal(sent.code, 0, how);
+    assert.deepEqual(sent.actions.find((a) => a.i === "lessons").decisions, [], `${how}: nothing decided`);
+    await dlg.waitFor({ state: "hidden" });
+  }
+});
+
+test("lessons card: closing with choices made asks first, and Keep editing goes back", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  postCard(s);
+  await dlg.getByRole("button", { name: "Keep" }).click();
+  await dlg.getByRole("button", { name: "Keep", pressed: true }).waitFor();
+  await s.page.keyboard.press("Escape");
+  const ask = dlg.locator(".lessons-unsaved");
+  await ask.waitFor();
+  assert.match(await textOf(ask), /You have choices that are not saved\./);
+  await ask.getByRole("button", { name: "Keep editing" }).click();
+  await ask.waitFor({ state: "hidden" });
+  assert.equal(await dlg.isVisible(), true, "still open");
+  assert.equal(await dlg.getByRole("button", { name: "Keep", pressed: true }).count(), 1, "the choice is kept");
+  // Discard and close leaves everything waiting.
+  await dlg.getByRole("button", { name: "Close without saving" }).click();
+  await ask.getByRole("button", { name: "Discard and close" }).click();
+  const sent = s.wait(10);
+  assert.deepEqual(sent.actions.find((a) => a.i === "lessons").decisions, []);
+  await dlg.waitFor({ state: "hidden" });
+});
+
+test("lessons card: Save lessons shows saving, locks the card, then the banner takes over until the agent is done", async (t) => {
+  const { s, main, dlg } = await reviewOpen(t);
+  s.wait(10);
+  postCard(s);
+  await dlg.getByRole("button", { name: "Keep" }).click();
+  await dlg.getByRole("button", { name: "Keep", pressed: true }).waitFor();
+  // Hold the send so the saving state can be seen.
+  let release;
+  const held = new Promise((r) => (release = r));
+  await s.page.route("**/submit", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await dlg.getByRole("button", { name: "Save lessons" }).click();
+  await dlg.getByText("Saving…").waitFor();
+  assert.equal(await dlg.getAttribute("aria-busy"), "true");
+  assert.equal(await dlg.getByRole("button", { name: "Not now" }).isDisabled(), true);
+  assert.equal(await dlg.getByRole("button", { name: "Close without saving" }).isDisabled(), true);
+  release();
+  await dlg.waitFor({ state: "hidden" });
+  const sent = s.wait(10);
+  assert.deepEqual(sent.actions.find((a) => a.i === "lessons").decisions, [{ id: LESSON_ID, choice: "Keep" }]);
+  await main.locator(".learn-banner").getByText("Saving your lessons…").waitFor();
+  s.post({ menu: { note: "Kept 1 lesson." }, agent: { status: "working" } });
+  s.post({ agent: { status: "waiting" } });
+  await main.getByText("Kept 1 lesson.").waitFor();
+  await until(async () => (await main.getByText("Saving your lessons…").count()) === 0, 5000);
+});
+
+test("lessons card: a refused send keeps the dialog open with the choice still made", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  postCard(s);
+  await dlg.getByRole("button", { name: "Keep" }).click();
+  await dlg.getByRole("button", { name: "Keep", pressed: true }).waitFor();
+  await s.page.route("**/submit", (route) => route.fulfill({ status: 409, contentType: "application/json", body: "{}" }));
+  await dlg.getByRole("button", { name: "Save lessons" }).click();
+  await until(async () => (await dlg.getByText("Saving…").count()) === 0, 5000);
+  assert.equal(await dlg.isVisible(), true, "still open");
+  assert.equal(await dlg.getByRole("button", { name: "Keep", pressed: true }).count(), 1, "the choice is kept");
+});
+
+test("lessons card: Not now carries a typed note, and a click outside closes only while nothing is chosen", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  postCard(s);
+  await dlg.locator(".lessons-row").waitFor();
+  // Outside click with a choice made: stays open.
+  await dlg.getByRole("button", { name: "Keep" }).click();
+  await dlg.getByRole("button", { name: "Keep", pressed: true }).waitFor();
+  await s.page.mouse.click(5, 5);
+  assert.equal(await dlg.isVisible(), true, "a stray click keeps the dialog while a choice is made");
+  await dlg.getByRole("button", { name: "Keep", pressed: true }).click();
+  await dlg.getByRole("button", { name: "Keep" }).first().waitFor();
+  await dlg.getByLabel("Anything to add?").fill("Ask me again next week.");
+  await dlg.getByRole("button", { name: "Not now" }).click();
+  const sent = s.wait(10);
+  assert.match(sent.reply, /Ask me again next week\./);
+  assert.deepEqual(sent.actions.find((a) => a.i === "lessons").decisions, []);
 });
 
 test("the loop stop card says when lessons are waiting", async (t) => {

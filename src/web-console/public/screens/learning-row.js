@@ -9,11 +9,11 @@
 // in dashboard.js, reached through hooks: a screen never imports another),
 // and is disabled whenever a card would be.
 
-import { page, redraw, hooks } from "../state.js";
+import { page, redraw, hooks, stage } from "../state.js";
 import { el, mdInto, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
 import { sendState } from "../send-state.js";
-import { loopDriving, isOpen, stagedCount } from "../selectors.js";
+import { loopDriving, isOpen, stagedCount, learningBusyNow } from "../selectors.js";
 
 const TOP_STATES = new Set(["not-set-up", "off", "paused"]);
 
@@ -48,23 +48,14 @@ export function learningBlocked() {
   return "";
 }
 
-// How long a switch on or off may show as working before the row gives up
-// waiting for the new state (the agent normally answers in a second or two).
-const BUSY_MS = 30000;
-
 /**
- * The switch the person just pressed while the agent works on it, or null.
- * sendLearning() sets page.learningBusy the instant a switch is pressed;
- * it ends when the scan shows a different state, the send fails, or BUSY_MS pass.
+ * The switch the person just pressed while the agent works on it, or null (the
+ * rule is learningBusyNow() in selectors.js; Review and a saved choice show in
+ * the banner instead).
  */
 function busySwitch(state) {
-  const busy = page.learningBusy;
-  if (!busy) return null;
-  if (busy.from !== state || Date.now() - busy.at > BUSY_MS) {
-    page.learningBusy = null;
-    return null;
-  }
-  return busy;
+  const busy = learningBusyNow(state);
+  return busy && (busy.what === "switch-on" || busy.what === "switch-off") ? busy : null;
 }
 
 function agentButton(text, cls, what) {
@@ -203,6 +194,80 @@ function wireOutside() {
 
 /* ------------------------------------------------------------- the dialogs */
 
+// The dialog's own state, kept across the dashboard's redraws: a send from it
+// in flight (the card locks), and the "choices not saved" ask after a close
+// was asked for while something is chosen.
+let saving = false;
+let askingClose = false;
+// The card the dialog shows now, for the handlers made once with the dialog.
+let shownItem = null;
+
+/** How many lessons the person has chosen on the card so far (its draft). */
+function chosenCount(item) {
+  try {
+    const d = JSON.parse(page.local.drafts["lessons-" + item.id] || "null");
+    return d && d.picks && typeof d.picks === "object" ? Object.values(d.picks).filter(Boolean).length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Send the staged choices from the dialog. While it goes the card locks and
+ * the button says Saving…; the dialog closes by itself once the send is in,
+ * and the dashboard's banner takes over with "Saving your lessons…". `undo`
+ * puts staged choices back the way they were when the send did not go.
+ */
+async function saveLessons(item, undo) {
+  if (saving) return;
+  saving = true;
+  askingClose = false;
+  redraw();
+  try {
+    await hooks.send();
+  } finally {
+    saving = false;
+  }
+  if (page.local.sent && page.local.sent[item.id]?.value) {
+    hooks.beginLearningSave();
+    return;
+  }
+  if (undo) undo();
+  redraw();
+}
+
+/** Not now: leave every lesson waiting, and tell the agent so it is not left holding a card no one can answer. */
+function leaveAllWaiting(item) {
+  // A send that cannot go says so, rather than a close that does nothing.
+  const state = sendState(true);
+  if (state.disabled) {
+    hooks.banner(state.why || "Plan2Code cannot take that right now. Try again in a moment.", "warn");
+    return;
+  }
+  const before = page.local.staged[item.id];
+  // A note typed in "Anything to add?" goes with it.
+  stage(item.id, { type: "answer", kind: "lessons", decisions: [], ...(before && before.text ? { text: before.text } : {}) });
+  return saveLessons(item, () => stage(item.id, before === undefined ? null : before));
+}
+
+/** The close, the Not now button and Escape: straight out when nothing is chosen, an ask first when something is. */
+function requestClose(item) {
+  if (saving) return;
+  if (chosenCount(item) > 0) {
+    askingClose = true;
+    redraw();
+    queueMicrotask(() => document.querySelector("#lessons-modal .lessons-unsaved .btn")?.focus());
+    return;
+  }
+  leaveAllWaiting(item);
+}
+
+function spinnerLabel(text) {
+  const wrap = document.createDocumentFragment();
+  wrap.append(el("span", "spinner tiny"), document.createTextNode(text));
+  return wrap;
+}
+
 /**
  * Review from the dashboard (FR-18): the dashboard agent posts the lessons
  * card while the workflow is still `dashboard`, and its page draws no question
@@ -220,45 +285,97 @@ export function renderLessonsDialog(on) {
   const sent = item && ((page.local.sent && page.local.sent[item.id]?.value) || item.submitted);
   let dlg = document.getElementById("lessons-modal");
   if (!item || sent) {
-    if (dlg && dlg.open) dlg.close();
+    if (dlg && dlg.open) {
+      dlg.close();
+      // The Review button that opened it is the place to land again.
+      document.querySelector(".learn-banner button:not(:disabled)")?.focus();
+    }
+    askingClose = false;
     return;
   }
+  shownItem = item;
   if (!dlg) {
     dlg = el("dialog", "modal lessons-dialog");
     dlg.id = "lessons-modal";
     dlg.setAttribute("aria-label", "Lessons to review");
-    // Not light-dismissed, and Escape does not close it: the agent is waiting
-    // on this card, and the dialog is the only place it is drawn. Leave them
-    // all waiting, then Send, is the way out.
-    dlg.addEventListener("cancel", (e) => e.preventDefault());
+    // The agent is waiting on this card, and the dialog is the only place it
+    // is drawn, so a close is never only a hide: Escape, the corner ×, Not now
+    // and a click outside all leave every lesson waiting and say so (a click
+    // outside only while nothing is chosen, so a stray one never costs picks).
+    dlg.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      if (shownItem) requestClose(shownItem);
+    });
+    lightDismiss(dlg, () => {
+      if (shownItem && !saving && !chosenCount(shownItem)) leaveAllWaiting(shownItem);
+      return false;
+    });
     document.body.appendChild(dlg);
   }
   const scroll = dlg.scrollTop;
+  dlg.classList.toggle("is-saving", saving);
+  dlg.setAttribute("aria-busy", saving ? "true" : "false");
   const card = hooks.renderCard(item);
+  if (saving) card.inert = true;
+  const x = el("button", "modal-x", "×");
+  x.type = "button";
+  x.setAttribute("aria-label", "Close without saving");
+  x.disabled = saving;
+  x.addEventListener("click", () => requestClose(item));
   const actions = el("div", "modal-actions");
-  const go = el("button", "btn primary", "Send to Plan2Code");
-  go.type = "button";
-  go.id = "lessons-send";
-  go.addEventListener("click", () => hooks.send());
-  actions.appendChild(go);
-  if (stagedCount() > 1) actions.appendChild(el("p", "help", "Anything else ready to send goes with it."));
-  dlg.replaceChildren(card, actions);
+  if (askingClose && !saving) {
+    const ask = el("div", "lessons-unsaved");
+    ask.setAttribute("role", "alert");
+    ask.appendChild(el("p", "lessons-unsaved-text", "You have choices that are not saved."));
+    const row = el("div", "modal-actions");
+    const keep = el("button", "btn ghost", "Keep editing");
+    keep.type = "button";
+    keep.addEventListener("click", () => {
+      askingClose = false;
+      redraw();
+    });
+    const drop = el("button", "btn danger", "Discard and close");
+    drop.type = "button";
+    drop.addEventListener("click", () => leaveAllWaiting(item));
+    const save = el("button", "btn primary", "Save lessons");
+    save.type = "button";
+    save.disabled = !page.local.staged[item.id] || sendState().disabled;
+    save.addEventListener("click", () => saveLessons(item));
+    row.append(keep, drop, save);
+    ask.appendChild(row);
+    actions.appendChild(ask);
+  } else {
+    const later = el("button", "btn ghost", "Not now");
+    later.type = "button";
+    later.id = "lessons-later";
+    later.disabled = saving;
+    later.addEventListener("click", () => requestClose(item));
+    const go = el("button", "btn primary");
+    go.type = "button";
+    go.id = "lessons-send";
+    if (saving) go.appendChild(spinnerLabel("Saving…"));
+    else go.textContent = "Save lessons";
+    go.addEventListener("click", () => saveLessons(item));
+    actions.append(later, go);
+    if (stagedCount() > 1) actions.appendChild(el("p", "help", "Anything else ready to send goes with it."));
+  }
+  dlg.replaceChildren(card, actions, x);
   refreshLessonsSend();
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = scroll;
 }
 
 /**
- * The dialog's Send, set again whenever what is staged changes, including the
- * quiet staging of typing (a Reword field emptied, a note): on only while the
- * lessons card holds an answer and a send can go.
+ * The dialog's Save lessons, set again whenever what is staged changes,
+ * including the quiet staging of typing (a Reword field emptied, a note): on
+ * only while the lessons card holds an answer and a send can go.
  */
 export function refreshLessonsSend() {
   const go = document.getElementById("lessons-send");
   if (!go) return;
   const items = (page.S && Array.isArray(page.S.items) && page.S.items) || [];
   const item = items.find((i) => i && i.kind === "lessons" && isOpen(i));
-  go.disabled = !item || !page.local.staged[item.id] || sendState().disabled;
+  go.disabled = saving || !item || !page.local.staged[item.id] || sendState().disabled;
 }
 
 function dialog(id, cls, title) {
