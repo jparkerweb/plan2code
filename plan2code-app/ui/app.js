@@ -950,7 +950,10 @@ function stopRetryCountdown() {
   stateButton.disabled = false;
 }
 
-function showState(text, buttonLabel, onButton, onCancel, { tired = false, retryAfter = 0 } = {}) {
+// One automatic Try reconnecting per run of trouble (cleared when a new page is announced).
+let autoReconnected = false;
+
+function showState(text, buttonLabel, onButton, onCancel, { tired = false, retryAfter = 0, autoRetry = false } = {}) {
   // The poll repeats the same waiting message every tick: that must not
   // restart a countdown that is already running (or its button).
   if (retryAfter > 0 && !stateBox.hidden && stateText.textContent === text && stateButton.textContent.startsWith('Try reconnecting')) return;
@@ -975,7 +978,15 @@ function showState(text, buttonLabel, onButton, onCancel, { tired = false, retry
     retryTimer = setInterval(() => {
       left -= 1;
       stateButton.textContent = retryLabel(left);
-      if (left <= 0) stopRetryCountdown();
+      if (left <= 0) {
+        stopRetryCountdown();
+        // The button is on now: press it once for the person. If that try
+        // fails, the button stays for them.
+        if (autoRetry && onButton) {
+          autoReconnected = true;
+          onButton();
+        }
+      }
     }, 1000);
   }
 }
@@ -1020,7 +1031,7 @@ async function pollConsole() {
     if (action === 'wait-for-phase') {
       // Covers the old phase's page and its "Lost contact" until the new one
       // says hello. Never over a question the box is already asking.
-      if (stateCancelEl.hidden) showState(loopDetailEl.textContent, 'Try reconnecting', reconnectConsole, undefined, { retryAfter: RETRY_AFTER_SECONDS });
+      if (stateCancelEl.hidden) showState(loopDetailEl.textContent, 'Try reconnecting', reconnectConsole, undefined, { retryAfter: RETRY_AFTER_SECONDS, autoRetry: !autoReconnected });
       return;
     }
     markConsoleDead();
@@ -1110,6 +1121,7 @@ function showAnnounced(notice) {
   restarting = false;
   // A new page is a new start: the budget is per run of trouble, not per launch.
   reconnects = 0;
+  autoReconnected = false;
   if (!consoleKnown) {
     consoleKnown = true;
     if (!pollTimer) pollTimer = setInterval(pollConsole, STATUS_POLL_MS);

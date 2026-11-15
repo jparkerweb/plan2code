@@ -444,6 +444,16 @@ test("app.js re-arms the hello check and offers Try reconnecting on the loop's w
   assert.match(app, /loopStep === 'Starting' && stepBefore !== 'Starting' && consoleKnown\) void pollConsole\(\)/, "a phase starting looks at the console at once, so the countdown does not wait for the next poll");
 });
 
+test("app.js tries Try reconnecting once by itself when its countdown ends, once per run of trouble", () => {
+  const app = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "ui", "app.js"), "utf8");
+  const show = app.slice(app.indexOf("function showState"), app.indexOf("function hideState"));
+  assert.match(show, /autoRetry/, "showState takes an autoRetry option");
+  assert.match(show, /if \(left <= 0\) \{[^}]*onButton/s, "the countdown's end runs the button's action itself");
+  assert.match(app, /showState\(loopDetailEl\.textContent[^)]*autoRetry: !autoReconnected/s, "the loop's wait for a phase's page tries once");
+  const announced = app.slice(app.indexOf("function showAnnounced"), app.indexOf("window.__TAURI__.event.listen('console-page'"));
+  assert.match(announced, /autoReconnected = false/, "each new page gets its own automatic try");
+});
+
 test("app.js refills the reconnect budget on a new page and brings the page back when a loop ends", () => {
   const app = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "ui", "app.js"), "utf8");
   const announced = app.slice(app.indexOf("function showAnnounced"), app.indexOf("window.__TAURI__.event.listen('console-page'"));
