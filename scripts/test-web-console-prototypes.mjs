@@ -82,7 +82,8 @@ test("prototypeHtmlPath names one .html in prototypes/ and refuses everything el
   });
   try {
     const found = await prototypeHtmlPath(root, SPEC, "picker.html");
-    assert.equal(found, fs.realpathSync(path.join(root, SPEC, "prototypes", "picker.html")));
+    // fs.promises.realpath is the native one, which spells out an 8.3 short temp path.
+    assert.equal(found, fs.realpathSync.native(path.join(root, SPEC, "prototypes", "picker.html")));
     const refused = ["picker.md", "../../../secret.html", "missing.html", path.join(base, "secret.html"), "picker.html.exe", "", undefined];
     for (const name of refused) assert.equal(await prototypeHtmlPath(root, SPEC, name), null, String(name));
   } finally {
