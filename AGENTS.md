@@ -84,7 +84,11 @@ The web console draws him as inline SVG in `src/web-console/public/index.html`, 
     ╰┬─┬╯
 ```
 
+Lessons: approved lessons about this codebase live in `.plan2code/lessons/`, one file per area plus `general.md`. Each file lists the paths it covers; read the matching file before changing that code.
+
 ## Keeping this file current
+
+During a Plan2Code skill run, mistakes are offered as lessons at the end of the run, not written here. Outside a skill run, add one line to the failure log as before.
 
 The `Failure log` section below is a recording of mistakes made by previous AI Agents while working with this code base.
 
