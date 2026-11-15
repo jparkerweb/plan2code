@@ -4113,7 +4113,7 @@ const OUTCOMES = new Set(["passed", "failed", "timeout", "not-started"]);
  * timeout, are judged as a whole command (known false); a passing run names
  * none.
  */
-function readCheckLog(file, outcome, flag) {
+export function readCheckLog(file, outcome, flag) {
   let text;
   try {
     text = fs.readFileSync(path.resolve(file), "utf8");
@@ -4122,7 +4122,9 @@ function readCheckLog(file, outcome, flag) {
   }
   if (outcome && !OUTCOMES.has(outcome)) fail(EXIT.USAGE, "bad-outcome", `${flag} must be passed, failed, timeout or not-started.`, "Pass run-check's outcome.");
   const parsed = failedTests(text);
-  const result = outcome || (parsed.names.length ? "failed" : parsed.known ? "passed" : null);
+  // Without run-check's outcome, a bare FAIL or not ok line (Jest's default output, Go's package line) is a failure even when it names no test.
+  const bareFail = text.split(/\r?\n/).some((l) => /^\s*(?:FAIL\b|not ok\b)/.test(l) && !/#\s*(?:TODO|SKIP)\b/i.test(l));
+  const result = outcome || (parsed.names.length || bareFail ? "failed" : parsed.known ? "passed" : null);
   if (!result) fail(EXIT.USAGE, "missing-outcome", `${file} is in a format I cannot read, so its result is unknown.`, `Pass ${flag} with run-check's outcome.`);
   const names = result === "passed" ? [] : parsed.names;
   return { names, known: parsed.known && result !== "timeout" && (result === "passed" || names.length > 0), outcome: result };

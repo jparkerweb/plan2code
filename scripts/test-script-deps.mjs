@@ -2644,6 +2644,16 @@ test("failedTests reads each runner's failing tests; TODO and SKIP lines are no 
   assert.deepEqual(deps.failedTests("\x1b[31m--- FAIL: TestColor (0.00s)\x1b[0m\n"), { names: ["TestColor"], known: true }, "color codes are dropped");
 });
 
+test("baseline without --outcome reads a bare FAIL line as a failure, and a TODO line as none", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deps-bare-"));
+  const jestDefault = path.join(dir, "jest-default.txt");
+  fs.writeFileSync(jestDefault, "PASS src/a.test.js\nFAIL src/b.test.js\n");
+  const todo = path.join(dir, "todo.txt");
+  fs.writeFileSync(todo, "ok 1 - adds\nnot ok 2 - later # TODO\n");
+  assert.deepEqual(deps.readCheckLog(jestDefault), { names: [], known: false, outcome: "failed" });
+  assert.equal(deps.readCheckLog(todo).outcome, "passed");
+});
+
 test("judgeCheck and compareCheck: red before, flaky and new failures by name; a whole command when the log is unknown", () => {
   const log = (names, outcome = names.length ? "failed" : "passed", known = true) => ({ names, known, outcome });
   const base = (first, retry) => {
