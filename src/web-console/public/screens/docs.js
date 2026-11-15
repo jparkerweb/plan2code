@@ -191,7 +191,7 @@ export function renderDoc(main, id) {
       box.appendChild(el("span", "block-tag", "Assumed for now, still open"));
     }
     if (b.state === "draft") box.appendChild(el("span", "block-tag", "Draft"));
-    box.appendChild(blockBody(b));
+    box.appendChild(blockBody(b, doc));
     main.appendChild(box);
   });
 }

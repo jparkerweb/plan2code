@@ -3,10 +3,14 @@
 // Shared by the documents tab and the finished screen, so neither imports the other.
 
 import { el, md } from "./render.js";
+import { drawDiff } from "./diff-view.js";
 
-// A block's content: its markdown, or for an image block (a screenshot the
-// agent saved under the session's shots/ folder) a captioned picture.
-export function blockBody(b) {
+// A block's content: its markdown, for an image block (a screenshot the
+// agent saved under the session's shots/ folder) a captioned picture, and for
+// a diff block (changes.mjs diff) the Changes tab. `doc` is the block's
+// document, when known.
+export function blockBody(b, doc) {
+  if (isDiffBlock(b)) return drawDiff(b, doc);
   if (typeof b.image !== "string") return md(b.md, "md");
   const fig = el("figure", "doc-figure");
   const img = el("img", "doc-img");
@@ -27,11 +31,29 @@ export function downloadDoc(doc) {
   // assumptions or drafts. Without the marks a half-finished document reads,
   // once it leaves the page, as a set of decisions.
   const mark = { assumed: "> **Assumed for now, still open.**\n\n", draft: "> **Draft.**\n\n" };
-  const blocks = (doc.blocks || []).map((b) => (mark[b.state] || "") + (typeof b.image === "string" ? b.alt || "" : b.md || ""));
+  const blocks = (doc.blocks || []).map((b) => (mark[b.state] || "") + blockText(b));
   const first = (doc.blocks || [])[0];
   const titled = first && /^\s*#\s/.test(first.md || "");
   const body = [titled || !doc.title ? null : `# ${doc.title}`, ...blocks].filter((x) => x != null).join("\n\n");
   saveFile(`${docFileName(doc)}.md`, body, "text/markdown");
+}
+
+// A diff block names its .diff file, or carries only the agent's reason it
+// could not read one.
+function isDiffBlock(b) {
+  return typeof b.diff === "string" || (typeof b.error === "string" && b.md == null && b.image == null);
+}
+
+// What one block contributes to a saved file: a diff block's text as a fenced
+// diff (its error line when it has none), an image's caption, else markdown.
+function blockText(b) {
+  if (isDiffBlock(b)) {
+    if (typeof b.error === "string" && b.error.trim()) return `The changes could not be read: ${b.error.trim()}`;
+    if (typeof b.text !== "string") return "";
+    const fence = b.text.includes("```") ? "~~~~" : "```";
+    return `${fence}diff\n${b.text.replace(/\n$/, "")}\n${fence}`;
+  }
+  return typeof b.image === "string" ? b.alt || "" : b.md || "";
 }
 
 function docFileName(doc) {

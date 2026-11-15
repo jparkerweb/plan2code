@@ -30,19 +30,19 @@ export const BUDGETS = {
   notes: {
     "changelog.md": 1400,
     "dead-code.md": 4900,
-    "deps.md": 9000, // raised by the pin, newer-Node, baseline and full-suite lines, then the fix card and the install card (8765 bytes)
+    "deps.md": 9000, // raised by the pin, newer-Node, baseline and full-suite lines, then the fix card and the install card (8823 bytes)
     "diagnose.md": 2840, // raised by the lessons card line's bytes only
     "document.md": 400,
     "finalize.md": 2000,
     "git.md": 6500,
     "handoff.md": 300,
-    "implement.md": 5700,
+    "implement.md": 6416, // raised by the Changes tab's lines only
     "init.md": 300,
-    "loop.md": 11712, // raised by the failed report's nextStep line's bytes only
+    "loop.md": 11857, // raised by the failed report's nextStep line's and the Changes tab line's bytes only
     "pathfinder.md": 2622, // raised by the UI prototype line's bytes only
     "plan.md": 1023, // raised by the UI prototype line's bytes only
     "pr-prep.md": 4500,
-    "quick-task.md": 4869, // raised by the UI prototype line's, the prototype recap line's, the prototype archive wording's and the lessons card line's bytes only
+    "quick-task.md": 5194, // raised by the UI prototype line's, the prototype recap line's, the prototype archive wording's, the lessons card line's and the Changes tab lines' bytes only
     "review.md": 1140, // raised by the lessons card line's bytes only
     "revise-plan.md": 1422, // raised by the UI prototype line's bytes only
     "test.md": 5540, // raised by the lessons card line's bytes only

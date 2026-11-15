@@ -262,7 +262,7 @@ function mergeDocs(current, patchList) {
     // version: the agent no longer has to track what the page holds, and a
     // repost of unchanged content is not a new version.
     if (prev && typeof entry.version !== "number" && typeof prev.version === "number") {
-      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state, b.image, b.alt, b.diff, b.text]));
+      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state, b.image, b.alt, b.diff, b.text, b.error]));
       if (text(prev.blocks) !== text(doc.blocks)) doc.version = prev.version + 1;
     }
   }
@@ -492,8 +492,11 @@ export function resolveDocImages(patch, state, dir) {
   // Diff blocks: `{ "id": "changes", "diff": "changes.diff" }` names a unified
   // diff the agent saved directly in the session folder (changes.mjs diff). The
   // server reads it like a file block, with the same 512 KB cap, and stores the
-  // name beside the text so the page can tell a diff from markdown.
+  // name beside the text so the page can tell a diff from markdown. When the
+  // changes could not be read, `{ "id": "changes", "error": "<one line>" }`
+  // carries the plain reason instead, and the page shows it with a Reload button.
   const DIFF_RIGHT = { id: "d1", diff: "changes.diff" };
+  const ERROR_RIGHT = { id: "d1", error: "No snapshot was taken at the start of this run." };
   const readDiff = (name, docId, blockId) => {
     const at = `doc "${docId}" block "${blockId}"`;
     if (typeof name !== "string" || !name.trim()) throw new Error(rule(at, "diff", "must be a file name", DIFF_RIGHT));
@@ -542,11 +545,19 @@ export function resolveDocImages(patch, state, dir) {
           if (["md", "file", "image"].some((k) => k in b && b[k] != null)) {
             throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "diff", 'a diff block cannot also carry "md", "file" or "image"', DIFF_RIGHT));
           }
-          return { state: prevBlock?.state || "settled", ...b, diff: b.diff, text: readDiff(b.diff, entry.id, b.id), md: null, file: null, image: null };
+          if (b.error != null) throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "error", 'a diff block carries "diff" or "error", never both', DIFF_RIGHT));
+          return { state: prevBlock?.state || "settled", ...b, diff: b.diff, text: readDiff(b.diff, entry.id, b.id), error: null, md: null, file: null, image: null };
+        }
+        if (b.error !== undefined && b.error !== null) {
+          const at = `doc "${entry.id}" block "${b.id}"`;
+          if (["md", "file", "image"].some((k) => k in b && b[k] != null)) throw new Error(rule(at, "error", 'an error block cannot also carry "md", "file" or "image"', ERROR_RIGHT));
+          if (typeof b.error !== "string" || !b.error.trim() || /[\r\n]/.test(b.error.trim())) throw new Error(rule(at, "error", "must be one line of prose: why the changes could not be read", ERROR_RIGHT));
+          return { state: prevBlock?.state || "settled", ...b, error: b.error.trim(), diff: null, text: null, md: null, file: null, image: null };
         }
         // Text, a file or an image over what was a diff: it stops being one.
         const wasDiff = prevBlock && typeof prevBlock.diff === "string";
-        const notDiff = wasDiff && ("md" in b || "file" in b || "image" in b) ? { diff: null, text: null } : {};
+        const wasError = prevBlock && typeof prevBlock.error === "string";
+        const notDiff = (wasDiff || wasError) && ("md" in b || "file" in b || "image" in b) ? { diff: null, text: null, error: null } : {};
         if (b.image === undefined || b.image === null) {
           // Text or a file over what was an image: it stops being one.
           return ("md" in b || "file" in b) && prevBlock && typeof prevBlock.image === "string" ? { ...b, ...notDiff, image: null, alt: null } : { ...b, ...notDiff };

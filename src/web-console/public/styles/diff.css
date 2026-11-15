@@ -1,0 +1,98 @@
+/* diff.css: The Changes tab, a diff block drawn as a file list and one unified diff. */
+
+/* Every color is a token, so light and dark both come from tokens.css. Added
+   lines take the success pair (--ok, --ok-soft), removed lines the danger
+   pair (--warn, --warn-soft). */
+
+.diff-view { --diff-gutter: 3.4em; --diff-sign: 1.6em; min-width: 0; }
+
+.diff-totals { margin: 0 0 10px; color: var(--ink-2); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.diff-notice {
+  margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--stage); border-radius: 8px;
+  background: var(--stage-soft); color: var(--ink); font-size: 13px;
+}
+.diff-plus { color: var(--ok); font-weight: 600; }
+.diff-minus { color: var(--warn); font-weight: 600; }
+.diff-counts { display: inline-flex; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* Two columns, each scrolling inside itself: the tab never grows past the
+   window, so the doc's head (with its way back to the sign-off card) stays in
+   view however long the diff is. */
+.diff-cols {
+  display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; align-items: start;
+  --diff-max: max(260px, calc(100vh - 280px));
+}
+
+.diff-list {
+  list-style: none; margin: 0; padding: 6px; max-height: var(--diff-max); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius);
+}
+.diff-list:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.diff-file {
+  display: grid; gap: 2px; padding: 7px 10px; border-radius: calc(var(--radius) / 2); cursor: pointer;
+}
+.diff-file:hover { background: var(--panel-2); }
+.diff-file.is-picked { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.diff-file-name { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; min-width: 0; }
+.diff-file-name strong { font-weight: 600; overflow-wrap: anywhere; }
+.diff-file-dir { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.diff-status {
+  font: 700 10px/1.4 var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 0 5px; border-radius: 4px; border: 1px solid var(--rule-2); color: var(--ink-2);
+}
+.diff-status-added { border-color: var(--ok); color: var(--ok); }
+.diff-status-deleted { border-color: var(--warn); color: var(--warn); }
+.diff-status-renamed { border-color: var(--accent); color: var(--accent); }
+
+/* The pane scrolls both ways, so the sideways scrollbar for a long line sits
+   at the bottom of the pane, never under the file's last row. */
+.diff-pane {
+  min-width: 0; max-height: var(--diff-max); overflow: auto; overscroll-behavior: contain;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius);
+}
+.diff-pane-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 9px 14px; border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; left: 0; z-index: 1; background: var(--panel);
+}
+.diff-pane-path { font-weight: 600; overflow-wrap: anywhere; }
+
+/* Long lines scroll sideways with the pane, all rows together, never the page. */
+.diff-rows { display: grid; min-width: 100%; width: max-content; font: 12px/1.55 var(--mono); }
+.diff-hunk { padding: 3px 14px; color: var(--ink-3); background: var(--panel-2); white-space: pre; }
+.diff-line { display: grid; grid-template-columns: var(--diff-gutter) var(--diff-gutter) var(--diff-sign) auto; }
+.diff-no { text-align: right; padding-right: 8px; color: var(--ink-3); font-variant-numeric: tabular-nums; user-select: none; }
+.diff-sign { text-align: center; color: var(--ink-3); user-select: none; }
+.diff-text { font: inherit; white-space: pre; padding-right: 14px; color: var(--ink); background: none; border: 0; }
+.diff-line.add { background: var(--ok-soft); }
+.diff-line.add .diff-sign { color: var(--ok); font-weight: 700; }
+.diff-line.del { background: var(--warn-soft); }
+.diff-line.del .diff-sign { color: var(--warn); font-weight: 700; }
+.diff-line.meta .diff-text { color: var(--ink-3); font-style: italic; }
+
+.diff-plain { margin: 0; padding: 16px 14px; color: var(--ink-2); }
+
+/* Empty and error: a plain line and a button to ask again. */
+.diff-state { padding: 16px 18px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); }
+.diff-state.diff-error { border-color: var(--warn); background: var(--warn-soft); }
+.diff-state-msg { margin: 0 0 12px; }
+.diff-state-why { margin: 8px 0 0; color: var(--ink-2); font-size: 13px; }
+.diff-state-why:empty { display: none; }
+
+/* Loading: muted rows where the list and the lines will be. */
+.diff-skeleton { display: grid; gap: 10px; padding: 14px; }
+.diff-skel-row { display: block; height: 14px; border-radius: 4px; background: var(--rule); }
+.diff-pane.diff-skeleton .diff-skel-row:nth-child(3n) { width: 70%; }
+.diff-pane.diff-skeleton .diff-skel-row:nth-child(4n + 1) { width: 85%; }
+
+/* Narrow window: the file list stacks above the diff as a short list. */
+@media (max-width: 720px) {
+  .diff-cols { grid-template-columns: minmax(0, 1fr); --diff-max: max(240px, calc(100vh - 340px)); }
+  .diff-list { max-height: 152px; }
+}
+
+@media print {
+  .diff-list, .diff-pane { max-height: none; overflow: visible; }
+  .diff-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .diff-rows { width: auto; }
+}

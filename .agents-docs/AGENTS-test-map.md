@@ -11,6 +11,7 @@ Which checks cover which files, read by PR Prep and Test (`test-map.mjs read` ch
 | Update Dependencies script | `src/plan2code-deps-scripts/**`, `scripts/fixtures/deps/**` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-deps.mjs` | no |
 | UI Prototype script and shell | `src/skill-scripts/ui-prototype*.mjs`, `src/plan2code-ui-prototype-references/**`, `scripts/fixtures/ui-prototype/**` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-ui-prototype.mjs scripts/test-ui-prototype-page.mjs` | no |
 | Lessons script | `src/skill-scripts/lessons.mjs`, `src/web-console/learning.mjs` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-lessons.mjs` | no |
+| Changes tab and script | `src/skill-scripts/changes.mjs`, `src/web-console/public/diff-parse.js`, `src/web-console/public/diff-view.js`, `src/web-console/public/styles/diff.css` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-changes.mjs scripts/test-web-console-diff-parse.mjs scripts/test-web-console-page-changes.mjs` | no |
 | Learning on the console | `src/web-console/learning.mjs`, `src/web-console/public/screens/learning-row.js`, `src/web-console/public/styles/learning.css` | `node scripts/node-test.mjs scripts/test-web-console-learning.mjs scripts/test-web-console-page-learning.mjs` | no |
 | Workflow prompts | `src/plan2code-*.md` | `node scripts/validate-char-count.js && node scripts/check-skill-table.mjs` | no |
 | Desktop app | `plan2code-app/**` | `cd plan2code-app && cargo test` | no |

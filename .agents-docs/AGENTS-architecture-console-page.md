@@ -10,6 +10,8 @@ One row per file under `src/web-console/public/` (the games and their sound are 
 | `public/md-field.css` | The frame a Markdown field wears inside its shadow root, linked beside `notepad-editor.css`. |
 | `public/app.js` | the page's entry and the only page file that starts anything: the start-up block. `index.html` loads it; it imports `screens/core.js` and the screens beside it |
 | `public/doc-files.js` | a document as the page shows it, and as a file: blocks, Markdown and HTML download |
+| `public/diff-parse.js` | the Changes tab's parser: the unified diff `changes.mjs diff` writes, read into files, hunks and numbered lines; never throws |
+| `public/diff-view.js` | the Changes tab: a `diff` doc block drawn as a file list and one unified diff, with its empty, loading and error states (Check again and Reload send `__changes`) |
 | `public/hops.js` | no imports: the hop rule, `startsClean(from, to)`, which says whether a hop from one workflow to another starts the new skill on a clean page (to or from the dashboard, into Git, or from one skill into another off a finished screen, but never out of Git or into Review); shared by `cmd-open.mjs`, `server.mjs` (its Ask reset) and `screens/core.js` |
 | `public/looks.js` | how the page looks and sounds: the saved looks, their sync, and the preferences dialog's swatches |
 | `public/mention-box.js` | the @name suggestions popover under a text box |
@@ -51,6 +53,7 @@ One row per file under `src/web-console/public/` (the games and their sound are 
 | `public/styles/dashboard.css` | The dashboard: the menu, the spec picker, its confirm and the launching pane |
 | `public/styles/learning.css` | Learning's row (the paused amber tint, the sliding switch, the upward More menu) and the waiting banner, from the saved prototype on the page's tokens |
 | `public/styles/docs.css` | Documents and the doc tools |
+| `public/styles/diff.css` | The Changes tab: file list, unified diff and its states, on the page's tokens (added rows `--ok`, removed rows `--warn`) |
 | `public/styles/ending.css` | The end of a session: the hand-off and the stopping screen |
 | `public/styles/git.css` | The git board |
 | `public/styles/help.css` | The help dialog, its diagrams and its tabs |

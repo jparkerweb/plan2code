@@ -148,6 +148,7 @@ test("changes: a sensitive file shows its name and counts but no lines", () => {
   assert.match(diff, /^diff --git a\/\.env b\/\.env$/m);
   assert.match(diff, /^Lines hidden: this file may hold a secret\.$/m);
   assert.match(diff, /^# hidden: \.env$/m);
+  assert.match(diff, /^# counts: 2\t0\t\.env$/m, "a hidden file's counts travel in the trailer");
   assert.match(diff, /^\+fine$/m, "other files keep their lines");
 });
 

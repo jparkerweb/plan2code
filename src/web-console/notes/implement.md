@@ -4,6 +4,8 @@
 
 ## First post of a phase
 
+Before the first task, snapshot the tree for the Changes tab: `node "<S>/changes.mjs" start --session <session folder>` (the `session` path `open` printed, not the sid; once per phase, a rerun replaces the snapshot). A non-zero exit: say so in one line and carry on; the sign-off's `diff` then posts the error.
+
 ```jsonc
 {"headline":{"stage":"Phase 3: API layer","cleared":0,"total":9},"docs":[{"id":"phasefile","title":"phase-3.md","blocks":[{"id":"body","file":"specs/<feature>/phase-3.md"}]}],"agent":{"status":"working","activity":"Checking the prerequisites","quietMinutes":15}}
 ```
@@ -27,6 +29,8 @@ Loop mode (`notes/loop.md`) posts `loopOutcome` instead. Otherwise the Completio
 ```jsonc
 {"docs":[{"id":"report","title":"Completion report","blocks":[{"id":"summary","state":"settled","md":"## Summary\n\n..."},{"id":"files","state":"settled","md":"## Files\n\n..."},{"id":"verify","state":"settled","md":"## How to check it\n\n..."}]}],"items":[{"id":"signoff","kind":"review","title":"Approve this phase","doc":"report","body":"Phase 3 is built. Read the report, try the checks, then approve it, review the code first, see it running, or say what to change.","verdicts":[{"id":"review","label":"Review the code first"},{"id":"approve","label":"Approve this phase"},{"id":"show","label":"Show me it working"},{"id":"changes","label":"I want changes"}],"token":{"approve":"approved","changes":"needs changes","show":"show me"},"nothingYet":"Nothing is marked complete until you approve.","gate":{"id":"signoff","authoritative":true}}]}
 ```
+
+**Changes tab:** first run `node "<S>/changes.mjs" diff --session <session folder>`, then add a second doc after `report` in the same post: `{"id":"changes","title":"Changes","blocks":[{"id":"diff","diff":"changes.diff"}]}` (the card keeps `"doc":"report"`). `files: 0` posts it as is. A non-zero exit sends `{"id":"diff","error":"<its message, one line>"}` instead; the sign-off goes on. On an `__changes` send (the tab's Check again or Reload button), run `diff` again, re-send the block (`"refresh":true` on the doc while it stays a diff), then wait as usual. Code changed before the card reopens (a `changes` verdict, a note's change, review fixes): run `diff` again and re-send the block in that post. A later phase re-sends the doc after its new `start`.
 
 Posted with `--wait`. An approval whose note asks for a change: do the change first and ask again. `changes`: address it, update the report, reopen the item with a `thread` reply. `review`: read `building-review.md`. `show`: below.
 
@@ -62,4 +66,4 @@ Yes: `specs.mjs tick`, `{"headline":{"cleared":N}}` with the next item. After th
 
 ## Implement + Review (`implement-review`)
 
-Stage 2 publishes findings as in `building-review.md` (The findings). Stage 3 has no "Check the fixes" item. The post starting Stage 2 carries `"run":{"event":"review","id":"review"}` (scores 1 point; the final `run` leaves it out). Stage 4 is the sign-off above, `show` included, without the `review` verdict, with review results and unresolved findings in the report and "Reviewed and ready for sign-off" in `body`. Its finish `run` is `implement-review-phase`.
+Stage 2 publishes findings as in `building-review.md` (The findings). Stage 3 has no "Check the fixes" item. The post starting Stage 2 carries `"run":{"event":"review","id":"review"}` (scores 1 point; the final `run` leaves it out). Stage 4 is the sign-off above, `show` and the Changes tab included (run `changes.mjs diff` after the review's fixes, so the tab shows the fixed code), without the `review` verdict, with review results and unresolved findings in the report and "Reviewed and ready for sign-off" in `body`. Its finish `run` is `implement-review-phase`.

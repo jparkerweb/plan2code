@@ -245,6 +245,21 @@ function sumNumstat(text) {
   return { added, removed };
 }
 
+/** Per-file counts from `numstat -z`, keyed by the new path; a binary file counts 0. */
+function fileCounts(text) {
+  const tok = (text || "").split("\0");
+  const counts = new Map();
+  for (let i = 0; i < tok.length && tok[i]; ) {
+    const m = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(tok[i]);
+    if (!m) break;
+    const renamed = m[3] === "";
+    const key = renamed ? tok[i + 2] : m[3];
+    counts.set(key, [/^\d+$/.test(m[1]) ? Number(m[1]) : 0, /^\d+$/.test(m[2]) ? Number(m[2]) : 0]);
+    i += renamed ? 3 : 1;
+  }
+  return counts;
+}
+
 /* ------------------------------------------------------------- commands */
 
 function sessionFolder(args) {
@@ -300,6 +315,13 @@ async function diffCommand(args) {
   const trailer = [];
   if (capped.truncated) trailer.push("# truncated: true");
   for (const p of shown.hidden) trailer.push(`# hidden: ${p}`);
+  // Hidden and cut files carry no lines for the page to count: give it their counts.
+  if (shown.hidden.length || capped.truncated) {
+    const counts = fileCounts(git(top, ["diff", "--numstat", "-z", "-M", "--no-ext-diff", start.tree, now]));
+    for (const [p, [a, d]] of counts) {
+      if ((capped.truncated || shown.hidden.includes(p)) && !/[\t\n]/.test(p)) trailer.push(`# counts: ${a}\t${d}\t${p}`);
+    }
+  }
   if (trailer.length) text += (text && !text.endsWith("\n") ? "\n" : "") + trailer.join("\n") + "\n";
 
   fs.mkdirSync(session, { recursive: true });

@@ -1048,6 +1048,49 @@ test("a diff block reads a .diff file in the session folder, refreshes and turns
   }
 });
 
+// When the changes could not be read, the agent sends the plain reason as the
+// block's `error` instead of a diff; a diff sent later replaces it.
+test("a diff block may carry one line of error instead of a diff, never both", () => {
+  const res = cli(["open", "--workflow", "implement", "--no-open"]);
+  const sid = res.json.sid;
+  const dir = res.json.session;
+  const post = (name, patch, opts) => cli(["post", "--session", sid, "--file", payload(name, patch)], opts);
+  const block = () => readState(dir).docs.find((d) => d.id === "changes").blocks[0];
+  try {
+    post("err-ok.json", { docs: [{ id: "changes", title: "Changes", blocks: [{ id: "c1", error: "  No snapshot was taken at the start of this run.  " }] }] });
+    assert.equal(block().error, "No snapshot was taken at the start of this run.");
+    assert.equal(block().diff, undefined);
+    assert.equal(block().text, undefined);
+    assert.equal(block().state, "settled");
+
+    for (const [name, b, why] of [
+      ["err-both.json", { id: "c1", diff: "changes.diff", error: "x" }, /carries "diff" or "error", never both/],
+      ["err-md.json", { id: "c1", error: "x", md: "text" }, /an error block cannot also carry "md", "file" or "image"/],
+      ["err-lines.json", { id: "c1", error: "one\ntwo" }, /must be one line of prose/],
+      ["err-blank.json", { id: "c1", error: "   " }, /must be one line of prose/],
+      ["err-type.json", { id: "c1", error: 3 }, /must be one line of prose/],
+    ]) {
+      fs.writeFileSync(path.join(dir, "changes.diff"), "diff --git a/a b/a\n");
+      const r = post(name, { docs: [{ id: "changes", blocks: [b] }] }, { expectFail: true });
+      assert.equal(r.status, 3, name);
+      assert.match(r.stderr, why, name);
+    }
+
+    // A diff over it clears the error, and an error over a diff clears the text.
+    const text = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n";
+    fs.writeFileSync(path.join(dir, "changes.diff"), text);
+    post("err-to-diff.json", { docs: [{ id: "changes", blocks: [{ id: "c1", diff: "changes.diff" }] }] });
+    assert.equal(block().text, text);
+    assert.equal(block().error, undefined);
+    post("diff-to-err.json", { docs: [{ id: "changes", blocks: [{ id: "c1", error: "The snapshot is gone." }] }] });
+    assert.equal(block().error, "The snapshot is gone.");
+    assert.equal(block().diff, undefined);
+    assert.equal(block().text, undefined);
+  } finally {
+    cli(["stop", "--session", sid, "--force"]);
+  }
+});
+
 test("a diff block refuses a path, a wrong extension, a missing file and a link out of the session folder", () => {
   const res = cli(["open", "--workflow", "implement", "--no-open"]);
   const sid = res.json.sid;

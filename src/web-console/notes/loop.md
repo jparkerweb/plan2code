@@ -36,6 +36,8 @@ approve.
 - Build the phase `--phase` names, without asking (Choosing the phase).
 - No sign-off card, no "Approve this phase", no Show me it working, no Continue
   offer. A loop run notes lessons and never lists them: no `lessons` card.
+- Take the `changes.mjs start` snapshot as `notes/implement.md` says, but run
+  no `diff` and post no Changes tab: a loop phase has no sign-off.
 - Never run `specs.mjs mark --to done`, and never set `[x]` on the phase in
   `overview.md`. Tasks inside the phase file are still checked off as they
   finish: `[x]`, `[!]` when blocked, `[?]` when assumed.

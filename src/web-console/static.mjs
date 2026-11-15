@@ -28,6 +28,8 @@ export const SERVABLE = new Set([
   "card-rows.js",
   "state.js",
   "doc-files.js",
+  "diff-parse.js",
+  "diff-view.js",
   "send-state.js",
   "mention-box.js",
   "md-field.js",
@@ -320,7 +322,7 @@ export const SERVABLE = new Set([
 // Layers first, then one file per screen, then responsive and print last so
 // its overrides still come after everything they override. The files are not
 // on SERVABLE: they reach the page only through /app.css.
-export const CSS_ORDER = ["tokens.css", "shell.css", "planny.css", "pieces.css", "dashboard.css", "learning.css", "poses.css", "docs.css", "ask.css", "ending.css", "help.css", "looks.css", "prefs.css", "agents.css", "notepad.css", "activities.css", "git.css", "responsive.css"];
+export const CSS_ORDER = ["tokens.css", "shell.css", "planny.css", "pieces.css", "dashboard.css", "learning.css", "poses.css", "docs.css", "diff.css", "ask.css", "ending.css", "help.css", "looks.css", "prefs.css", "agents.css", "notepad.css", "activities.css", "git.css", "responsive.css"];
 
 // The files joined with one newline between them (each file's own last newline
 // is that one), as the server serves them before the accent rules. The test
