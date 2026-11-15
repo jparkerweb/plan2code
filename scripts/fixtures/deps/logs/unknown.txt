@@ -1,0 +1,2 @@
+Error: something broke
+    at main (build.js:1:1)

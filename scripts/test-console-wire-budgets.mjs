@@ -30,7 +30,7 @@ export const BUDGETS = {
   notes: {
     "changelog.md": 1400,
     "dead-code.md": 4900,
-    "deps.md": 5700,
+    "deps.md": 9000, // raised by the pin, newer-Node, baseline and full-suite lines, then the fix card and the install card (8765 bytes)
     "diagnose.md": 2840, // raised by the lessons card line's bytes only
     "document.md": 400,
     "finalize.md": 2000,

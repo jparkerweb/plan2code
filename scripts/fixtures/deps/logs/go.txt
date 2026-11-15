@@ -1,0 +1,5 @@
+=== RUN   TestAdds
+--- PASS: TestAdds (0.00s)
+=== RUN   TestDivides
+--- FAIL: TestDivides (0.00s)
+FAIL	example.com/m	0.01s

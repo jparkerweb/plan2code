@@ -57,7 +57,7 @@ function copyManifest(rel, { crlf = false } = {}) {
 test("deps --help names every command and every exit code", () => {
   const r = runDeps(["--help"]);
   assert.equal(r.code, 0, r.stderr);
-  for (const command of ["detect", "scan", "notes", "label", "batches", "backup", "apply", "restore", "handoff", "cleanup"]) {
+  for (const command of ["detect", "scan", "notes", "fit", "pins", "label", "checks", "baseline", "compare", "batches", "backup", "apply", "restore", "handoff", "cleanup"]) {
     assert.match(r.stdout, new RegExp(`deps\\.mjs ${command}\\b`), command);
   }
   for (const exit of ["0 ok", "1 crash", "2 bad arguments", "3 not found", "4 invalid", "5 refused"]) assert.ok(r.stdout.includes(exit), exit);
@@ -1084,8 +1084,20 @@ test("scan attaches the test map rows covering a lockfile's members; a Shared ro
   const { scan } = detectAndScan(root, { npm: npmRules() }, ["--no-audit"]);
   const byLock = Object.fromEntries(scan.lockfiles.map((l) => [l.lockfile, l.checks]));
   // The root lockfile resolves the root folder, so every row falls in it.
-  assert.deepEqual(byLock["package-lock.json"], { rows: ["App", "Web", "Build"], commands: ["npm test -w app", "x", "npm test"], discovered: [], full: true });
-  assert.deepEqual(byLock["web/package-lock.json"], { rows: ["Web"], commands: ["x"], discovered: [], full: false });
+  // Each command gets a stable id across the scan: the same command in two lockfiles keeps one id.
+  assert.deepEqual(byLock["package-lock.json"], {
+    rows: ["App", "Web", "Build"],
+    commands: ["npm test -w app", "x", "npm test"],
+    discovered: [],
+    full: true,
+    list: [
+      { id: "c1", area: "App", run: "npm test -w app", paths: ["packages/app/**"], shared: false },
+      { id: "c2", area: "Web", run: "x", paths: ["web/**"], shared: false },
+      { id: "c3", area: "Build", run: "npm test", paths: ["scripts/**"], shared: true },
+    ],
+    build: [],
+  });
+  assert.deepEqual(byLock["web/package-lock.json"], { rows: ["Web"], commands: ["x"], discovered: [], full: false, list: [{ id: "c2", area: "Web", run: "x", paths: ["web/**"], shared: false }], build: [] });
   assert.equal(scan.noChecks, false);
 });
 
@@ -2444,7 +2456,7 @@ test("handoff writes one brief per package in the 4.5 format, every section pres
       "",
       "## Why it was held back",
       "",
-      "- **chalk**: Warning (major, range ^4.1.0 → ^5.3.0, breaking notes, calls a changed API, used in 2 files)",
+      "- **chalk**: Warning (a big change, the allowed range widens from ^4.1.0 to ^5.3.0, the notes say something was removed or changed, your code uses something that changed, 2 files use it)",
       "",
       "## What the notes say changed",
       "",
@@ -2484,8 +2496,8 @@ test("handoff: a pair shares one brief listing both packages; a scoped name gets
   assert.match(pair, /^# Upgrade react 18\.3\.1 to 19\.0\.0 and react-dom 18\.3\.1 to 19\.0\.0\n/);
   for (const section of ["Why it was held back", "What the notes say changed", "Where the code calls it", "Checks that cover it", "How to apply"]) assert.match(pair, new RegExp(`^## ${section}$`, "m"), section);
   assert.match(pair, /^\*\*Status:\*\* Ready$/m);
-  assert.match(pair, /- \*\*react\*\*: Warning \(major, .*used in 9 files/, "a major with unreadable notes in 9 files");
-  assert.match(pair, /- \*\*react-dom\*\*: Check first \(major/);
+  assert.match(pair, /- \*\*react\*\*: Warning \(a big change, .*9 files use it/, "a big change with unreadable notes in 9 files");
+  assert.match(pair, /- \*\*react-dom\*\*: Check first \(a big change/);
   assert.match(pair, /### react\n\nThe notes could not be read\./);
   assert.match(pair, /### react-dom\n\nThe notes were not read\./);
   assert.match(pair, /npm update react react-dom --package-lock-only/, "one command moves both");
@@ -2535,6 +2547,475 @@ test("handoff refuses an id not in labels.json (exit 3) and writes nothing; upgr
   assert.equal(deps.upgradeFolder(".."), "package-upgrade");
 });
 
+/* ------------------------------------------------------------ pins */
+
+const PINS = fx("pins", "project");
+
+/** The pins fixture project copied into a temp folder, with extra files on top. */
+function pinsProject(extra = {}) {
+  const dir = tmp("deps-pins");
+  fs.cpSync(PINS, dir, { recursive: true });
+  for (const [rel, content] of Object.entries(extra)) write(dir, rel, content);
+  return dir;
+}
+
+const PW = { id: "package-lock.json#playwright-core", package: "playwright-core", current: "1.64.1", target: "1.66.0" };
+
+test("findPins finds a whole-token exact version beside the package name, never a stray number", () => {
+  const root = pinsProject();
+  const pins = deps.findPins(root, [PW], { skip: ["package.json", "package-lock.json"] });
+  assert.deepEqual(pins, [{ id: PW.id, file: "scripts/test-browser-helper.mjs", line: 4, text: 'export const BROWSER = "playwright-core@1.64.1";' }], "the 11.64.10 and 1.64.12 line is no pin");
+});
+
+test("findPins skips lockfiles, files a lockfile entry owns, binary files and files over 1 MB", () => {
+  const big = `playwright-core 1.64.1\n${"x".repeat(deps.PIN_FILE_CAP)}`;
+  const root = pinsProject({ "web/package-lock.json": '{"playwright-core": "1.64.1"}\n', "notes/big.txt": big, "docs/readme.md": "Uses playwright-core 1.64.1 today.\n" });
+  fs.writeFileSync(path.join(root, "assets.bin"), Buffer.concat([Buffer.from("playwright-core 1.64.1\n"), Buffer.from([0, 1, 2])]));
+  const files = deps.findPins(root, [PW], { skip: ["package.json", "package-lock.json"] }).map((p) => p.file);
+  assert.deepEqual(files.sort(), ["docs/readme.md", "scripts/test-browser-helper.mjs"]);
+  const owned = deps.findPins(root, [PW], { skip: ["package-lock.json"] }).map((p) => p.file);
+  assert.ok(owned.includes("package.json"), "a manifest not on the skip list is searched");
+  assert.deepEqual(deps.findPins(root, [PW], { files: ["docs/readme.md"] }).map((p) => p.file), ["docs/readme.md"], "files limits the search");
+  assert.deepEqual(deps.findPins(root, []), [], "no rows, no search");
+});
+
+test("label: a pin outside the row's own files moves a Safe row to Check first, naming the file", () => {
+  const before = labeled();
+  assert.equal(before.r1.label, "safe");
+  const pins = { pins: [{ id: "r1", file: "scripts/test-browser-helper.mjs", line: 4, text: "x" }, { id: "r1", file: "package-lock.json", line: 9, text: "x" }] };
+  const after = Object.fromEntries(deps.label(SCAN, RECORDS, pins).map((l) => [l.id, l]));
+  assert.equal(after.r1.label, "check-first");
+  assert.ok(after.r1.reasons.includes("exact version used in scripts/test-browser-helper.mjs"), after.r1.reasons.join("; "));
+  assert.match(after.r1.reasonsPlain.join(" "), /scripts\/test-browser-helper\.mjs names this exact version \(1\.2\.3\)/);
+  const own = Object.fromEntries(deps.label(SCAN, RECORDS, [{ id: "r1", file: "package-lock.json" }]).map((l) => [l.id, l]));
+  assert.equal(own.r1.label, "safe", "a pin in its own lockfile moves with the update");
+  assert.deepEqual(deps.label(SCAN, RECORDS, null), deps.label(SCAN, RECORDS), "no pins.json changes nothing");
+  const warning = Object.fromEntries(deps.label(SCAN, RECORDS, [{ id: "r5", file: "a.js" }]).map((l) => [l.id, l]));
+  assert.equal(warning.r5.label, "warning", "the Warning rules stay as they are");
+});
+
+test("pins --run writes pins.json, label reads it, and the row with a pin in a test file leaves Safe", () => {
+  const root = pinsProject();
+  const lock = { lockfile: "package-lock.json", manifest: "package.json", adapter: "npm", ecosystem: "npm", manager: "npm", members: ["."], checks: { rows: ["Root"], discovered: [] }, rows: [{ ...PW, jump: "minor", inRange: false, range: { from: "1.64.1", to: "1.66.0" }, pinned: true, security: null, declaredIn: [{ file: "package.json", range: "1.64.1" }] }] };
+  const dir = runFolder({ "scan.json": { root, noChecks: false, lockfiles: [lock] } });
+  const r = runDeps(["pins", "--run", dir]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.count, 1);
+  assert.deepEqual(r.json.pins.map((p) => [p.file, p.line]), [["scripts/test-browser-helper.mjs", 4]]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "pins.json"), "utf8")), { pins: r.json.pins });
+  const records = path.join(dir, "records-in.json");
+  fs.writeFileSync(records, JSON.stringify([{ id: PW.id, notes: "read", breaking: [], usedIn: ["scripts/test-browser-helper.mjs"] }]));
+  const unpinned = deps.label({ noChecks: false, lockfiles: [lock] }, JSON.parse(fs.readFileSync(records, "utf8")));
+  assert.equal(unpinned[0].label, "safe", "without the pin the row is Safe");
+  const l = runDeps(["label", "--run", dir, "--records", records]);
+  assert.equal(l.code, 0, l.stderr);
+  assert.equal(l.json.labels[0].label, "check-first");
+  assert.ok(l.json.labels[0].reasons.includes("exact version used in scripts/test-browser-helper.mjs"));
+});
+
+test("pins: a run folder that is not there and a run with no scan.json exit 3", () => {
+  const gone = runDeps(["pins", "--run", path.join(os.tmpdir(), "plan2code-deps-19990101-deadbeef")]);
+  assert.equal(gone.code, 3);
+  assert.equal(gone.json.error, "run-missing");
+  const empty = runDeps(["pins", "--run", runFolder()]);
+  assert.equal(empty.code, 3);
+  assert.equal(empty.json.next, "Run scan first.");
+});
+
+/* ------------------------------------------------------------ checks: failing tests */
+
+const LOGS = fx("logs");
+const logText = (name) => fs.readFileSync(path.join(LOGS, name), "utf8");
+
+test("failedTests reads each runner's failing tests; TODO and SKIP lines are no failures", () => {
+  const cases = {
+    "tap.txt": ["parses dates"],
+    "node-spec.txt": ["parses dates"],
+    "jest.txt": ["divides by zero"],
+    "vitest.txt": ["src/b.test.ts > math > divides by zero"],
+    "pytest.txt": ["tests/test_b.py::test_divides"],
+    "cargo.txt": ["math::divides"],
+    "go.txt": ["TestDivides"],
+    "dotnet.txt": ["MyApp.Tests.Divides"],
+  };
+  for (const [file, names] of Object.entries(cases)) assert.deepEqual(deps.failedTests(logText(file)), { names, known: true }, file);
+  assert.deepEqual(deps.failedTests(logText("unknown.txt")), { names: [], known: false }, "an unknown format falls back to the command");
+  assert.deepEqual(deps.failedTests("ok 1 - adds\nok 2 - parses\n"), { names: [], known: true }, "a known format with nothing failing");
+  assert.deepEqual(deps.failedTests("\x1b[31m--- FAIL: TestColor (0.00s)\x1b[0m\n"), { names: ["TestColor"], known: true }, "color codes are dropped");
+});
+
+test("judgeCheck and compareCheck: red before, flaky and new failures by name; a whole command when the log is unknown", () => {
+  const log = (names, outcome = names.length ? "failed" : "passed", known = true) => ({ names, known, outcome });
+  const base = (first, retry) => {
+    const j = deps.judgeCheck(first, retry);
+    return { failing: j.names, flaky: j.flaky, known: j.known, commandFailed: j.commandFailed, ...(j.timeout ? { timeout: true } : {}) };
+  };
+  const red = base(log(["a"]), log(["a"]));
+  assert.deepEqual(red.failing, ["a"]);
+  const wobbly = base(log(["b"]), log([]));
+  assert.deepEqual([wobbly.failing, wobbly.flaky], [[], ["b"]]);
+  assert.deepEqual(deps.compareCheck(red, deps.judgeCheck(log(["a"]), log(["a"]))), { newFailures: [], stillFailing: ["a"], flaky: [], blame: false, known: true });
+  assert.equal(deps.compareCheck(wobbly, deps.judgeCheck(log(["b"]), log(["b"]))).blame, false, "flaky before never blames");
+  const broke = deps.compareCheck(red, deps.judgeCheck(log(["a", "c"]), log(["a", "c"])));
+  assert.deepEqual([broke.newFailures, broke.blame], [["c"], true]);
+  assert.equal(deps.compareCheck(red, deps.judgeCheck(log(["c"]), log([]))).blame, false, "a test that fails once and passes on the retry is flaky now");
+  const unknownPass = base(log([], "passed", false));
+  assert.equal(deps.compareCheck(unknownPass, deps.judgeCheck(log([], "failed", false))).blame, true, "a command that passed before and fails now");
+  const unknownFail = base(log([], "failed", false));
+  assert.equal(deps.compareCheck(unknownFail, deps.judgeCheck(log([], "failed", false))).blame, false, "a command already failing as a whole");
+  assert.equal(deps.compareCheck(red, deps.judgeCheck(log([], "failed", false))).blame, true, "a run that names no test now, after named failures before, is blamed");
+});
+
+/* ------------------------------------------------------------ checks: commands */
+
+const CHECKS_LOCK = "package-lock.json";
+const TOOLS_LOCK = "tools/package-lock.json";
+/** A run folder: the root version list with test map rows (one Shared) and a build check, and tools/ with only a confirmed command. */
+function checksRun({ records = null, pins = null, list = null } = {}) {
+  const lock = {
+    lockfile: CHECKS_LOCK,
+    manifest: "package.json",
+    adapter: "npm",
+    ecosystem: "npm",
+    manager: "npm",
+    members: ["."],
+    install: "npm ci",
+    checks: {
+      rows: ["App", "Web", "Everything"],
+      commands: ["npm test -w app", "npm test -w web", "npm test"],
+      discovered: [],
+      full: true,
+      list: list || [
+        { id: "c1", area: "App", run: "npm test -w app", paths: ["packages/app/**"], shared: false },
+        { id: "c2", area: "Web", run: "npm test -w web", paths: ["web/**"], shared: false },
+        { id: "c3", area: "Everything", run: "npm test", paths: ["scripts/**"], shared: true },
+      ],
+      build: [{ command: "npm run build", cwd: "." }],
+    },
+    rows: ["a", "b", "c", "d"].map((p) => ({ id: `${CHECKS_LOCK}#${p}`, package: p, current: "1.0.0", target: "1.0.1" })),
+    held: [],
+  };
+  const tools = {
+    lockfile: TOOLS_LOCK,
+    manifest: "tools/package.json",
+    adapter: "npm",
+    ecosystem: "npm",
+    manager: "npm",
+    members: ["tools"],
+    install: "npm ci",
+    checks: { rows: [], commands: [], discovered: [{ command: "npm run lint", cwd: "tools" }], full: false, list: [], build: [] },
+    rows: [{ id: `${TOOLS_LOCK}#e`, package: "e", current: "1.0.0", target: "1.0.1" }],
+    held: [],
+  };
+  const batches = [...["a", "b", "c", "d"].map((p, i) => ({ id: `b${i + 1}`, lockfile: CHECKS_LOCK, picks: [`${CHECKS_LOCK}#${p}`] })), { id: "b5", lockfile: TOOLS_LOCK, picks: [`${TOOLS_LOCK}#e`] }];
+  const files = {
+    "scan.json": { root: tmp("deps-checks"), noChecks: false, lockfiles: [lock, tools] },
+    "batches.json": { batches },
+  };
+  if (records) files["records.json"] = records;
+  if (pins) files["pins.json"] = pins;
+  return runFolder(files);
+}
+
+test("checks lists every check with an id for the baseline, the Shared rows too; full is the full suite", () => {
+  const r = runDeps(["checks", "--run", checksRun()]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(
+    r.json.checks.map((c) => [c.id, c.command, c.cwd, c.kind, c.lockfile, Boolean(c.shared)]),
+    [
+      ["install", "npm ci", ".", "install", CHECKS_LOCK, false],
+      ["c1", "npm test -w app", ".", "map", CHECKS_LOCK, false],
+      ["c2", "npm test -w web", ".", "map", CHECKS_LOCK, false],
+      ["c3", "npm test", ".", "map", CHECKS_LOCK, true],
+      ["d1", "npm run build", ".", "build", CHECKS_LOCK, false],
+      ["install-2", "npm ci", "tools", "install", TOOLS_LOCK, false],
+      ["d2", "npm run lint", "tools", "discovered", TOOLS_LOCK, false],
+    ],
+  );
+  assert.deepEqual(r.json.full, [{ id: "c3", command: "npm test", cwd: ".", area: "Everything" }]);
+});
+
+test("checks --batch narrows by usedIn and pins and adds the build; a Shared row runs only when it alone covers a file", () => {
+  const dir = checksRun({
+    records: [
+      { id: `${CHECKS_LOCK}#a`, usedIn: ["packages/app/src/x.js"] },
+      { id: `${CHECKS_LOCK}#c`, usedIn: ["tools2/y.js"] },
+      { id: `${CHECKS_LOCK}#d`, usedIn: ["scripts\\helper.mjs", "packages/app/z.js"] },
+    ],
+    pins: { pins: [{ id: `${CHECKS_LOCK}#b`, file: "web/test/pin.test.js", line: 3, text: "b 1.0.0" }] },
+  });
+  const a = runDeps(["checks", "--run", dir, "--batch", "b1"]);
+  assert.equal(a.code, 0, a.stderr);
+  assert.equal(a.json.narrowed, true);
+  assert.deepEqual(a.json.commands.map((c) => c.id), ["c1", "d1"], "the App row and the build");
+  assert.deepEqual(a.json.install, { id: "install", command: "npm ci", cwd: "." });
+  assert.deepEqual(a.json.full.map((c) => c.id), ["c3"], "the Shared row is left for the end");
+  assert.equal(a.json.message, null);
+  const b = runDeps(["checks", "--run", dir, "--batch", "b2"]);
+  assert.deepEqual(b.json.commands.map((c) => c.id), ["c2", "d1"], "narrowed by the pin's file");
+  const d = runDeps(["checks", "--run", dir, "--batch", "b4"]);
+  assert.deepEqual(d.json.commands.map((c) => c.id), ["c1", "c3", "d1"], "scripts/helper.mjs is covered only by the Shared row");
+  assert.deepEqual(d.json.full, [], "it ran in the group, so nothing is left for the end");
+  const c = runDeps(["checks", "--run", dir, "--batch", "b3"]);
+  assert.equal(c.json.narrowed, false);
+  assert.deepEqual(c.json.commands.map((x) => x.id), ["c1", "c2", "d1"]);
+  assert.match(c.json.message, /No test map row covers/);
+  const none = runDeps(["checks", "--run", checksRun(), "--batch", "b1"]);
+  assert.equal(none.json.narrowed, false);
+  assert.match(none.json.message, /Nothing says which files/);
+  assert.ok(!none.json.commands.some((x) => x.id === "c3"), "with other tests, not narrowed still leaves the Shared row out");
+  const tools = runDeps(["checks", "--run", dir, "--batch", "b5"]);
+  assert.deepEqual([tools.json.commands.map((x) => x.id), tools.json.install.id], [["d2"], "install-2"], "a folder with only a confirmed command runs it");
+  assert.equal(runDeps(["checks", "--run", dir, "--batch", "b9"]).code, 3, "an unknown batch");
+});
+
+test("checks --batch: a pin file no narrower row covers runs the full suite in the group, narrowed or not", () => {
+  const dir = checksRun({
+    records: [{ id: `${CHECKS_LOCK}#a`, usedIn: ["packages/app/src/x.js"] }],
+    pins: {
+      pins: [
+        { id: `${CHECKS_LOCK}#a`, file: "tests/browser.test.mjs", line: 4, text: "a 1.0.0" },
+        { id: `${CHECKS_LOCK}#c`, file: "tests/other.test.mjs", line: 2, text: "c 1.0.0" },
+        { id: `${CHECKS_LOCK}#b`, file: "web/pin.test.js", line: 3, text: "b 1.0.0" },
+      ],
+    },
+  });
+  const narrowed = runDeps(["checks", "--run", dir, "--batch", "b1"]);
+  assert.equal(narrowed.code, 0, narrowed.stderr);
+  assert.equal(narrowed.json.narrowed, true);
+  assert.deepEqual(narrowed.json.commands.map((c) => c.id), ["c1", "c3", "d1"], "the App row, then the full suite for the uncovered pin");
+  assert.deepEqual(narrowed.json.full, []);
+  assert.match(narrowed.json.message, /covers tests\/browser\.test\.mjs, which names the exact version, so the full suite runs/);
+  const wide = runDeps(["checks", "--run", dir, "--batch", "b3"]);
+  assert.equal(wide.json.narrowed, false);
+  assert.deepEqual(wide.json.commands.map((c) => c.id), ["c1", "c2", "c3", "d1"], "every row, plus the full suite for the pin");
+  assert.match(wide.json.message, /tests\/other\.test\.mjs/);
+  const covered = runDeps(["checks", "--run", dir, "--batch", "b2"]);
+  assert.deepEqual(covered.json.commands.map((c) => c.id), ["c2", "d1"], "a pin a narrower row covers changes nothing");
+  assert.equal(covered.json.message, null);
+});
+
+test("checks --batch: a folder whose only test is a Shared row runs it, so a group never runs without a test", () => {
+  const dir = checksRun({ list: [{ id: "c1", area: "Everything", run: "npm test", paths: ["scripts/**"], shared: true }] });
+  const r = runDeps(["checks", "--run", dir, "--batch", "b1"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.narrowed, false);
+  assert.deepEqual(r.json.commands.map((c) => c.id), ["c1", "d1"]);
+  assert.match(r.json.message, /full suite is the only test/);
+  assert.deepEqual(r.json.full, []);
+});
+
+test("scan saves the build checks test-commands.mjs finds in each version list's folder", () => {
+  const root = project({ "package.json": { name: "fixture-root", private: true, engines: { node: ">=12" }, workspaces: ["packages/*"], scripts: { build: "tsup", test: "node --test" }, dependencies: { chalk: "^4.1.0", "left-pad": "1.1.0", semver: "^7.5.0", mkdirp: "^0.5.5" }, overrides: { ms: "2.1.2" } } });
+  const { scan } = detectAndScan(root, { npm: npmRules() }, ["--no-audit"]);
+  assert.deepEqual(scan.lockfiles[0].checks.build, [{ command: "npm run build", cwd: "." }]);
+  assert.deepEqual(deps.checkList(scan)[0].discovered, [{ id: "d1", command: "npm run build", cwd: ".", kind: "build" }]);
+  assert.equal(deps.label(scan, []).length > 0, true);
+});
+
+/* ------------------------------------------------------------ checks: baseline and compare */
+
+function logFile(text) {
+  const dir = tmp("deps-log");
+  return write(dir, "check.log", text);
+}
+const TAP = (fails) => ["TAP version 13", "ok 1 - adds numbers", ...fails.map((n, i) => `not ok ${i + 2} - ${n}`), ""].join("\n");
+
+test("baseline records red-before and flaky tests; compare blames only tests that passed before", () => {
+  const dir = checksRun();
+  const b = runDeps(["baseline", "--run", dir, "--check", "c1", "--log", logFile(TAP(["parses dates", "reads the clock"])), "--outcome", "failed", "--retry-log", logFile(TAP(["parses dates"])), "--retry-outcome", "failed"]);
+  assert.equal(b.code, 0, b.stderr);
+  assert.deepEqual([b.json.failing, b.json.flaky, b.json.known, b.json.commandFailed], [["parses dates"], ["reads the clock"], true, false]);
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, "baseline.json"), "utf8"));
+  assert.deepEqual(saved.checks.c1.failing, ["parses dates"]);
+
+  const same = runDeps(["compare", "--run", dir, "--batch", "b1", "--check", "c1", "--log", logFile(TAP(["parses dates", "reads the clock"])), "--retry-log", logFile(TAP(["parses dates", "reads the clock"]))]);
+  assert.equal(same.code, 0, same.stderr);
+  assert.deepEqual([same.json.newFailures, same.json.stillFailing, same.json.flaky, same.json.blame], [[], ["parses dates"], ["reads the clock"], false], "red before and flaky never blame");
+
+  const broke = runDeps(["compare", "--run", dir, "--batch", "b1", "--check", "c1", "--log", logFile(TAP(["adds more", "parses dates"])), "--outcome", "failed"]);
+  assert.deepEqual([broke.json.newFailures, broke.json.blame], [["adds more"], true], "a test that passed before");
+  const record = JSON.parse(fs.readFileSync(path.join(dir, "compare.json"), "utf8"));
+  assert.equal(record.batches.b1.c1.blame, true);
+});
+
+test("baseline and compare judge a log in an unknown format, and a timeout, by the whole command", () => {
+  const dir = checksRun();
+  const unknown = logFile(logText("unknown.txt"));
+  const pass = runDeps(["baseline", "--run", dir, "--check", "install", "--log", unknown, "--outcome", "passed"]);
+  assert.equal(pass.code, 0, pass.stderr);
+  assert.deepEqual([pass.json.known, pass.json.commandFailed], [false, false]);
+  const now = runDeps(["compare", "--run", dir, "--batch", "b1", "--check", "install", "--log", unknown, "--outcome", "failed"]);
+  assert.deepEqual([now.json.known, now.json.blame], [false, true], "passed before, fails now");
+
+  const red = runDeps(["baseline", "--run", dir, "--check", "d1", "--log", unknown, "--outcome", "failed"]);
+  assert.deepEqual([red.json.known, red.json.commandFailed], [false, true]);
+  assert.equal(runDeps(["compare", "--run", dir, "--batch", "b1", "--check", "d1", "--log", unknown, "--outcome", "failed"]).json.blame, false, "already failing as a whole");
+
+  const slow = runDeps(["baseline", "--run", dir, "--check", "c2", "--log", logFile(TAP([])), "--outcome", "timeout"]);
+  assert.deepEqual([slow.json.commandFailed, slow.json.timeout, slow.json.known], [true, true, false]);
+});
+
+test("baseline and compare: usage, a missing log, an unknown check and a check with no baseline", () => {
+  const dir = checksRun();
+  const log = logFile(TAP([]));
+  assert.equal(runDeps(["baseline", "--run", dir, "--log", log]).json.error, "missing-check");
+  assert.equal(runDeps(["baseline", "--run", dir, "--check", "c1"]).json.error, "missing-log");
+  const unknownCheck = runDeps(["baseline", "--run", dir, "--check", "c9", "--log", log]);
+  assert.equal(unknownCheck.code, 3);
+  assert.equal(unknownCheck.json.error, "unknown-check");
+  const missing = runDeps(["baseline", "--run", dir, "--check", "c1", "--log", path.join(tmp("deps-log"), "nope.log")]);
+  assert.equal(missing.code, 3);
+  assert.equal(missing.json.error, "log-missing");
+  const unread = runDeps(["baseline", "--run", dir, "--check", "c1", "--log", logFile(logText("unknown.txt"))]);
+  assert.equal(unread.code, 2, "an unknown format needs run-check's outcome");
+  assert.equal(unread.json.error, "missing-outcome");
+  assert.equal(runDeps(["baseline", "--run", dir, "--check", "c1", "--log", log, "--outcome", "maybe"]).json.error, "bad-outcome");
+  const noBase = runDeps(["compare", "--run", dir, "--batch", "b1", "--check", "c2", "--log", log]);
+  assert.equal(noBase.code, 3);
+  assert.equal(noBase.json.next, "Run baseline for this check first.");
+});
+
+/* ------------------------------------------------------------ runtime fit */
+
+test("bestFit: the newest version that fits, none, and never one older than the current", () => {
+  const versions = [
+    { version: "4.1.2", engines: ">=10" },
+    { version: "5.0.0", engines: ">=16" },
+    { version: "6.0.1", engines: ">=22" },
+  ];
+  const fits = (floor) => (v) => !v.engines || Number(v.engines.replace(">=", "")) <= floor;
+  assert.deepEqual(deps.bestFit({ current: "4.1.0", versions, fits: fits(18) }), { best: "5.0.0", needs: ">=22" });
+  assert.deepEqual(deps.bestFit({ current: "4.1.0", versions, fits: fits(8) }), { best: null, needs: ">=22" });
+  assert.deepEqual(deps.bestFit({ current: "4.1.0", latest: "5.0.0", versions, fits: fits(18) }), { best: "5.0.0", needs: null }, "latest caps the list");
+  assert.deepEqual(deps.bestFit({ current: "5.0.0", versions: [{ version: "4.1.2", engines: ">=10" }, { version: "6.0.1", engines: ">=22" }], fits: fits(18) }), { best: null, needs: ">=22" }, "an older version that fits is never offered");
+});
+
+/** A run folder whose scan holds chalk held for the runtime, ms held by an override, and a Cargo crate held for Rust. */
+function fitRun(root) {
+  const npmLock = {
+    lockfile: "package-lock.json",
+    manifest: "package.json",
+    adapter: "npm",
+    ecosystem: "npm",
+    manager: "npm",
+    members: [".", "packages/app"],
+    runtime: { declared: JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).engines.node, source: "engines", machine: "24.0.0" },
+    checks: { rows: ["Root"], discovered: [] },
+    rows: [],
+    held: [
+      { id: "package-lock.json#chalk", package: "chalk", current: "4.1.0", latest: "6.0.1", reason: "every newer version needs Node >=22 (the project declares >=12)", file: null, security: null },
+      { id: "package-lock.json#ms", package: "ms", current: "2.1.2", latest: "2.1.3", reason: "held by overrides in package.json", file: "package.json", security: null },
+    ],
+  };
+  const cargoLock = {
+    lockfile: "app/Cargo.lock",
+    manifest: "app/Cargo.toml",
+    adapter: "cargo",
+    ecosystem: "cargo",
+    manager: "cargo",
+    members: ["app"],
+    runtime: { declared: "1.70", source: "rust-version", machine: "1.99.1" },
+    checks: { rows: [], discovered: [] },
+    rows: [],
+    held: [{ id: "app/Cargo.lock#serde", package: "serde", current: "1.0.100", latest: "1.0.200", reason: "every newer version needs Rust 1.80 (the project declares 1.70)", file: null, security: null }],
+  };
+  return runFolder({ "scan.json": { root, noChecks: false, lockfiles: [npmLock, cargoLock] } });
+}
+
+test("fit turns a runtime hold with a fitting version into an ordinary row that can be Safe; an override stays held; no adapter means unknown", () => {
+  const root = project();
+  const dir = fitRun(root);
+  const r = runStubbed(["fit", "--run", dir], stubPath({ npm: npmRules() }));
+  assert.equal(r.code, 0, r.stderr);
+  const chalk = r.json.rows.find((x) => x.package === "chalk");
+  assert.deepEqual(chalk, { id: "package-lock.json#chalk", package: "chalk", current: "4.1.0", best: "4.1.2", needs: ">=22", source: "registry" });
+  assert.deepEqual(r.json.unknown, ["app/Cargo.lock#serde"]);
+  assert.ok(!r.json.rows.some((x) => x.package === "ms"), "an override hold is not a runtime hold");
+  const scan = JSON.parse(fs.readFileSync(path.join(dir, "scan.json"), "utf8"));
+  const [npmLock, cargoLock] = scan.lockfiles;
+  assert.deepEqual(npmLock.held.map((h) => h.package), ["ms"]);
+  const row = npmLock.rows.find((x) => x.package === "chalk");
+  assert.equal(row.target, "4.1.2");
+  assert.equal(row.inRange, true);
+  assert.deepEqual(row.fit, { runtime: "Node", declared: ">=12", needs: ">=22", latest: "6.0.1" });
+  const [l] = deps.label(scan, [{ id: row.id, notes: "read", breaking: [] }]);
+  assert.equal(l.label, "safe", "labeled by the same rules");
+  assert.match(l.reasonsPlain.join(" "), /newest version that runs on Node >=12; the latest needs Node >=22/);
+  assert.equal(cargoLock.held[0].reason, "needs Rust 1.80 (you declare 1.70)");
+  assert.equal(cargoLock.held[0].raise, "change `rust-version` in `app/Cargo.toml`");
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "fit.json"), "utf8")).unknown, ["app/Cargo.lock#serde"]);
+});
+
+test("fit: with no version that runs on the declared Node the row stays held, saying what it needs and how to raise it", () => {
+  const root = project();
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  pkg.engines.node = ">=8";
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+  const dir = fitRun(root);
+  const r = runStubbed(["fit", "--run", dir], stubPath({ npm: npmRules() }));
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.rows.find((x) => x.package === "chalk"), { id: "package-lock.json#chalk", package: "chalk", current: "4.1.0", best: null, needs: ">=22", source: "registry" });
+  assert.ok(!r.json.unknown.includes("package-lock.json#chalk"), "the registry answered: none fits");
+  const held = JSON.parse(fs.readFileSync(path.join(dir, "scan.json"), "utf8")).lockfiles[0].held.find((h) => h.package === "chalk");
+  assert.equal(held.reason, "needs Node >=22 (you declare >=8)");
+  assert.equal(held.raise, "change `engines.node` in `package.json`");
+});
+
+test("fit: a row the scan already cut keeps its target and learns what the latest needs; a run with no scan exits 3", () => {
+  const { scan, run, bin } = detectAndScan(project(), { npm: npmRules() }, ["--no-audit"]);
+  assert.ok(scan.lockfiles[0].rows.find((x) => x.package === "chalk").newerNotFitting);
+  const r = runStubbed(["fit", "--run", run], bin);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.rows.find((x) => x.package === "chalk"), { id: "package-lock.json#chalk", package: "chalk", current: "4.1.0", best: "4.1.2", needs: ">=22", source: "registry" });
+  const row = JSON.parse(fs.readFileSync(path.join(run, "scan.json"), "utf8")).lockfiles[0].rows.find((x) => x.package === "chalk");
+  assert.equal(row.target, "4.1.2");
+  assert.equal(row.fit.needs, ">=22");
+  const empty = runDeps(["fit", "--run", runFolder()]);
+  assert.equal(empty.code, 3);
+  assert.equal(empty.json.next, "Run scan first.");
+});
+
+test("fit --id --best makes the version worked out with the person a pick; a hold that is not the runtime's and a version not newer are refused", () => {
+  const root = project();
+  const dir = fitRun(root);
+  const first = runStubbed(["fit", "--run", dir], stubPath({ npm: npmRules() }));
+  assert.deepEqual(first.json.unknown, ["app/Cargo.lock#serde"]);
+  const r = runDeps(["fit", "--run", dir, "--id", "app/Cargo.lock#serde", "--best", "1.0.150"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.rows, [{ id: "app/Cargo.lock#serde", package: "serde", current: "1.0.100", best: "1.0.150", needs: "1.80", source: "agent" }]);
+  const scan = JSON.parse(fs.readFileSync(path.join(dir, "scan.json"), "utf8"));
+  const cargo = scan.lockfiles[1];
+  assert.deepEqual(cargo.held, []);
+  assert.equal(cargo.rows[0].target, "1.0.150");
+  assert.deepEqual(cargo.rows[0].fit, { runtime: "Rust", declared: "1.70", needs: "1.80", latest: "1.0.200" });
+  const fit = JSON.parse(fs.readFileSync(path.join(dir, "fit.json"), "utf8"));
+  assert.deepEqual(fit.unknown, []);
+  assert.equal(fit.rows.find((x) => x.id === "app/Cargo.lock#serde").source, "agent");
+  const override = runDeps(["fit", "--run", dir, "--id", "package-lock.json#ms", "--best", "2.1.3"]);
+  assert.equal(override.code, 5);
+  assert.equal(override.json.error, "not-a-runtime-hold");
+  const again = fitRun(project());
+  const older = runDeps(["fit", "--run", again, "--id", "app/Cargo.lock#serde", "--best", "1.0.90"]);
+  assert.equal(older.code, 4);
+  assert.equal(older.json.error, "not-newer");
+  assert.equal(runDeps(["fit", "--run", again, "--id", "nope#x", "--best", "1.0.0"]).code, 3);
+  assert.equal(runDeps(["fit", "--run", again, "--id", "app/Cargo.lock#serde"]).code, 2, "--id needs --best");
+});
+
+test("fit: when the adapter cannot answer, the held reason keeps a runtime range with spaces whole", () => {
+  const root = project();
+  const dir = fitRun(root);
+  const scan = JSON.parse(fs.readFileSync(path.join(dir, "scan.json"), "utf8"));
+  scan.lockfiles[0].held[0].reason = "every newer version needs Node ^12.17.0 || >=16.0.0 (the project declares >=12)";
+  fs.writeFileSync(path.join(dir, "scan.json"), JSON.stringify(scan));
+  const r = runStubbed(["fit", "--run", dir], stubPath({ git: [{ has: ["--version"], text: "git" }] }));
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.unknown, ["package-lock.json#chalk", "app/Cargo.lock#serde"], "no npm on PATH: no adapter answers");
+  const held = JSON.parse(fs.readFileSync(path.join(dir, "scan.json"), "utf8")).lockfiles[0].held.find((h) => h.package === "chalk");
+  assert.equal(held.reason, "needs Node ^12.17.0 || >=16.0.0 (you declare >=12)");
+});
+
 test("no stub ever received --force or an audit fix", () => {
   const calls = stubDirs.flatMap(callsOf);
   assert.ok(calls.length > 20, "the stubbed tests ran first");
@@ -2542,4 +3023,328 @@ test("no stub ever received --force or an audit fix", () => {
     assert.ok(!c.args.some((a) => /^--force/.test(a)), `${c.tool} ${c.args.join(" ")}`);
     assert.ok(!(c.args.includes("audit") && c.args.includes("fix")), "never audit fix");
   }
+});
+
+/* ------------------------------------------------------------ plain words */
+
+// Words a person never reads (specs/deps-skill-rework/wording-audit.md). They stay in field names, commands and file names.
+const AVOID = /\b(lockfiles?|manifests?|tracked|hand-?offs?|jump)\b/i;
+
+test("label: every row carries reasonsPlain, one plain sentence per reason in the same order, with no avoid-list word", () => {
+  const pinned = JSON.parse(JSON.stringify(SCAN));
+  pinned.lockfiles[0].rows[0] = { ...pinned.lockfiles[0].rows[0], pinned: true, security: { severity: "high", ids: ["X"] }, runtimeNotChecked: ">=3.10", couldNotRead: "npm" };
+  const scans = [SCAN, pinned, { ...SCAN, noChecks: true }];
+  const lists = [deps.label(SCAN, RECORDS), deps.label(SCAN, []), deps.label(pinned, RECORDS), deps.label(scans[2], RECORDS)];
+  let seen = 0;
+  for (const labels of lists) {
+    for (const l of labels) {
+      assert.ok(Array.isArray(l.reasonsPlain), `${l.id} has reasonsPlain`);
+      assert.equal(l.reasonsPlain.length, l.reasons.length, `${l.id}: reasonsPlain lines up with reasons`);
+      for (const s of l.reasonsPlain) {
+        seen++;
+        assert.ok(typeof s === "string" && s.length > 0, `${l.id}: a plain sentence`);
+        assert.ok(!AVOID.test(s), `${l.id}: "${s}" uses an avoid-list word`);
+        assert.ok(!l.reasons.includes(s), `${l.id}: "${s}" is not just the raw reason`);
+      }
+    }
+  }
+  assert.ok(seen > 20, "the fixtures exercise many reasons");
+  assert.ok(deps.label(SCAN, []).some((l) => l.reasonsPlain.includes("I did not read the update notes")));
+  assert.deepEqual(labeled().r1.reasonsPlain, ["2 files use it"]);
+});
+
+test("label: reasonsPlain is printed by the label command and saved in labels.json", () => {
+  const dir = runFolder({ "scan.json": SCAN });
+  const r = runDeps(["label", "--run", dir, "--records", path.join(FIXTURES, "label", "records.json")]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(r.json.labels.length > 0);
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, "labels.json"), "utf8")).every((l) => Array.isArray(l.reasonsPlain)));
+  assert.ok(r.json.labels.every((l) => Array.isArray(l.reasonsPlain) && l.reasonsPlain.length === l.reasons.length));
+});
+
+// The text a person reads: every double-quoted sentence in the prompt, and every multi-word string value in the notes' example cards.
+function personFacing(markdown) {
+  const out = [];
+  for (const m of markdown.matchAll(/"([^"\n]*\s[^"\n]*)"/g)) out.push(m[1]);
+  return out;
+}
+function exampleStrings(markdown) {
+  const out = [];
+  const walk = (v) => {
+    if (typeof v === "string") {
+      if (/\s/.test(v)) out.push(v);
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v).forEach(walk);
+  };
+  for (const m of markdown.matchAll(/```jsonc\n([\s\S]*?)\n```/g)) walk(JSON.parse(m[1]));
+  return out;
+}
+const WHITELIST = /package-lock\.json|package\.json|requirements\.txt|pom\.xml|Cargo\.lock/g;
+
+test("the prompt and the console notes keep avoid-list words out of text a person reads", () => {
+  const prompt = fs.readFileSync(path.join(ROOT, "src", "plan2code-deps.md"), "utf8");
+  const notes = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "deps.md"), "utf8");
+  const strings = [...personFacing(prompt), ...exampleStrings(notes)];
+  assert.ok(strings.length > 10, "there is person-facing text to check");
+  for (const s of strings) {
+    const text = s.replace(WHITELIST, "").replace(/`[^`]*`/g, "");
+    assert.ok(!AVOID.test(text), `"${s}" uses an avoid-list word`);
+  }
+});
+
+test("the notes no longer carry a card with the id notes, and the start card is a confirm with a Start button", () => {
+  const notes = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "deps.md"), "utf8");
+  const items = [];
+  for (const m of notes.matchAll(/```jsonc\n([\s\S]*?)\n```/g)) items.push(...(JSON.parse(m[1]).items || []));
+  assert.ok(!items.some((i) => i.id === "notes"), "the release-notes question is gone");
+  const start = items.find((i) => i.id === "start");
+  assert.equal(start.kind, "confirm");
+  assert.equal(start.yesLabel, "Start");
+  assert.match(start.body, /I will read what each update changes before judging it/);
+  assert.ok(!/Release notes|skip the notes/i.test(notes), "no release-notes question or skip option remains");
+});
+
+/* ------------------------------------------------------ fixes and tools */
+
+// A fix is one approved replacement in one project file after apply; it is
+// backed up into the batch's backup, so restore puts it back with the rest.
+
+/** Every file under root (relative, forward slashes) with its bytes. */
+function treeOf(root) {
+  const files = {};
+  const walkTree = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) walkTree(abs);
+      else files[path.relative(root, abs).split(path.sep).join("/")] = fs.readFileSync(abs);
+    }
+  };
+  walkTree(root);
+  return files;
+}
+
+function assertSameTree(root, before) {
+  const now = treeOf(root);
+  assert.deepEqual(Object.keys(now).sort(), Object.keys(before).sort(), "the same files");
+  for (const [rel, bytes] of Object.entries(before)) assert.ok(now[rel].equals(bytes), `${rel} byte for byte`);
+}
+
+const PIN_TEST = 'import { test } from "node:test";\nconst BUILD = "1.64.1";\ntest("browser build", () => {\n  check(BUILD);\n});\n';
+
+/** A project with a test file, chalk planned, backed up and applied: ready for a fix. */
+function applied(extra = {}) {
+  const root = project({ "scripts/test-browser.mjs": PIN_TEST, ...extra });
+  const start = treeOf(root);
+  const { run, bin, batches } = planned(root, ["chalk"], {
+    npm: npmRules([{ has: ["update", "chalk"], writes: [{ file: "package-lock.json", bump: { "node_modules/chalk": "4.1.2" } }] }]),
+  });
+  const b = batches[0];
+  assert.equal(runStubbed(["backup", "--run", run, "--batch", b.id], bin).code, 0);
+  const a = runStubbed(["apply", "--run", run, "--batch", b.id], bin);
+  assert.equal(a.code, 0, a.stderr);
+  return { root, run, bin, b, start };
+}
+
+const fixArgs = (run, b, file, from, to) => ["fix", "--run", run, "--batch", b.id, "--file", file, "--from", from, "--to", to];
+
+test("deps --help names fix and install-tool, and the new rule for editing files", () => {
+  const r = runDeps(["--help"]);
+  for (const command of ["fix", "install-tool"]) assert.match(r.stdout, new RegExp(`deps\\.mjs ${command}\\b`), command);
+  assert.ok(!/never edits source code/.test(r.stdout), "the old rule is gone");
+  assert.match(r.stdout, /only through fix, after the person approved that\s+exact change/);
+});
+
+test("fix replaces the one place, backs the file up into the batch and records fixes.json", () => {
+  const { root, run, bin, b } = applied();
+  const r = runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", '"1.64.1"', '"1.65.1"'), bin);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json, { ok: true, batch: b.id, file: "scripts/test-browser.mjs", replaced: 1, backedUp: true });
+  assert.equal(fs.readFileSync(path.join(root, "scripts/test-browser.mjs"), "utf8"), PIN_TEST.replace("1.64.1", "1.65.1"));
+  const backup = JSON.parse(fs.readFileSync(path.join(run, "backups", b.id, "backup.json"), "utf8"));
+  assert.deepEqual(backup.files.at(-1), { path: "scripts/test-browser.mjs", existed: true });
+  assert.deepEqual(backup.fixed, ["scripts/test-browser.mjs"]);
+  assert.equal(fs.readFileSync(path.join(run, "backups", b.id, "files", "scripts/test-browser.mjs"), "utf8"), PIN_TEST, "the as-found copy");
+  const fixes = JSON.parse(fs.readFileSync(path.join(run, "fixes.json"), "utf8")).fixes;
+  assert.equal(fixes.length, 1);
+  const { at, ...rest } = fixes[0];
+  assert.deepEqual(rest, { batch: b.id, file: "scripts/test-browser.mjs", from: '"1.64.1"', to: '"1.65.1"' });
+  assert.ok(!Number.isNaN(Date.parse(at)));
+});
+
+test("fix needs a backup and an applied batch (exit 5)", () => {
+  const root = project({ "scripts/test-browser.mjs": PIN_TEST });
+  const { run, bin, batches } = planned(root, ["chalk"], { npm: npmRules([{ has: ["update"], text: "" }]) });
+  const b = batches[0];
+  const noBackup = runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), bin);
+  assert.equal(noBackup.code, 5);
+  assert.equal(noBackup.json.error, "no-backup");
+  runStubbed(["backup", "--run", run, "--batch", b.id], bin);
+  const notApplied = runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), bin);
+  assert.equal(notApplied.code, 5);
+  assert.equal(notApplied.json.error, "not-applied");
+  assert.equal(fs.readFileSync(path.join(root, "scripts/test-browser.mjs"), "utf8"), PIN_TEST, "nothing changed");
+});
+
+test("restore --verify after a fix puts LF and CRLF files back byte for byte and names the fixes", () => {
+  const crlf = 'line one\r\nconst BUILD = "1.64.1";\r\nline three\r\n';
+  const { root, run, bin, b, start } = applied({ "config/browser.txt": crlf });
+  const lf = runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), bin);
+  assert.equal(lf.code, 0, lf.stderr);
+  // A bare-LF --from spanning a line break matches the CRLF file and is written back with CRLF.
+  const cr = runStubbed(fixArgs(run, b, "config/browser.txt", 'line one\nconst BUILD = "1.64.1";', 'line one\nconst BUILD = "1.65.1";'), bin);
+  assert.equal(cr.code, 0, cr.stderr);
+  assert.equal(fs.readFileSync(path.join(root, "config/browser.txt"), "utf8"), crlf.replace("1.64.1", "1.65.1"), "CRLF kept");
+  const r = runStubbed(["restore", "--run", run, "--batch", b.id, "--verify"], bin);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.verified, true);
+  assert.deepEqual(r.json.fixed, ["scripts/test-browser.mjs", "config/browser.txt"]);
+  assert.ok(r.json.restored.includes("config/browser.txt"));
+  assertSameTree(root, start);
+});
+
+test("a second fix to the same file keeps the first as-found copy", () => {
+  const { root, run, bin, b, start } = applied();
+  assert.equal(runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), bin).code, 0);
+  const second = runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "check(BUILD)", "check(BUILD, true)"), bin);
+  assert.equal(second.code, 0, second.stderr);
+  assert.equal(second.json.backedUp, false);
+  assert.equal(fs.readFileSync(path.join(run, "backups", b.id, "files", "scripts/test-browser.mjs"), "utf8"), PIN_TEST);
+  const backup = JSON.parse(fs.readFileSync(path.join(run, "backups", b.id, "backup.json"), "utf8"));
+  assert.equal(backup.files.filter((f) => f.path === "scripts/test-browser.mjs").length, 1, "listed once");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(run, "fixes.json"), "utf8")).fixes.length, 2);
+  assert.equal(runStubbed(["restore", "--run", run, "--batch", b.id, "--verify"], bin).json.verified, true);
+  assertSameTree(root, start);
+});
+
+test("after restore the group is no longer applied, so fix refuses it until apply runs again", () => {
+  const { run, bin, b } = applied();
+  assert.equal(runStubbed(["restore", "--run", run, "--batch", b.id, "--verify"], bin).json.verified, true);
+  const r = runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), bin);
+  assert.equal(r.code, 5);
+  assert.equal(r.json.error, "not-applied");
+});
+
+test("a fixed executable keeps its mode through the put-back (macOS and Linux)", { skip: process.platform === "win32" }, () => {
+  const { root, run, bin, b } = applied();
+  const file = path.join(root, "scripts/test-browser.mjs");
+  fs.chmodSync(file, 0o755);
+  assert.equal(runStubbed(fixArgs(run, b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), bin).code, 0);
+  assert.equal(runStubbed(["restore", "--run", run, "--batch", b.id, "--verify"], bin).json.verified, true);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o755);
+});
+
+test("fix refuses a batch file, a path outside the project, a protected folder, a binary and text found twice or not at all", () => {
+  const twice = "a = 1;\na = 1;\n";
+  const { root, run, bin, b } = applied({ "src/twice.js": twice, "node_modules/x/index.js": "const v = 1;\n", "specs/x/plan.md": "v 1\n" });
+  fs.writeFileSync(path.join(root, "assets.bin"), Buffer.from([0x61, 0x00, 0x62, 0x0a]));
+  const before = treeOf(root);
+  const cases = [
+    ["package.json", '"chalk"', '"chalk2"', "fix-batch-file"],
+    ["package-lock.json", '"4.1.2"', '"4.1.3"', "fix-batch-file"],
+    ["packages/app/package.json", '"is-number"', '"is-num"', "fix-batch-file"],
+    ["../outside.txt", "a", "b", "fix-outside"],
+    [path.join(root, "src", "twice.js"), "a = 1", "a = 2", "fix-absolute"],
+    ["node_modules/x/index.js", "1", "2", "fix-protected-folder"],
+    ["specs/x/plan.md", "1", "2", "fix-protected-folder"],
+    ["assets.bin", "a", "c", "fix-binary"],
+    ["src/twice.js", "a = 1;", "a = 2;", "fix-many"],
+    ["src/twice.js", "b = 1;", "b = 2;", "fix-not-found-text"],
+    ["src/missing.js", "a", "b", "fix-not-found"],
+  ];
+  for (const [file, from, to, error] of cases) {
+    const r = runStubbed(fixArgs(run, b, file, from, to), bin);
+    assert.equal(r.code, 5, `${file}: ${r.stdout}`);
+    assert.equal(r.json.error, error, file);
+    assert.ok(r.json.message && r.json.next, `${file}: plain message and next`);
+  }
+  assert.match(runStubbed(fixArgs(run, b, "src/twice.js", "a = 1;", "a = 2;"), bin).json.message, /appears 2 times in src\/twice\.js/);
+  assertSameTree(root, before);
+  const backup = JSON.parse(fs.readFileSync(path.join(run, "backups", b.id, "backup.json"), "utf8"));
+  assert.deepEqual(backup.fixed || [], [], "nothing was backed up for a refused fix");
+  assert.ok(!fs.existsSync(path.join(run, "fixes.json")));
+});
+
+test("applyFix refuses a file over 1 MB", () => {
+  const root = tmp("deps-fix-big");
+  const store = tmp("deps-fix-store");
+  fs.writeFileSync(path.join(store, "backup.json"), JSON.stringify({ files: [] }));
+  fs.writeFileSync(path.join(root, "big.txt"), "x".repeat(deps.PIN_FILE_CAP + 1) + "\nneedle\n");
+  assert.deepEqual(deps.applyFix(root, store, "big.txt", "needle", "pin"), { ok: false, code: "too-big", reason: "big.txt is over 1 MB" });
+});
+
+test("put-back stories: a batch failing after a fix, a skipped fix and a refused fix each end with the tree as found", () => {
+  // Failing after a fix: the fix lands, the checks still fail, restore takes both back.
+  const failing = applied();
+  assert.equal(runStubbed(fixArgs(failing.run, failing.b, "scripts/test-browser.mjs", "1.64.1", "1.65.1"), failing.bin).code, 0);
+  const r1 = runStubbed(["restore", "--run", failing.run, "--batch", failing.b.id, "--verify"], failing.bin);
+  assert.equal(r1.json.verified, true);
+  assert.deepEqual(r1.json.fixed, ["scripts/test-browser.mjs"]);
+  assertSameTree(failing.root, failing.start);
+
+  // A skipped fix: no fix call, restore only.
+  const skipped = applied();
+  const r2 = runStubbed(["restore", "--run", skipped.run, "--batch", skipped.b.id, "--verify"], skipped.bin);
+  assert.equal(r2.json.verified, true);
+  assert.deepEqual(r2.json.fixed, []);
+  assertSameTree(skipped.root, skipped.start);
+
+  // A refused fix: nothing written, restore puts the update back.
+  const refused = applied();
+  assert.equal(runStubbed(fixArgs(refused.run, refused.b, "package.json", '"chalk"', '"chalk2"'), refused.bin).code, 5);
+  const r3 = runStubbed(["restore", "--run", refused.run, "--batch", refused.b.id, "--verify"], refused.bin);
+  assert.equal(r3.json.verified, true);
+  assert.deepEqual(r3.json.fixed, []);
+  assertSameTree(refused.root, refused.start);
+});
+
+test("install-tool prints a listed scanner's exact command and runs nothing; an unlisted one or an empty list exits 5", () => {
+  const missingTools = ["cargo", { tool: "cargo-audit", step: "audit", install: "cargo install cargo-audit" }, { tool: "pip-audit", step: "audit", install: "pip install pip-audit" }];
+  const dir = runFolder({ "scan.json": { root: os.tmpdir(), lockfiles: [], missingTools } });
+  const before = fs.readdirSync(dir).sort();
+  const r = runDeps(["install-tool", "--run", dir, "--tool", "cargo-audit"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json, { ok: true, tool: "cargo-audit", command: "cargo install cargo-audit", step: "audit" });
+  assert.deepEqual(fs.readdirSync(dir).sort(), before, "nothing written");
+  for (const tool of ["govulncheck", "cargo", "rm"]) {
+    const no = runDeps(["install-tool", "--run", dir, "--tool", tool]);
+    assert.equal(no.code, 5, tool);
+    assert.equal(no.json.error, "tool-not-listed");
+    assert.match(no.json.message, /was not in the scan's missing list/);
+    assert.deepEqual(no.json.offered, ["cargo-audit", "pip-audit"]);
+  }
+  const empty = runFolder({ "scan.json": { root: os.tmpdir(), lockfiles: [], missingTools: [] } });
+  const none = runDeps(["install-tool", "--run", empty, "--tool", "pip-audit"]);
+  assert.equal(none.code, 5);
+  assert.match(none.json.next, /found no missing tool/);
+  assert.equal(runDeps(["install-tool", "--run", empty]).json.error, "missing-tool");
+});
+
+test("fix refuses a batch file or protected folder named in other letter case, or reached through a link, and keeps the as-found copy", () => {
+  const { root, run, bin, b, start } = applied({ "node_modules/x/index.js": "const v = 1;\n" });
+  const caseless = process.platform === "win32" || process.platform === "darwin";
+  if (caseless) {
+    for (const [file, from, to, error] of [
+      ["PACKAGE.JSON", '"chalk"', '"chalk2"', "fix-batch-file"],
+      ["Package-Lock.json", '"4.1.2"', '"4.1.3"', "fix-batch-file"],
+      ["NODE_MODULES/x/index.js", "1", "2", "fix-protected-folder"],
+    ]) {
+      const r = runStubbed(fixArgs(run, b, file, from, to), bin);
+      assert.equal(r.code, 5, `${file}: ${r.stdout}`);
+      assert.equal(r.json.error, error, file);
+    }
+  }
+  let linked = false;
+  try {
+    fs.symlinkSync(path.join(root, "package.json"), path.join(root, "link.json"), "file");
+    linked = true;
+  } catch {}
+  if (linked) {
+    const r = runStubbed(fixArgs(run, b, "link.json", '"chalk"', '"chalk2"'), bin);
+    assert.equal(r.code, 5, r.stdout);
+    assert.equal(r.json.error, "fix-batch-file", "a link to a batch file is that file");
+    fs.rmSync(path.join(root, "link.json"));
+  }
+  const restored = runStubbed(["restore", "--run", run, "--batch", b.id, "--verify"], bin);
+  assert.equal(restored.json.verified, true);
+  assertSameTree(root, start);
 });

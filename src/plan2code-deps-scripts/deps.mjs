@@ -7,18 +7,24 @@
 // slices and the hand-off brief. Judgment stays with the agent and its
 // helpers: they read the notes, search for callers and return records; this
 // script turns records into labels. It never commits, never installs a tool,
-// never edits source code and never updates anything not picked.
+// never updates anything not picked, and edits a file other than a manifest
+// or version list only through fix, after the person approved that exact
+// change, and restore puts it back.
 //
 // Sections, in order (each behind a banner comment, so a later phase adds its
 // code in its own section):
 //   1. dispatch and run folder
 //   2. adapters (one object per ecosystem behind one interface)
 //   3. version math
-//   4. manifests
-//   5. labels
-//   6. batches
-//   7. notes
-//   8. hand-off
+//   4. pins (exact versions written in the project's own files)
+//   5. manifests
+//   6. labels
+//   7. batches
+//   8. checks (the baseline, the compare and the checks per group)
+//   9. runtime fit (the newest version the project's runtime runs)
+//   10. notes
+//   11. hand-off
+//   12. fixes and tools (one approved replacement, a scanner's install line)
 //
 // PLAN2CODE_DEPS_HTTP_BASE exists for tests only: notes sends every request
 // to <base>/<host><path> (a local server replaying saved responses) instead of
@@ -30,23 +36,34 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { EXIT, fail, out, parseArgs, run, isDir, compactDate, readText } from "./common.mjs";
+import { EXIT, fail, out, parseArgs, run, isDir, compactDate, readText, now } from "./common.mjs";
 import { matchGlob } from "./glob.mjs";
 import { readTestMap } from "./test-map.mjs";
+import { discover } from "./test-commands.mjs";
 
 const USAGE = `
 deps.mjs: find, label and apply dependency updates. JSON on stdout.
-It never commits, never installs a tool and never edits source code.
+It never commits and never installs a tool. It edits a file other than a
+manifest or version list only through fix, after the person approved that
+exact change, and restore puts it back.
+label prints reasons (machine words) and reasonsPlain (the same, in plain English).
 
   node deps.mjs detect [--root <dir>]
   node deps.mjs scan --run <dir> [--folders a,b] [--no-audit] [--notes]
   node deps.mjs notes --run <dir> --id <row>
+  node deps.mjs fit --run <dir> [--id <held row> --best <version>]
+  node deps.mjs pins --run <dir>
   node deps.mjs label --run <dir> --records <file>
+  node deps.mjs checks --run <dir> [--batch <batch>]
+  node deps.mjs baseline --run <dir> --check <id> --log <file> [--outcome <o>] [--retry-log <file> [--retry-outcome <o>]]
+  node deps.mjs compare --run <dir> --batch <batch> --check <id> --log <file> [--outcome <o>] [--retry-log <file> [--retry-outcome <o>]]
   node deps.mjs batches --run <dir> --picks <id,id,...>
   node deps.mjs batches --run <dir> --split <batch>
   node deps.mjs backup --run <dir> --batch <batch>
   node deps.mjs apply --run <dir> --batch <batch>
+  node deps.mjs fix --run <dir> --batch <batch> --file <path> --from <text> --to <text>
   node deps.mjs restore --run <dir> --batch <batch> [--verify]
+  node deps.mjs install-tool --run <dir> --tool <name>
   node deps.mjs handoff --run <dir> --ids <id,id,...>
   node deps.mjs cleanup --run <dir>
 
@@ -77,18 +94,97 @@ scan       Per lockfile (--folders limits it to lockfiles in those folders):
            holds, never pickable), notScanned (a lookup that failed, with the
            reason), stillOpen (vulnerabilities no pick fixes), checks (test
            map rows covering its members; full when a Shared row hits) and
-           audited (--no-audit skips the audit). A plugin that is not
+           audited (--no-audit skips the audit). checks is { rows (areas),
+           commands, discovered, full, list [{ id, area, run, paths, shared
+           }] }: each test map command gets a stable id, c1, c2, ... in scan
+           order (one id per command), so baseline and compare can name it;
+           a lockfile's install command is check install (install-2,
+           install-3, ... for later lockfiles), and each confirmed
+           checks.discovered command and each build check test-commands.mjs
+           finds in the lockfile's folder (checks.build: [{ command, cwd }])
+           d1, d2, ... A plugin that is not
            installed (cargo-outdated, cargo-audit, pip-audit, govulncheck) skips only its
            step and is listed in missingTools as { tool, step, install };
            rows it could not audit carry notAudited, rows from output it could
            not read carry couldNotRead. noChecks when no lockfile has
            a check. Writes scan.json, prints counts. Exit 3 with reason "no
            registry answered" when every lookup failed.
+fit        For every held row whose reason is the runtime (never an override
+           or a resolution) and every row with newerNotFitting: the newest
+           version the project's runtime runs, from the adapter's own lookup
+           (npm asks the registry for each version's engines.node). A held
+           row with one becomes an ordinary row with that target (labeled by
+           the same rules, so it can be Safe); the rest stay held with the
+           reason "needs Node >=22 (you declare >=18)" and raise, the way to
+           raise the runtime. A row the scan already cut keeps its target and
+           gets fit { runtime, declared, needs, latest }. Rewrites scan.json,
+           writes fit.json and prints { ok, rows: [{ id, package, current,
+           best, needs, source (registry or scan) }], unknown: [id] }: best
+           is null and the id is in unknown when no adapter can say. A version
+           older than the current one is never offered. --id <held row>
+           --best <version>: the version worked out with the person for an
+           unknown row becomes a pick the same way (source agent); a hold that
+           is not the runtime's is refused (exit 5), a version not newer than
+           the current one is invalid (exit 4), an unknown id exits 3.
+pins       Searches the project's own files (git ls-files in a checkout,
+           tracked and untracked, ignored left out; else a walk) for each
+           scanned row's current version as a whole token on a line that
+           also names the package. Every file a lockfile entry owns (its
+           lockfile and manifests), any file named like a lockfile, binary
+           files and files over 1 MB are skipped. Read only. Writes pins.json
+           ({ pins: [{ id, file, line, text }] }, text cut at 200 characters)
+           and prints { ok, pins, count }.
 label      Reads scan.json from the run folder and the helpers' records from
            --records (a JSON array, or { records: [...] }), applies the label
            rules and writes labels.json. Prints { ok, labels: [{ id, label,
            reasons[] }] }; label is safe, check-first or warning. Saves the
-           records as records.json in the run folder for handoff.
+           records as records.json in the run folder for handoff and checks.
+           A record is { id, notes (read, not read or could not read),
+           source, url, breaking[], files, calls[], usedIn[] }; usedIn lists
+           the project-relative files that import or name the package (label
+           ignores it; checks narrows by it). With pins.json in the run
+           folder, a row whose current version is written in a file outside
+           its own lockfile and manifests is never safe: reason "exact
+           version used in <file>", check-first at best.
+checks     Without --batch: every check a group or the full suite can run,
+           for the baseline, as { ok, checks: [{ id, command, cwd, lockfile,
+           kind (install, map, discovered or build), shared? }], full }. With --batch: the checks that group
+           runs, { ok, batch, install, commands: [{ id, command, cwd }],
+           narrowed, full, files, message }: the lockfile's non-Shared test
+           map rows whose paths match a file in the picks' usedIn or pins,
+           plus its confirmed build command. When nothing narrows (no file
+           known, or no row covers one), narrowed is false, commands are
+           every non-Shared row and confirmed command of the lockfile, and
+           message says so. full lists the Shared commands of every lockfile
+           once: the full suite, offered once after the last group, never
+           run by this command. A Shared row runs in a group when it is the
+           only row covering one of its files, when the folder has no other
+           test, or when a pin file no other row covers names the exact
+           version (message says so). The scan's build checks
+           (checks.build, found by test-commands.mjs in each lockfile's
+           folder) run in every group.
+           Without --batch the list holds the Shared rows too (shared: true),
+           so the baseline covers them.
+baseline   Records one check's result on the untouched tree from the logs
+           run-check.mjs --log wrote: --log the first run, --retry-log the
+           second run of a failing check. Tests failing in both go to failing
+           (red before), in one only to flaky; a log in a format it cannot
+           read, a run that failed naming no test, and a timeout record the
+           command alone (known false, commandFailed). --outcome and
+           --retry-outcome are run-check's outcomes (passed, failed, timeout,
+           not-started); without one the log decides, and an unreadable log
+           needs it. Merges baseline.json ({ checks: { <id>: { outcome,
+           failing[], flaky[], known, commandFailed, timeout? } } }) and
+           prints that entry with { ok, check }. The failing tests are read
+           from TAP and node:test, Jest and Vitest, pytest, cargo test, Go and
+           dotnet output.
+compare    The same inputs for a check run after a group. Prints { ok, batch,
+           check, newFailures[], stillFailing[], flaky[], blame, known }:
+           newFailures fail now (in both logs, or the one) and were neither
+           red nor flaky in the baseline; stillFailing were red before; blame
+           is true when newFailures is not empty, or, judged as a whole
+           command, when it fails now and was not failing before. Merges
+           compare.json. A check with no baseline exits 3.
 batches    --picks: one batch for every Safe pick of a lockfile, every Check
            first and Warning pick alone, pairs kept together. Writes
            batches.json. Prints { ok, batches: [{ id, lockfile, picks[] }] },
@@ -121,17 +217,39 @@ apply      Needs the batch's backup (exit 5 without one, or when its
            { id, package, file, from, to } per pick moved, from null when
            go.mod had no directive (Go reads that as 1.16), failed is true,
            put the batch back) }. With every pick skipped
-           nothing runs: command, cwd and exit are null.
+           nothing runs: command, cwd and exit are null. Marks the
+           backup applied, so fix may follow.
+fix        One approved change to a project file after apply: replaces the
+           one place --from appears in --file (relative to the project) with
+           --to. Needs the batch's backup and an applied batch (exit 5
+           without). Refuses (exit 5, message and next in plain words, reason
+           the code) an absolute path or one outside the project, a
+           lockfile or manifest of the batch, a path under node_modules,
+           .git, specs or specs--completed, a binary or over 1 MB file, and
+           text found zero times or more than once. Keeps line endings: in a
+           CRLF file a bare-LF --from and --to match and write as CRLF.
+           Before the first fix of a file it copies the file as found into
+           the batch's backup and lists it there, so restore puts it back
+           with the rest; a second fix of the same file keeps that copy.
+           Appends { batch, file, from, to, at } to fixes.json. Prints { ok,
+           batch, file, replaced: 1, backedUp }.
 restore    Puts the backed-up files back (and removes ones the batch made).
            --verify compares every byte: verified is true only on an exact
            match. A file it cannot copy, remove or read (locked, no access)
            goes to mismatched[] as { path, reason } and verified is false,
            never a crash. Prints { ok, restored[], deleted[], extra, verified,
-           mismatched[], reinstall { command, cwd } } for the prompt to run
-           through run-check.mjs. extra is null, or for pip { ok,
+           mismatched[], fixed[], reinstall { command, cwd } } for the prompt
+           to run through run-check.mjs. fixed[] names the files fix had changed
+           (put back with the rest). extra is null, or for pip { ok,
            uninstalled[], reason, command }: the snapshot reinstalled and
            what the batch added uninstalled. extra.ok false means stop the
            run and give the person its command to run by hand.
+install-tool  The exact install line for a scanner the scan listed in
+           missingTools (cargo-outdated, cargo-audit, pip-audit, govulncheck):
+           prints { ok, tool, command, step } from that scan entry. Writes
+           nothing and runs nothing: the prompt runs command through
+           run-check.mjs only after the person approved it. A name the scan
+           did not list exits 5.
 cleanup    Removes the run folder. Prints { ok, removed }.
 
 notes      The release notes of one row (--id <lockfile>#<package>) between
@@ -160,8 +278,9 @@ sends every notes request to <base>/<host><path> instead of the real host.
 
 Exit: 0 ok · 1 crash · 2 bad arguments · 3 not found (a run folder that is
 not there or not a deps run, a missing scan.json or batches.json, an unknown
-pick, batch or id) · 4 invalid input (an unreadable
-records file, a batch that cannot be split) · 5 refused.
+pick, batch, check or id, a log that is not there, a check with no baseline)
+· 4 invalid input (an unreadable records file, a batch that cannot be split)
+· 5 refused.
 `;
 
 /* ======================================================================
@@ -189,9 +308,9 @@ const samePath = (a, b) => (process.platform === "win32" ? a.toLowerCase() === b
 function runDir(value) {
   if (!value) fail(EXIT.USAGE, "missing-run", "--run is required.", "Pass the run folder detect printed.");
   const dir = path.resolve(value);
-  const notARun = () => fail(EXIT.NOT_FOUND, "not-a-run", `${value} is not a deps run folder.`, `Pass the run folder detect printed (a ${RUN_PREFIX}... folder in the system temp folder).`);
+  const notARun = () => fail(EXIT.NOT_FOUND, "not-a-run", `${value} is not a folder this skill made.`, `Pass the run folder detect printed (a ${RUN_PREFIX}... folder in the system temp folder).`);
   if (!path.basename(dir).startsWith(RUN_PREFIX)) notARun();
-  if (!isDir(dir)) fail(EXIT.NOT_FOUND, "run-missing", `The run folder ${value} does not exist.`, "Run detect again for a new run folder.");
+  if (!isDir(dir)) fail(EXIT.NOT_FOUND, "run-missing", `The run folder ${value} does not exist.`, "Run `detect` again to start over.");
   let real;
   let temp;
   try {
@@ -259,6 +378,10 @@ function cmdCleanup(argv) {
 //                          a check of the files after the update against the
 //                          backup in store (Go's go directive)
 //   runtime(entry, root) -> { declared, source, machine }
+//   runtimeFit(entry, root, item) -> { best, needs } or null: optional, the
+//                          newest version of item.package above item.current
+//                          (at most item.latest) that the project's runtime
+//                          runs; null when the adapter cannot say (fit)
 //   lockVersions(entry, text) -> Map of a lockfile key to its resolved version
 //
 // spawnTool runs every tool. It never passes --force: an update that needs it
@@ -2608,7 +2731,7 @@ function needBatch(dir, id) {
   const batch = saved.batches.find((b) => b.id === id);
   if (!batch) fail(EXIT.NOT_FOUND, "unknown-batch", `No batch ${id} in batches.json.`, `One of: ${saved.batches.map((b) => b.id).join(", ") || "none"}.`);
   const entry = (scan.lockfiles || []).find((l) => l.lockfile === batch.lockfile);
-  if (!entry) fail(EXIT.NOT_FOUND, "unknown-lockfile", `scan.json has no lockfile ${batch.lockfile}.`, "Scan again, then plan the batches again.");
+  if (!entry) fail(EXIT.NOT_FOUND, "unknown-lockfile", `The scan has no version list ${batch.lockfile}.`, "Scan again, then plan the batches again.");
   const adapter = adapterOf(entry.adapter);
   if (!adapter) fail(EXIT.INVALID, "unknown-adapter", `No adapter ${entry.adapter} for ${entry.lockfile}.`, "Scan again with this version of deps.mjs.");
   return { scan, batch, entry, adapter, root: scan.root };
@@ -2659,10 +2782,15 @@ function cmdDetect(argv) {
   out(result);
 }
 
-/** The test map rows whose paths fall in any member folder; a Shared row hit means the full suite. */
+/**
+ * The test map rows whose paths fall in any member folder; a Shared row hit
+ * means the full suite. list holds each row with a command as { id, area,
+ * run, paths, shared }; cmdScan numbers the ids across the scan.
+ */
 function checksFor(members, testMap) {
   const rows = [];
   const commands = [];
+  const list = [];
   let full = false;
   for (const row of testMap) {
     const hit = (row.paths || []).some((glob) => {
@@ -2676,10 +2804,34 @@ function checksFor(members, testMap) {
     });
     if (!hit) continue;
     rows.push(row.area);
-    if (row.run) commands.push(row.run);
+    if (row.run) {
+      commands.push(row.run);
+      list.push({ id: null, area: row.area, run: row.run, paths: row.paths || [], shared: Boolean(row.shared) });
+    }
     if (row.shared) full = true;
   }
-  return { rows, commands, discovered: [], full };
+  return { rows, commands, discovered: [], full, list };
+}
+
+/** The build checks test-commands.mjs finds in a lockfile's folder, run there: every group runs them beside its other checks. */
+function buildChecks(root, lockfile) {
+  const dir = dirOf(lockfile);
+  try {
+    return (discover(path.join(root, dir)).checks || []).filter((c) => c && c.kind === "build" && c.cmd).map((c) => ({ command: c.cmd, cwd: dir }));
+  } catch {
+    return [];
+  }
+}
+
+/** Stable ids for a scan's test map commands: c1, c2, ... in scan order, one per command (each runs from the project root), so baseline and compare can name them. */
+function numberChecks(lockfiles) {
+  const ids = new Map();
+  for (const l of lockfiles) {
+    for (const c of (l.checks && l.checks.list) || []) {
+      if (!ids.has(c.run)) ids.set(c.run, `c${ids.size + 1}`);
+      c.id = ids.get(c.run);
+    }
+  }
 }
 
 function cmdScan(argv) {
@@ -2691,7 +2843,7 @@ function cmdScan(argv) {
   if (args.folders) {
     const wanted = args.folders.split(",").map((s) => s.trim().replace(/\\/g, "/").replace(/\/+$/, "") || ".").filter(Boolean);
     const unknown = wanted.filter((f) => !entries.some((e) => dirOf(e.lockfile) === f));
-    if (unknown.length) fail(EXIT.NOT_FOUND, "unknown-folder", `No lockfile in ${unknown.join(", ")}.`, `One of: ${entries.map((e) => dirOf(e.lockfile)).join(", ") || "none"}.`, { unknown });
+    if (unknown.length) fail(EXIT.NOT_FOUND, "unknown-folder", `No version list in ${unknown.join(", ")}.`, `One of: ${entries.map((e) => dirOf(e.lockfile)).join(", ") || "none"}.`, { unknown });
     entries = entries.filter((e) => wanted.includes(dirOf(e.lockfile)));
   }
   let testMap = [];
@@ -2723,11 +2875,12 @@ function cmdScan(argv) {
       members: entry.members,
       tracked: entry.tracked ?? null,
       install: entry.install,
-      checks: checksFor(entry.members, testMap),
+      checks: { ...checksFor(entry.members, testMap), build: buildChecks(root, entry.lockfile) },
       ...rest,
     });
   }
-  if (lookups > 0 && answered === 0) fail(EXIT.NOT_FOUND, "no-registry", "No registry answered.", "Check the network and scan again.", { reason: "no registry answered" });
+  numberChecks(lockfiles);
+  if (lookups > 0 && answered === 0) fail(EXIT.NOT_FOUND, "no-registry", "No package server answered.", "Check the network connection and look again.", { reason: "no registry answered" });
   const scan = {
     ok: true,
     root,
@@ -2755,7 +2908,7 @@ function cmdBackup(argv) {
   const { batch, entry, adapter, root } = needBatch(dir, args.batch);
   const store = path.join(dir, "backups", batch.id);
   // The backup is the only as-found copy: a second one (after apply) would put back the changed files.
-  if (fs.existsSync(path.join(store, "backup.json"))) fail(EXIT.REFUSED, "backup-exists", `Batch ${batch.id} already has a backup.`, "Restore it, or plan the batches again for new ids.");
+  if (fs.existsSync(path.join(store, "backup.json"))) fail(EXIT.REFUSED, "backup-exists", `Group ${batch.id} already has a backup.`, "Restore it, or plan the batches again for new ids.");
   fs.rmSync(store, { recursive: true, force: true });
   fs.mkdirSync(path.join(store, "files"), { recursive: true });
   const files = [];
@@ -2778,10 +2931,10 @@ function cmdApply(argv) {
   const args = parseArgs(argv, { values: ["run", "batch"] });
   const dir = runDir(args.run);
   const { batch, entry, adapter, root } = needBatch(dir, args.batch);
-  if (!fs.existsSync(path.join(dir, "backups", batch.id, "backup.json"))) fail(EXIT.REFUSED, "no-backup", `Batch ${batch.id} has no backup.`, `Run backup --batch ${batch.id} first.`);
+  if (!fs.existsSync(path.join(dir, "backups", batch.id, "backup.json"))) fail(EXIT.REFUSED, "no-backup", `Group ${batch.id} has no backup.`, `Run backup --batch ${batch.id} first.`);
   // Without its snapshot (pip freeze) the environment could not be put back, so nothing moves.
   const backup = readJsonFile(path.join(dir, "backups", batch.id, "backup.json"));
-  if (backup && backup.snapshot && backup.snapshot.ok === false) fail(EXIT.REFUSED, "no-snapshot", `Batch ${batch.id}'s backup has no environment snapshot: ${backup.snapshot.reason}.`, "Fix the reason, then plan the batches again for a fresh backup.");
+  if (backup && backup.snapshot && backup.snapshot.ok === false) fail(EXIT.REFUSED, "no-snapshot", `Group ${batch.id}'s backup has no snapshot of the installed packages: ${backup.snapshot.reason}.`, "Fix the reason, then plan the batches again for a fresh backup.");
   const rowsById = new Map((entry.rows || []).map((r) => [r.id, r]));
   const missing = batch.picks.filter((id) => !rowsById.has(id));
   if (missing.length) fail(EXIT.NOT_FOUND, "unknown-pick", `No row ${missing.join(", ")} in ${entry.lockfile}.`, "Scan again, then plan the batches again.", { unknown: missing });
@@ -2875,6 +3028,8 @@ function cmdApply(argv) {
   // An update that raised the project's runtime floor (Go's go directive) is never kept: the batch fails and is put back.
   const { needsNewerRuntime = [] } = moving.length && adapter.afterApply ? adapter.afterApply(entry, root, path.join(dir, "backups", batch.id), moving) : {};
   const failed = toolFailed || undoFailed.length > 0 || needsNewerRuntime.length > 0 || overshot.length > 0;
+  // The backup records that the update is in place, so fix may follow (even when it failed: a fix can be what it needs).
+  if (backup) fs.writeFileSync(path.join(dir, "backups", batch.id, "backup.json"), JSON.stringify({ ...backup, applied: true }, null, 2) + "\n");
   out({
     ok: true,
     batch: batch.id,
@@ -2903,7 +3058,7 @@ function cmdRestore(argv) {
   const { batch, entry, adapter, root } = needBatch(dir, args.batch);
   const store = path.join(dir, "backups", batch.id);
   const saved = readJsonFile(path.join(store, "backup.json"));
-  if (!saved) fail(EXIT.NOT_FOUND, "backup-missing", `Batch ${batch.id} has no backup.`, "Nothing to put back: backup was never run for this batch.");
+  if (!saved) fail(EXIT.NOT_FOUND, "backup-missing", `Group ${batch.id} has no backup.`, "Nothing to undo: backup was never run for this group.");
   const restored = [];
   const deleted = [];
   // A file the OS will not let go of (EBUSY or EPERM from an editor or antivirus on Windows) is named,
@@ -2944,6 +3099,11 @@ function cmdRestore(argv) {
     }
     verified = mismatched.length === 0;
   }
+  // The update is no longer in place, so fix must refuse this group until apply runs again.
+  if (saved.applied && failedFiles.size === 0) {
+    const { applied, ...rest } = saved;
+    fs.writeFileSync(path.join(store, "backup.json"), JSON.stringify(rest, null, 2) + "\n");
+  }
   const install = adapter.installCommand(entry, root);
   out({
     ok: true,
@@ -2953,6 +3113,7 @@ function cmdRestore(argv) {
     extra,
     verified,
     mismatched,
+    fixed: Array.isArray(saved.fixed) ? saved.fixed : [],
     reinstall: { cmd: install.cmd, args: install.args, cwd: relTo(root, install.cwd), command: [install.cmd, ...install.args].join(" ") },
   });
 }
@@ -3338,7 +3499,102 @@ export function raiseRange(ecosystem, range, target) {
 }
 
 /* ======================================================================
- * 4. Manifests
+ * 4. Pins
+ * ==================================================================== */
+
+// An exact version written in the project's own files (a test that checks
+// one browser build, a script that downloads one release, a config naming
+// it) does not move when apply moves the package, so label never calls such a
+// row Safe. The search is plain text over the project's files and only reads:
+// git's own list in a checkout, else a walk. A line counts when it holds the
+// package name and the row's current version as a whole token, so a stray
+// number such as 11.64.10 never matches 1.64.1.
+
+/** A file bigger than this is never read for pins. */
+export const PIN_FILE_CAP = 1024 * 1024;
+/** A NUL byte in this many first bytes marks a file as binary. */
+const BINARY_SNIFF = 8 * 1024;
+/** A pin's line is cut at this many characters in pins.json. */
+const PIN_TEXT_CAP = 200;
+
+/** The project's own files, relative with forward slashes: git's list (tracked and untracked, ignored left out) in a checkout, else a walk skipping SKIP_DIRS. */
+function projectFiles(root) {
+  const top = git(root, ["rev-parse", "--show-toplevel"]);
+  if (top.ok && top.code === 0 && top.stdout.trim()) {
+    const ls = git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+    if (ls.ok && ls.code === 0) return [...new Set(ls.stdout.split("\0").filter(Boolean).map((p) => p.replace(/\\/g, "/")))].sort();
+  }
+  return walk(root, () => true);
+}
+
+/** A file's text when it is small and not binary; null otherwise (or when it cannot be read). */
+function pinText(file) {
+  let buf;
+  try {
+    if (fs.statSync(file).size > PIN_FILE_CAP) return null;
+    buf = fs.readFileSync(file);
+  } catch {
+    return null;
+  }
+  if (buf.subarray(0, BINARY_SNIFF).includes(0)) return null;
+  return buf.toString("utf8");
+}
+
+/**
+ * Exact-version references to scanned rows in the project's own files.
+ * rows: [{ id, package, current }]. opts.files: the files to search (relative
+ * to root; default the project's own files), opts.skip: files a lockfile
+ * entry owns (its lockfile and manifests), never searched. Any file named
+ * like a lockfile, a binary file and a file over 1 MB are skipped too.
+ * Returns [{ id, file, line, text }], text the trimmed line.
+ */
+export function findPins(root, rows, { files, skip } = {}) {
+  const tests = (rows || [])
+    .filter((r) => r && r.id && r.package && r.current)
+    .map((r) => ({
+      id: r.id,
+      version: String(r.current),
+      name: new RegExp(`(?<![\\w.-])${escapeRe(String(r.package))}(?![\\w.-])`, "i"),
+      token: new RegExp(`(?<![\\w.])${escapeRe(String(r.current))}(?![\\w.])`),
+    }));
+  if (!tests.length) return [];
+  const skipped = new Set([...(skip || [])].map((f) => String(f).replace(/\\/g, "/")));
+  const lockNames = ADAPTERS.flatMap((a) => a.lockfiles);
+  const pins = [];
+  for (const rel of files || projectFiles(root)) {
+    const base = path.posix.basename(rel);
+    if (skipped.has(rel) || lockNames.some((n) => n === base || matchGlob(n, base))) continue;
+    const text = pinText(path.join(root, rel));
+    if (text === null) continue;
+    const here = tests.filter((t) => text.includes(t.version));
+    if (!here.length) continue;
+    text.split(/\r?\n/).forEach((line, i) => {
+      for (const t of here) if (t.token.test(line) && t.name.test(line)) pins.push({ id: t.id, file: rel, line: i + 1, text: line.trim() });
+    });
+  }
+  return pins;
+}
+
+function cmdPins(argv) {
+  const args = parseArgs(argv, { values: ["run"] });
+  const dir = runDir(args.run);
+  const scan = needScan(dir);
+  if (!scan.root || !isDir(scan.root)) fail(EXIT.NOT_FOUND, "root-missing", "The project folder in scan.json is not there.", "Run detect and scan again.");
+  // detect.json carries every entry in full (a .NET props file too); scan.json only the folders scanned.
+  const detect = readRun(dir, "detect.json");
+  const skip = new Set();
+  for (const entry of [...((detect && detect.lockfiles) || []), ...(scan.lockfiles || [])]) {
+    const adapter = adapterOf(entry.adapter);
+    if (adapter && entry.lockfile && Array.isArray(entry.members)) for (const f of batchFiles(adapter, entry)) if (f) skip.add(f);
+  }
+  const rows = (scan.lockfiles || []).flatMap((l) => l.rows || []);
+  const pins = findPins(scan.root, rows, { skip }).map((p) => ({ ...p, text: p.text.slice(0, PIN_TEXT_CAP) }));
+  writeRun(dir, "pins.json", { pins });
+  out({ ok: true, pins, count: pins.length });
+}
+
+/* ======================================================================
+ * 5. Manifests
  * ==================================================================== */
 
 /** The value of `key = "value"` on one line, or null when it is not a one-line string. */
@@ -3495,7 +3751,7 @@ export function editVersion(file, { name, from, to } = {}) {
 }
 
 /* ======================================================================
- * 5. Labels
+ * 6. Labels
  * ==================================================================== */
 
 // FR-6 to FR-9, in one tested place. Safe is checked, in range (or a pin that
@@ -3503,7 +3759,9 @@ export function editVersion(file, { name, from, to } = {}) {
 // major and 0.x move is Check first at best; one whose changed API the code
 // calls, or whose notes were not read or could not be read while 5 or more
 // files import it, is a Warning. A move whose size cannot be worked out is
-// never Safe. No checks at all caps every row at Check first.
+// never Safe. No checks at all caps every row at Check first. An exact
+// version written in the project's own files outside the row's manifests
+// (pins.json) keeps a row out of Safe too.
 
 export const WIDE_USE_FILES = 5;
 
@@ -3525,12 +3783,21 @@ function securityReason(security) {
  * network. scan: { noChecks, lockfiles: [{ lockfile, ecosystem, checks: {
  * rows, discovered }, rows: [{ id, current, target, jump, inRange, range,
  * pinned, security, unreadable }] }] }. records: [{ id, notes ("read", "not
- * read", "could not read"), breaking: [], files, calls: [] }]. Returns
- * [{ id, label, reasons[] }] in scan order; a security reason always comes
- * first.
+ * read", "could not read"), breaking: [], files, calls: [], usedIn: [] }]
+ * (usedIn is read by checks, never here). pins: pins.json (or its pins array):
+ * [{ id, file, line, text }]; null for a run that has none. Returns
+ * [{ id, label, reasons[], reasonsPlain[] }] in scan order (reasonsPlain
+ * says each reason in plain English, same order); a security reason always
+ * comes first.
  */
-export function label(scan, records) {
+export function label(scan, records, pins = null) {
   const byId = new Map((Array.isArray(records) ? records : []).map((r) => [r && r.id, r]));
+  const pinsOf = new Map();
+  for (const p of (Array.isArray(pins) ? pins : pins && Array.isArray(pins.pins) ? pins.pins : []) || []) {
+    if (!p || !p.id || !p.file) continue;
+    if (!pinsOf.has(p.id)) pinsOf.set(p.id, []);
+    pinsOf.get(p.id).push(p.file);
+  }
   const noChecks = Boolean(scan && scan.noChecks);
   const result = [];
   for (const lock of (scan && scan.lockfiles) || []) {
@@ -3538,46 +3805,57 @@ export function label(scan, records) {
     const covered = Boolean((checks.rows && checks.rows.length) || (checks.discovered && checks.discovered.length));
     for (const row of lock.rows || []) {
       const reasons = [];
+      const plain = [];
+      // reasons keep their machine words (handoff and the tests read them); reasonsPlain says each one in plain English, in the same order.
+      const add = (reason, sentence) => {
+        reasons.push(reason);
+        plain.push(sentence);
+      };
       const security = securityReason(row.security);
-      if (security) reasons.push(security);
+      if (security) add(security, security === "security" ? "fixes a security problem" : `fixes a ${row.security.severity}-severity security problem`);
       const jump = row.jump || jumpOf(lock.ecosystem, row.current, row.target);
       const major = jump === "major" || jump === "0.x";
-      if (major) reasons.push(jump === "0.x" ? "0.x" : "major");
-      if (!jump) reasons.push("could not read the versions");
+      if (major) add(jump === "0.x" ? "0.x" : "major", jump === "0.x" ? "an early (0.x) version, where any update can break things" : "a big change");
+      if (!jump) add("could not read the versions", "the versions could not be compared");
       // couldNotRead (a scan's own flag) and unreadable name the tool whose output could not be read.
       const unreadable = row.couldNotRead || row.unreadable;
-      if (unreadable) reasons.push(`could not read ${unreadable} output`);
+      if (unreadable) add(`could not read ${unreadable} output`, `could not read what ${unreadable} printed`);
       // notAudited: the audit tool is missing or its output could not be read, so a known vulnerability could hide here.
-      if (row.notAudited) reasons.push("not checked for vulnerabilities");
-      if (row.runtimeNotChecked) reasons.push(`runtime fit not checked (${row.runtimeNotChecked})`);
-      if (row.pinned) reasons.push(`pinned ${row.current} → ${row.target}`);
+      if (row.notAudited) add("not checked for vulnerabilities", "not checked for known security problems");
+      if (row.runtimeNotChecked) add(`runtime fit not checked (${row.runtimeNotChecked})`, `not checked against the Node or language version you use (${row.runtimeNotChecked})`);
+      if (row.pinned) add(`pinned ${row.current} → ${row.target}`, `locked to one exact version, ${row.current} to ${row.target}`);
       const rangeTo = row.range && row.range.to;
       const rangeChange = Boolean(row.range && row.range.from && rangeTo && rangeTo !== row.range.from);
       const notRewritten = !row.pinned && row.inRange === false && !rangeChange;
-      if (rangeChange && !row.pinned) reasons.push(`range ${row.range.from} → ${rangeTo}`);
-      if (notRewritten) reasons.push("range not rewritten");
+      if (rangeChange && !row.pinned) add(`range ${row.range.from} → ${rangeTo}`, `the allowed range widens from ${row.range.from} to ${rangeTo}`);
+      if (notRewritten) add("range not rewritten", "the allowed range was written by hand and does not take the new version");
+      // A pin in the row's own lockfile or manifests moves with apply; one anywhere else does not.
+      const own = new Set([lock.lockfile, lock.manifest, ...(row.declaredIn || []).map((d) => d && d.file)].filter(Boolean));
+      const pinFiles = [...new Set(pinsOf.get(row.id) || [])].filter((file) => !own.has(file));
+      if (pinFiles.length) add(`exact version used in ${pinFiles.join(", ")}`, `${pinFiles.join(", ")} ${pinFiles.length === 1 ? "names" : "name"} this exact version (${row.current}), and the update does not change ${pinFiles.length === 1 ? "that file" : "those files"}`);
+      if (row.fit && row.fit.needs) add(`newest that fits ${row.fit.runtime || "the runtime"} (latest needs ${row.fit.needs})`, `the newest version that runs on ${row.fit.runtime || "your runtime"} ${row.fit.declared || ""}; the latest needs ${row.fit.runtime || "a newer runtime"} ${row.fit.needs}`.replace(/ ;/, ";"));
       const rec = byId.get(row.id);
       const notes = rec && rec.notes ? rec.notes : "not read";
-      if (notes === "not read") reasons.push("notes not read");
-      else if (notes !== "read") reasons.push("notes could not be read");
+      if (notes === "not read") add("notes not read", "I did not read the update notes");
+      else if (notes !== "read") add("notes could not be read", "the update notes could not be read");
       const breaking = rec && Array.isArray(rec.breaking) && rec.breaking.length > 0;
-      if (breaking) reasons.push("breaking notes");
+      if (breaking) add("breaking notes", "the notes say something was removed or changed");
       const calls = rec && Array.isArray(rec.calls) ? rec.calls : [];
-      if (calls.length) reasons.push("calls a changed API");
+      if (calls.length) add("calls a changed API", "your code uses something that changed");
       const files = rec && typeof rec.files === "number" ? rec.files : null;
-      if (files) reasons.push(`used in ${files} file${files === 1 ? "" : "s"}`);
-      if (noChecks) reasons.push("no checks to run");
-      else if (!covered) reasons.push("no checks cover this lockfile");
+      if (files) add(`used in ${files} file${files === 1 ? "" : "s"}`, `${files} file${files === 1 ? " uses" : "s use"} it`);
+      if (noChecks) add("no checks to run", "there are no checks to run");
+      else if (!covered) add("no checks cover this lockfile", "no checks cover this folder");
 
       let verdict;
       if (major && (calls.length > 0 || (notes !== "read" && files !== null && files >= WIDE_USE_FILES))) {
         verdict = LABEL.warning;
-      } else if ((jump === "patch" || jump === "minor") && !unreadable && !row.notAudited && !row.runtimeNotChecked && (row.inRange === true || row.pinned) && notes === "read" && !breaking && covered && !noChecks) {
+      } else if ((jump === "patch" || jump === "minor") && !unreadable && !row.notAudited && !row.runtimeNotChecked && (row.inRange === true || row.pinned) && notes === "read" && !breaking && covered && !noChecks && !pinFiles.length) {
         verdict = LABEL.safe;
       } else {
         verdict = LABEL.check;
       }
-      result.push({ id: row.id, label: verdict, reasons });
+      result.push({ id: row.id, label: verdict, reasons, reasonsPlain: plain });
     }
   }
   return result;
@@ -3613,7 +3891,8 @@ function cmdLabel(argv) {
   const dir = runDir(args.run);
   const scan = needScan(dir);
   const records = readRecords(args.records);
-  const labels = label(scan, records);
+  // pins.json is there once pins ran; an older run without it labels as before.
+  const labels = label(scan, records, readRun(dir, "pins.json"));
   // handoff reads the records again (breaking lines, notes url, calls) from the run folder.
   writeRun(dir, "records.json", records);
   writeRun(dir, "labels.json", labels);
@@ -3621,7 +3900,7 @@ function cmdLabel(argv) {
 }
 
 /* ======================================================================
- * 6. Batches
+ * 7. Batches
  * ==================================================================== */
 
 // Batches by label: every Safe pick of a lockfile in one batch, every Check
@@ -3759,14 +4038,458 @@ function cmdBatches(argv) {
   const at = saved.batches.findIndex((b) => b.id === args.split);
   if (at === -1) fail(EXIT.NOT_FOUND, "unknown-batch", `No batch ${args.split} in batches.json.`, `One of: ${saved.batches.map((b) => b.id).join(", ")}.`);
   const parts = splitBatch(scan, saved.batches[at]);
-  if (!parts) fail(EXIT.INVALID, "cannot-split", `Batch ${args.split} holds one pick and cannot be split.`, "That pick is the one that breaks: put it back and mark it failed.");
+  if (!parts) fail(EXIT.INVALID, "cannot-split", `Group ${args.split} holds one update and cannot be split.`, "That update is the one that breaks: undo it and mark it as broken.");
   saved.batches.splice(at, 1, ...parts);
   writeRun(dir, "batches.json", saved);
   out({ ok: true, split: args.split, batches: parts });
 }
 
 /* ======================================================================
- * 7. Notes
+ * 8. Checks
+ * ==================================================================== */
+
+// run-check.mjs stays the only runner of checks (timeouts, process trees,
+// Windows): the agent runs each check through it with --log, a failing one a
+// second time to a second log, and these commands only read those logs. The
+// baseline records which tests failed on the untouched tree; the compare
+// blames a group only for tests that passed before. A log in a format the
+// parser does not know is judged by the command's pass or fail, as before.
+// checks picks the commands a group runs: the test map rows covering the
+// files its updates touch, plus the build, with the Shared rows left for one
+// full-suite offer at the end.
+
+/** Failing-test lines of the runners the parser knows, with the lines that show the format when nothing fails. */
+const TEST_FORMATS = [
+  // TAP, and node:test's TAP reporter.
+  { pass: /^\s*ok \d+\b/, fail: /^\s*not ok \d+\s*(?:-\s*)?(.+?)\s*(?:#.*)?$/ },
+  // node:test's spec reporter ("✖ failing tests:" is its summary heading, not a test).
+  { pass: /^\s*✔ /, fail: /^\s*✖ (?!failing tests:?\s*$)(.+?)(?:\s+\([\d.]+\s*m?s\))?\s*$/ },
+  // Jest and Vitest.
+  { pass: /^\s*(?:PASS|✓|√)\s/, fail: /^\s*FAIL\s+(\S.*?\s>\s.+?)\s*$/ },
+  { fail: /^\s*[✕×]\s+(.+?)(?:\s+\([\d.]+\s*m?s\)|\s+\d+(?:\.\d+)?\s*m?s)?\s*$/ },
+  // pytest.
+  { pass: /^\S+::\S+ PASSED\b|^=+ .*\b\d+ (?:passed|failed)\b.*=+$/, fail: /^FAILED\s+(\S+::\S+)/ },
+  // cargo test.
+  { pass: /^test \S+ \.\.\. (?:ok|ignored)\s*$/, fail: /^test (\S+) \.\.\. FAILED\s*$/ },
+  // Go.
+  { pass: /^\s*--- PASS: |^ok\s+\S+/, fail: /^\s*--- FAIL: (\S+)/ },
+  // dotnet test.
+  { pass: /^\s*Passed\s+\S/, fail: /^\s*Failed\s+(\S.*?)\s+\[/ },
+];
+
+/**
+ * The failing tests a check's full output names. Returns { names (sorted,
+ * unique), known }; known is false when no line of a format the parser knows
+ * appeared, so the caller judges the whole command instead. A TAP line marked
+ * # TODO or # SKIP is not a failure.
+ */
+export function failedTests(log) {
+  const names = new Set();
+  let known = false;
+  for (const raw of String(log || "").split(/\r?\n/)) {
+    const line = raw.replace(/\x1b\[[0-9;]*m/g, "");
+    for (const f of TEST_FORMATS) {
+      const m = f.fail.exec(line);
+      if (m) {
+        known = true;
+        if (!/#\s*(?:TODO|SKIP)\b/i.test(line) && m[1].trim()) names.add(m[1].trim());
+        break;
+      }
+      if (f.pass && f.pass.test(line)) {
+        known = true;
+        break;
+      }
+    }
+  }
+  return { names: [...names].sort(), known };
+}
+
+const OUTCOMES = new Set(["passed", "failed", "timeout", "not-started"]);
+
+/**
+ * One log read for the judge: { names, known, outcome }. The outcome is the
+ * one given (run-check's), else read from the log. A run that did not pass
+ * and names no failing test (a crash before the tests, a failed hook), and a
+ * timeout, are judged as a whole command (known false); a passing run names
+ * none.
+ */
+function readCheckLog(file, outcome, flag) {
+  let text;
+  try {
+    text = fs.readFileSync(path.resolve(file), "utf8");
+  } catch {
+    fail(EXIT.NOT_FOUND, "log-missing", `${file} does not exist.`, "Pass the --log file run-check.mjs wrote.");
+  }
+  if (outcome && !OUTCOMES.has(outcome)) fail(EXIT.USAGE, "bad-outcome", `${flag} must be passed, failed, timeout or not-started.`, "Pass run-check's outcome.");
+  const parsed = failedTests(text);
+  const result = outcome || (parsed.names.length ? "failed" : parsed.known ? "passed" : null);
+  if (!result) fail(EXIT.USAGE, "missing-outcome", `${file} is in a format I cannot read, so its result is unknown.`, `Pass ${flag} with run-check's outcome.`);
+  const names = result === "passed" ? [] : parsed.names;
+  return { names, known: parsed.known && result !== "timeout" && (result === "passed" || names.length > 0), outcome: result };
+}
+
+/**
+ * Judge one check from its first log and its retry. { known, failed (the last
+ * run did not pass), names (failing in both runs, or in the one), flaky
+ * (failing in one run only), commandFailed, flakyCommand, timeout }. With
+ * either log unreadable the whole command is judged.
+ */
+export function judgeCheck(first, retry = null) {
+  const last = retry || first;
+  const failed = last.outcome !== "passed";
+  const timeout = last.outcome === "timeout";
+  if (!first.known || (retry && !retry.known && retry.outcome !== "passed")) {
+    return { known: false, failed, names: [], flaky: [], commandFailed: failed, flakyCommand: Boolean(retry && first.outcome !== "passed" && retry.outcome === "passed"), timeout };
+  }
+  if (!retry) return { known: true, failed, names: first.names.slice(), flaky: [], commandFailed: false, flakyCommand: false, timeout };
+  const again = new Set(retry.names);
+  const once = new Set(first.names);
+  const names = first.names.filter((n) => again.has(n));
+  const flaky = [...first.names.filter((n) => !again.has(n)), ...retry.names.filter((n) => !once.has(n))].sort();
+  return { known: true, failed, names, flaky, commandFailed: false, flakyCommand: false, timeout };
+}
+
+/**
+ * Compare a check after a group with its baseline entry. Named tests: the new
+ * failures are those neither red nor flaky before; blame when there is one.
+ * Judged as a whole command (either side unreadable, or a timeout before):
+ * blame when it fails now and was not already failing as a whole before.
+ */
+export function compareCheck(base, now) {
+  if (base.known && !base.timeout && now.known) {
+    const red = new Set(base.failing || []);
+    const wobbly = new Set(base.flaky || []);
+    const newFailures = now.names.filter((n) => !red.has(n) && !wobbly.has(n));
+    const stillFailing = now.names.filter((n) => red.has(n));
+    const flaky = [...new Set([...now.flaky, ...now.names.filter((n) => wobbly.has(n))])].sort();
+    return { newFailures, stillFailing, flaky, blame: newFailures.length > 0, known: true };
+  }
+  const before = Boolean(base.commandFailed);
+  return { newFailures: [], stillFailing: [], flaky: [], blame: now.failed && !before, known: false, commandFailed: now.failed, wasFailing: before };
+}
+
+/** --log, --retry-log and their outcomes, judged. */
+function judgedArgs(args) {
+  if (!args.log) fail(EXIT.USAGE, "missing-log", "--log is required.", "Pass the --log file run-check.mjs wrote.");
+  if (args["retry-outcome"] && !args["retry-log"]) fail(EXIT.USAGE, "missing-retry-log", "--retry-outcome needs --retry-log.", "Pass the retry's log too.");
+  const first = readCheckLog(args.log, args.outcome, "--outcome");
+  const retry = args["retry-log"] ? readCheckLog(args["retry-log"], args["retry-outcome"], "--retry-outcome") : null;
+  return judgeCheck(first, retry);
+}
+
+/**
+ * Every check of a scan with its id, per lockfile: the install (install for
+ * the first lockfile, install-2, install-3, ... for later ones), the test
+ * map commands (checks.list: c1, c2, ... one id per command, all run from
+ * the project root, numbered by scan), and the commands the person confirmed
+ * (checks.discovered) then the build checks the scan found (checks.build,
+ * kind build): d1, d2, ... one id per command and folder, in scan order.
+ * Pure.
+ */
+export function checkList(scan) {
+  const discoveredIds = new Map();
+  return ((scan && scan.lockfiles) || []).map((lock, i) => {
+    const checks = lock.checks || {};
+    const install = lock.install ? { id: i === 0 ? "install" : `install-${i + 1}`, command: lock.install, cwd: dirOf(lock.lockfile), kind: "install" } : null;
+    const map = (checks.list || []).filter((c) => c && c.id && c.run).map((c) => ({ id: c.id, command: c.run, cwd: ".", kind: "map", area: c.area, paths: c.paths || [], shared: Boolean(c.shared) }));
+    const seen = new Set();
+    const discovered = [...(checks.discovered || []).map((d) => [d, "discovered"]), ...(checks.build || []).map((d) => [d, "build"])]
+      .map(([d, kind]) => {
+        const command = typeof d === "string" ? d : d && (d.command || d.run);
+        if (!command) return null;
+        const cwd = (d && typeof d === "object" && d.cwd) || ".";
+        const key = `${cwd}\0${command}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        if (!discoveredIds.has(key)) discoveredIds.set(key, `d${discoveredIds.size + 1}`);
+        return { id: discoveredIds.get(key), command, cwd, kind: kind === "build" || /build/i.test(command) ? "build" : "discovered" };
+      })
+      .filter(Boolean);
+    return { lockfile: lock.lockfile, install, map, discovered };
+  });
+}
+
+/** The Shared test map commands across every lockfile, once each: the full suite, offered once after the last group. */
+function fullSuite(lists) {
+  const byId = new Map();
+  for (const l of lists) for (const c of l.map) if (c.shared && !byId.has(c.id)) byId.set(c.id, { id: c.id, command: c.command, cwd: c.cwd, area: c.area });
+  return [...byId.values()];
+}
+
+const shownCheck = (c) => ({ id: c.id, command: c.command, cwd: c.cwd, ...(c.area ? { area: c.area } : {}) });
+const relFile = (f) => String(f).replace(/\\/g, "/").replace(/^\.\//, "");
+
+/**
+ * The checks one group runs. Files are the picks' usedIn (records) and pin
+ * files (pins). Narrowed: the lockfile's non-Shared test map rows whose paths
+ * match one of those files, a Shared row that is the only one covering one of
+ * them, and its build checks. A pin file no non-Shared row covers (a test
+ * naming the exact version that nothing narrower runs) adds the Shared rows,
+ * narrowed or not, since only the full suite would see that pin break. Not
+ * narrowed (no files known, or no row covers them): every non-Shared row and every confirmed and build
+ * command of the lockfile, with a message saying so; when those hold no test at all, its
+ * Shared rows run, so a group never runs without one. full: the Shared
+ * commands of every lockfile this group leaves out, for the one offer after
+ * the last group. Pure.
+ * Returns { install, commands[], narrowed, full[], files[], message }.
+ */
+export function checksForBatch(scan, batch, records = [], pins = null) {
+  const lists = checkList(scan);
+  const lock = lists.find((l) => l.lockfile === batch.lockfile) || { install: null, map: [], discovered: [] };
+  const picks = new Set(batch.picks || []);
+  const recs = Array.isArray(records) ? records : records && Array.isArray(records.records) ? records.records : [];
+  const pinList = Array.isArray(pins) ? pins : pins && Array.isArray(pins.pins) ? pins.pins : [];
+  const files = new Set();
+  for (const r of recs) if (r && picks.has(r.id) && Array.isArray(r.usedIn)) for (const f of r.usedIn) if (typeof f === "string" && f.trim()) files.add(relFile(f.trim()));
+  for (const p of pinList) if (p && picks.has(p.id) && p.file) files.add(relFile(p.file));
+  const own = lock.map.filter((c) => !c.shared);
+  const shared = lock.map.filter((c) => c.shared);
+  const covers = (c, f) => c.paths.some((glob) => matchGlob(glob, f));
+  const hits = own.filter((c) => [...files].some((f) => covers(c, f)));
+  // A file only a Shared row covers is tested by nothing else: that row runs for the group.
+  const onlyShared = shared.filter((c) => [...files].some((f) => covers(c, f) && !own.some((o) => covers(o, f))));
+  // A pin in a file no narrower row covers would break unseen: the Shared rows run for the group.
+  const pinFiles = [...new Set(pinList.filter((p) => p && picks.has(p.id) && p.file).map((p) => relFile(p.file)))];
+  const orphanPins = pinFiles.filter((f) => !own.some((o) => covers(o, f))).sort();
+  const pinShared = orphanPins.length ? shared : [];
+  const pinMessage = orphanPins.length && shared.length ? `No test map row but the full suite covers ${orphanPins.join(", ")}, which names the exact version, so the full suite runs for this group.` : null;
+  const build = lock.discovered.filter((d) => d.kind === "build");
+  const install = lock.install && shownCheck(lock.install);
+  const leftOut = (commands) => fullSuite(lists).filter((c) => !commands.some((x) => x.id === c.id));
+  const once = (list) => list.filter((c, i) => list.findIndex((x) => x.id === c.id) === i);
+  if (hits.length || onlyShared.length) {
+    const commands = once([...hits, ...onlyShared, ...pinShared, ...build]).map(shownCheck);
+    return { install, commands, narrowed: true, full: leftOut(commands), files: [...files].sort(), message: pinMessage };
+  }
+  const tests = [...own, ...lock.discovered.filter((d) => d.kind !== "build")];
+  const commands = once([...(tests.length ? [...tests, ...pinShared] : shared), ...build]).map(shownCheck);
+  const message = pinMessage && tests.length
+    ? pinMessage
+    : !tests.length && shared.length
+    ? "The full suite is the only test for this folder, so it runs for this group."
+    : files.size
+      ? "No test map row covers the files these updates touch, so every check for this folder runs."
+      : "Nothing says which files these updates touch, so every check for this folder runs.";
+  return { install, commands, narrowed: false, full: leftOut(commands), files: [...files].sort(), message };
+}
+
+/** A check id from checkList, or exit 3. */
+function needCheck(scan, id) {
+  if (!id) fail(EXIT.USAGE, "missing-check", "--check is required.", "Pass a check id from checks.");
+  for (const l of checkList(scan)) for (const c of [l.install, ...l.map, ...l.discovered]) if (c && c.id === id) return c;
+  fail(EXIT.NOT_FOUND, "unknown-check", `No check ${id} in this run.`, "Run checks to list the check ids.");
+}
+
+function cmdChecks(argv) {
+  const args = parseArgs(argv, { values: ["run", "batch"] });
+  const dir = runDir(args.run);
+  const scan = needScan(dir);
+  if (!args.batch) {
+    // Before any change: every check a group or the end-of-run full suite can run, for the baseline.
+    const lists = checkList(scan);
+    const seen = new Set();
+    const checks = [];
+    for (const l of lists) {
+      for (const c of [l.install, ...l.map, ...l.discovered]) {
+        if (!c || seen.has(c.id)) continue;
+        seen.add(c.id);
+        checks.push({ ...shownCheck(c), lockfile: l.lockfile, kind: c.kind, ...(c.shared ? { shared: true } : {}) });
+      }
+    }
+    out({ ok: true, checks, full: fullSuite(lists) });
+    return;
+  }
+  const { batch } = needBatch(dir, args.batch);
+  out({ ok: true, batch: batch.id, ...checksForBatch(scan, batch, readRun(dir, "records.json") || [], readRun(dir, "pins.json")) });
+}
+
+function cmdBaseline(argv) {
+  const args = parseArgs(argv, { values: ["run", "check", "log", "retry-log", "outcome", "retry-outcome"] });
+  const dir = runDir(args.run);
+  const check = needCheck(needScan(dir), args.check);
+  const j = judgedArgs(args);
+  const saved = readRun(dir, "baseline.json") || {};
+  const checks = saved.checks && typeof saved.checks === "object" ? saved.checks : {};
+  const entry = { outcome: j.failed ? (j.timeout ? "timeout" : "failed") : "passed", failing: j.names, flaky: j.flaky, known: j.known, commandFailed: j.commandFailed };
+  if (j.flakyCommand) entry.flakyCommand = true;
+  if (j.timeout) entry.timeout = true;
+  checks[check.id] = entry;
+  writeRun(dir, "baseline.json", { checks });
+  out({ ok: true, check: check.id, ...entry });
+}
+
+function cmdCompare(argv) {
+  const args = parseArgs(argv, { values: ["run", "batch", "check", "log", "retry-log", "outcome", "retry-outcome"] });
+  const dir = runDir(args.run);
+  const { scan, batch } = needBatch(dir, args.batch);
+  const check = needCheck(scan, args.check);
+  const saved = readRun(dir, "baseline.json");
+  const base = saved && saved.checks && saved.checks[check.id];
+  if (!base) fail(EXIT.NOT_FOUND, "no-baseline", `Check ${check.id} has no baseline.`, "Run baseline for this check first.");
+  const result = compareCheck(base, judgedArgs(args));
+  const record = readRun(dir, "compare.json") || {};
+  const batches = record.batches && typeof record.batches === "object" ? record.batches : {};
+  batches[batch.id] = { ...(batches[batch.id] || {}), [check.id]: result };
+  writeRun(dir, "compare.json", { batches });
+  out({ ok: true, batch: batch.id, check: check.id, ...result });
+}
+
+/* ======================================================================
+ * 9. Runtime fit
+ * ==================================================================== */
+
+// A version held back for needing a newer runtime (Node, Rust, ...) is
+// replaced by the newest one the project's runtime still runs. The adapter
+// answers through runtimeFit when it has one (npm asks the registry for each
+// version's engines.node); a row the scan already cut keeps its target and
+// learns what the latest needs. Where no adapter can say, the row is listed
+// as unknown for the agent to work out with the person's OK. A fitting
+// version older than the current one is never offered.
+
+/** A held reason that names the runtime, and the version it needs. */
+const RUNTIME_HOLD = /\bneeds (Node|Rust|Python|Go|\.NET) (.+?)(?:\s+\(|$)/;
+
+/** Each adapter's runtime: its name, and how a person raises the declared one. */
+const RUNTIMES = {
+  npm: { name: "Node", raise: (lock) => `change \`engines.node\` in \`${lock.manifest}\`` },
+  cargo: { name: "Rust", raise: (lock) => `change \`rust-version\` in \`${lock.manifest}\`` },
+  pip: { name: "Python", raise: () => "move the project to a newer Python" },
+  uv: { name: "Python", raise: (lock) => `change \`requires-python\` in \`${lock.manifest}\`` },
+  go: { name: "Go", raise: (lock) => `change the \`go\` line in \`${lock.manifest}\`` },
+  dotnet: { name: ".NET", raise: (lock) => `change the target framework in \`${lock.manifest}\`` },
+};
+
+/**
+ * The newest version newer than current, at most latest, that fits. versions:
+ * [{ version, engines }]; fits(v) says whether one runs on the project's
+ * runtime. Returns { best (null when none fits), needs (what the newest
+ * newer version asks for when it does not fit, else null) }. Pure.
+ */
+export function bestFit({ ecosystem = "npm", current, latest = null, versions = [], fits }) {
+  const newer = (versions || [])
+    .filter((v) => v && parseVersion(ecosystem, v.version) && compareVersions(ecosystem, v.version, current) === 1)
+    .filter((v) => !latest || !parseVersion(ecosystem, latest) || compareVersions(ecosystem, v.version, latest) !== 1)
+    .sort((a, b) => compareVersions(ecosystem, b.version, a.version));
+  const best = newer.find((v) => fits(v));
+  return { best: best ? best.version : null, needs: newer.length && !fits(newer[0]) ? newer[0].engines || null : null };
+}
+
+/** The highest of a list of versions; null for none. */
+function maxVersion(ecosystem, list) {
+  const sorted = (list || []).filter((v) => parseVersion(ecosystem, v)).sort((a, b) => compareVersions(ecosystem, b, a));
+  return sorted[0] || null;
+}
+
+/** npm-family declarations of a package across a lockfile's members, as the npm adapter builds them. */
+function npmDeclaredIn(root, lock, name) {
+  const declaredIn = [];
+  for (const m of lock.members || [dirOf(lock.lockfile)]) {
+    const manifest = inDir(m, "package.json");
+    const d = declaredRange(readJsonFile(path.join(root, manifest)), name);
+    if (d) declaredIn.push({ file: manifest, range: d.range });
+  }
+  return declaredIn;
+}
+
+npmAdapter.runtimeFit = function runtimeFit(lock, root, item) {
+  if (!findTool("npm") || !item.current) return null;
+  const runtime = this.runtime(lock, root);
+  const view = npmView(item.package, `>${item.current}`, path.join(root, dirOf(lock.lockfile)));
+  if (!view.ok) return null;
+  return bestFit({ ecosystem: "npm", current: item.current, latest: item.latest || null, versions: view.versions, fits: (v) => fitsRuntime(v.engines, runtime.floor) });
+};
+
+/** A held row as an ordinary pick with target best, built as the adapter builds rows (npm reads each member's declaration). */
+function heldToRow(root, lock, held, best, fit) {
+  const declaredIn = lock.adapter === "npm" ? npmDeclaredIn(root, lock, held.package) : [];
+  const row = buildRow(lock.ecosystem, { id: held.id, name: held.package, current: held.current, target: best, declaredIn });
+  row.fit = fit;
+  return row;
+}
+
+/** Each lockfile's runtime words for fit: its runtime's name, the declared (or this machine's) version, and the "you declare" phrase. */
+function runtimeWords(lock) {
+  const rt = RUNTIMES[lock.adapter] || { name: "the runtime", raise: () => "raise the project's runtime" };
+  const declared = (lock.runtime && lock.runtime.declared) || null;
+  const machine = (lock.runtime && lock.runtime.machine) || null;
+  const yours = declared ? `you declare ${declared}` : machine ? `this machine runs ${machine}` : null;
+  return { rt, declared, machine, yours, fitOf: (needs, latest) => ({ runtime: rt.name, declared: declared || machine, needs, latest: latest || null }) };
+}
+
+/** fit --id --best: the version worked out with the person for a row fit could not answer, made a pick. */
+function fitOne(dir, scan, id, best) {
+  for (const lock of scan.lockfiles || []) {
+    const at = (lock.held || []).findIndex((h) => h.id === id);
+    if (at === -1) continue;
+    const held = lock.held[at];
+    const m = RUNTIME_HOLD.exec(held.reason || "");
+    if (!m) fail(EXIT.REFUSED, "not-a-runtime-hold", `${id} is held by ${held.reason}, not by the runtime.`, "Only a version held back for the runtime can be fitted.");
+    if (!parseVersion(lock.ecosystem, best) || compareVersions(lock.ecosystem, best, held.current) !== 1) fail(EXIT.INVALID, "not-newer", `${best} is not a version newer than ${held.current}.`, "Pass a newer version that runs on the project's runtime.");
+    const { fitOf } = runtimeWords(lock);
+    const row = heldToRow(scan.root, lock, held, best, fitOf(m[2], held.latest));
+    lock.held.splice(at, 1);
+    lock.rows = [...(lock.rows || []), row];
+    writeRun(dir, "scan.json", scan);
+    const saved = readRun(dir, "fit.json");
+    if (saved && Array.isArray(saved.rows)) {
+      for (const r of saved.rows) if (r.id === id) Object.assign(r, { best, source: "agent" });
+      saved.unknown = (saved.unknown || []).filter((u) => u !== id);
+      writeRun(dir, "fit.json", saved);
+    }
+    out({ ok: true, rows: [{ id, package: held.package, current: held.current, best, needs: m[2], source: "agent" }], unknown: [] });
+    return;
+  }
+  fail(EXIT.NOT_FOUND, "unknown-held", `No held row ${id} in scan.json.`, "Pass an id from fit's unknown list.");
+}
+
+function cmdFit(argv) {
+  const args = parseArgs(argv, { values: ["run", "id", "best"] });
+  const dir = runDir(args.run);
+  const scan = needScan(dir);
+  const root = scan.root;
+  if (Boolean(args.id) !== Boolean(args.best)) fail(EXIT.USAGE, "id-and-best", "Pass --id and --best together.", "--id <held row> --best <version> makes that version a pick.");
+  if (args.id) return fitOne(dir, scan, args.id, args.best);
+  const rows = [];
+  const unknown = [];
+  for (const lock of scan.lockfiles || []) {
+    const adapter = adapterOf(lock.adapter);
+    const { rt, yours, fitOf } = runtimeWords(lock);
+    const stillHeld = [];
+    for (const h of lock.held || []) {
+      const m = RUNTIME_HOLD.exec(h.reason || "");
+      if (!m) {
+        stillHeld.push(h);
+        continue;
+      }
+      const answer = adapter && adapter.runtimeFit && h.current ? adapter.runtimeFit(lock, root, h) : null;
+      const needs = (answer && answer.needs) || m[2];
+      const best = answer && answer.best && compareVersions(lock.ecosystem, answer.best, h.current) === 1 ? answer.best : null;
+      rows.push({ id: h.id, package: h.package, current: h.current, best, needs, source: answer ? "registry" : null });
+      if (!answer) unknown.push(h.id);
+      if (best) {
+        // A held package with a version that fits is an ordinary pick, labeled by the same rules.
+        lock.rows = [...(lock.rows || []), heldToRow(root, lock, h, best, fitOf(needs, h.latest))];
+        continue;
+      }
+      stillHeld.push({ ...h, reason: `needs ${rt.name} ${needs}${yours ? ` (${yours})` : ""}`, raise: rt.raise(lock) });
+    }
+    lock.held = stillHeld;
+    for (const row of lock.rows || []) {
+      if (!Array.isArray(row.newerNotFitting) || !row.newerNotFitting.length || row.fit) continue;
+      const latest = maxVersion(lock.ecosystem, row.newerNotFitting);
+      const answer = adapter && adapter.runtimeFit ? adapter.runtimeFit(lock, root, { ...row, latest }) : null;
+      // The scan already cut the target to the newest that fits: it stays, and learns what the latest needs.
+      rows.push({ id: row.id, package: row.package, current: row.current, best: row.target, needs: (answer && answer.needs) || null, source: answer ? "registry" : "scan" });
+      row.fit = fitOf((answer && answer.needs) || null, latest);
+    }
+  }
+  writeRun(dir, "scan.json", scan);
+  writeRun(dir, "fit.json", { rows, unknown });
+  out({ ok: true, rows, unknown });
+}
+
+/* ======================================================================
+ * 10. Notes
  * ==================================================================== */
 
 // Release-note slices for the assess step. The repo comes from the row (npm's
@@ -4022,7 +4745,7 @@ async function cmdNotes(argv) {
 }
 
 /* ======================================================================
- * 8. Hand-off
+ * 11. Hand-off
  * ==================================================================== */
 
 // The UPGRADE-<date>.md brief, written only for the rows the person ticks on
@@ -4058,7 +4781,8 @@ export function upgradeBrief(parts) {
 
   lines.push("## Why it was held back", "");
   for (const p of parts) {
-    const reasons = p.label && p.label.reasons && p.label.reasons.length ? ` (${p.label.reasons.join(", ")})` : "";
+    const shown = p.label && (p.label.reasonsPlain && p.label.reasonsPlain.length ? p.label.reasonsPlain : p.label.reasons);
+    const reasons = shown && shown.length ? ` (${shown.join(", ")})` : "";
     lines.push(`- **${p.row.package}**: ${LABEL_TEXT[p.label && p.label.label] || (p.label && p.label.label) || "not labeled"}${reasons}`);
   }
   lines.push("");
@@ -4159,6 +4883,172 @@ function cmdHandoff(argv) {
 }
 
 /* ======================================================================
+ * 12. Fixes and tools
+ * ==================================================================== */
+
+// A fix is one exact text replacement in one project file the person approved
+// on its own card: a pinned version in a test, an expected value, a config
+// line an update broke. It never touches a file the batch owns (its lockfile
+// and manifests move only through apply), and the file is backed up into the
+// batch's backup before the first edit, so restore puts it back with the rest.
+
+/** Folders a fix never edits: anywhere in the path (node_modules, .git) or at the top (specs). */
+const FIX_NEVER_ANYWHERE = new Set(["node_modules", ".git"]);
+const FIX_NEVER_TOP = new Set(["specs", "specs--completed"]);
+/** Disks that ignore letter case by default, where a path is compared case-folded. */
+const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
+
+/** How many times needle appears in text, overlapping ones counted. */
+function occurrences(text, needle) {
+  let count = 0;
+  for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + 1)) count++;
+  return count;
+}
+
+/**
+ * Replace the one place `from` appears in the project file `rel` with `to`.
+ * store is the batch's backup folder (backups/<batch>/, holding backup.json).
+ * Refuses, as { ok: false, code, reason }, a path that is absolute or leaves
+ * the root, a lockfile or manifest of the batch (the files backup.json listed
+ * before any fix), a path under node_modules, .git, specs or specs--completed,
+ * a missing, binary or over 1 MB file, and `from` found zero times or more
+ * than once. A CRLF file matches and writes a bare-LF `from` and `to` with
+ * CRLF. Before the first edit of a file its as-found bytes go to
+ * <store>/files/<rel> and { path, existed: true } joins backup.json's files
+ * (and its fixed list); a later fix of the same file keeps that copy.
+ * Returns { ok: true, file, replaced: 1, backedUp }.
+ */
+export function applyFix(root, store, rel, from, to) {
+  const refuse = (code, reason) => ({ ok: false, code, reason });
+  if (typeof rel !== "string" || !rel.trim()) return refuse("no-file", "no file was named");
+  if (typeof from !== "string" || !from) return refuse("no-from", "the text to replace is empty");
+  if (typeof to !== "string") return refuse("no-to", "the new text is missing");
+  if (path.isAbsolute(rel) || path.win32.isAbsolute(rel) || /^[\\/]/.test(rel)) return refuse("absolute", `${rel} is not a path inside the project`);
+  const abs = path.resolve(root, rel);
+  const inside = path.relative(path.resolve(root), abs);
+  if (!inside || inside.startsWith("..") || path.isAbsolute(inside)) return refuse("outside", `${rel} is outside the project`);
+  const backupFile = path.join(store, "backup.json");
+  const backup = readJsonFile(backupFile);
+  if (!backup || !Array.isArray(backup.files)) return refuse("no-backup", "the group has no backup");
+  const fixed = Array.isArray(backup.fixed) ? backup.fixed : [];
+  const owned = backup.files.map((f) => f.path).filter((p) => !fixed.includes(p));
+  // Windows and macOS disks ignore letter case: PACKAGE.JSON is package.json there.
+  const fold = (f) => (FOLD_CASE ? f.toLowerCase() : f);
+  const guard = (f) => {
+    const parts = fold(f).split("/");
+    if (parts.some((p) => FIX_NEVER_ANYWHERE.has(p)) || FIX_NEVER_TOP.has(parts[0])) return refuse("protected-folder", `${f} is in a folder this skill never edits (${parts.find((p) => FIX_NEVER_ANYWHERE.has(p)) || parts[0]})`);
+    if (owned.some((o) => fold(o) === fold(f))) return refuse("batch-file", `${f} is a version list or package list of this group; only the update itself changes it`);
+    return null;
+  };
+  let file = posix(inside);
+  const typed = guard(file);
+  if (typed) return typed;
+  let original;
+  try {
+    // A link that leads out of the project is refused like a path that does; one that leads to a
+    // guarded file inside it is refused like that file, and the file is named as it is on disk.
+    const real = fs.realpathSync.native(abs);
+    const realRoot = fs.realpathSync.native(root);
+    const back = path.relative(realRoot, real);
+    if (!back || back.startsWith("..") || path.isAbsolute(back)) return refuse("outside", `${file} leads outside the project`);
+    file = posix(back);
+    const onDisk = guard(file);
+    if (onDisk) return onDisk;
+    if (!fs.statSync(real).isFile()) return refuse("not-a-file", `${file} is not a file`);
+    if (fs.statSync(real).size > PIN_FILE_CAP) return refuse("too-big", `${file} is over 1 MB`);
+    original = fs.readFileSync(real);
+  } catch {
+    return refuse("not-found", `${file} is not there`);
+  }
+  const text = original.toString("utf8");
+  if (original.subarray(0, BINARY_SNIFF).includes(0) || !Buffer.from(text, "utf8").equals(original)) return refuse("binary", `${file} is not a text file`);
+  // A CRLF file: a bare LF in the given text stands for the file's own CRLF.
+  const crlf = text.includes("\r\n");
+  const toFile = (s) => (crlf ? s.replace(/\r?\n/g, "\r\n") : s);
+  const find = toFile(from);
+  const put = toFile(to);
+  if (find === put) return refuse("same", "the new text is the same as the old");
+  const count = occurrences(text, find);
+  if (count === 0) return refuse("not-found-text", `that text is not in ${file}`);
+  if (count > 1) return refuse("many", `that text appears ${count} times in ${file}`);
+  const index = text.indexOf(find);
+  const expected = Buffer.from(text.slice(0, index) + put + text.slice(index + find.length), "utf8");
+  let backedUp = false;
+  if (!backup.files.some((f) => fold(f.path) === fold(file))) {
+    const dest = path.join(store, "files", file);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(root, file), dest); // a copy, not a rewrite: it keeps the file mode the put-back must return
+    backup.files.push({ path: file, existed: true });
+    backup.fixed = [...fixed, file];
+    fs.writeFileSync(backupFile, JSON.stringify(backup, null, 2) + "\n");
+    backedUp = true;
+  }
+  try {
+    fs.writeFileSync(abs, expected);
+    if (!fs.readFileSync(abs).equals(expected)) throw new Error("the file changed by more than the one replacement");
+  } catch (err) {
+    try {
+      fs.writeFileSync(abs, original);
+    } catch {}
+    return refuse("write-failed", `${file} could not be written (${err.code || err.message})`);
+  }
+  return { ok: true, file, replaced: 1, backedUp };
+}
+
+/** The plain next step for each applyFix refusal. */
+const FIX_NEXT = {
+  many: "Give more of the line, so the text matches one place.",
+  "not-found-text": "Copy the text exactly as the file has it, spaces included.",
+  "batch-file": "Leave version lists and package lists to the update; fix another file, or put the group back.",
+  "protected-folder": "Fix a file of the project itself.",
+  absolute: "Give the path relative to the project folder.",
+  outside: "Give a path inside the project folder.",
+  binary: "Only text files can be fixed this way.",
+  "too-big": "Files over 1 MB are never fixed this way.",
+  "not-found": "Check the path against the failing check's output.",
+  same: "Give the changed text in --to.",
+  "no-backup": "Run backup and apply for the group first.",
+};
+
+function cmdFix(argv) {
+  const args = parseArgs(argv, { values: ["run", "batch", "file", "from", "to"] });
+  const dir = runDir(args.run);
+  const { batch, root } = needBatch(dir, args.batch);
+  if (!args.file) fail(EXIT.USAGE, "missing-file", "--file is required.", "Pass the project file to fix, relative to the project folder.");
+  if (args.from === undefined || args.to === undefined) fail(EXIT.USAGE, "missing-text", "--from and --to are required.", "Pass the exact text to replace and the text to put in its place.");
+  const store = path.join(dir, "backups", batch.id);
+  const backup = readJsonFile(path.join(store, "backup.json"));
+  if (!backup) fail(EXIT.REFUSED, "no-backup", `Group ${batch.id} has no backup.`, `Run backup --batch ${batch.id} first.`);
+  if (!backup.applied) fail(EXIT.REFUSED, "not-applied", `Group ${batch.id} has not been applied.`, `Run apply --batch ${batch.id} first; a fix belongs to an update that is in place.`);
+  const result = applyFix(root, store, args.file, args.from, args.to);
+  if (!result.ok) {
+    const reason = result.reason.charAt(0).toUpperCase() + result.reason.slice(1);
+    fail(EXIT.REFUSED, `fix-${result.code}`, `${reason}.`, FIX_NEXT[result.code] || "Nothing was changed.", { reason: result.code });
+  }
+  const saved = readRun(dir, "fixes.json");
+  const fixes = saved && Array.isArray(saved.fixes) ? saved.fixes : [];
+  fixes.push({ batch: batch.id, file: result.file, from: args.from, to: args.to, at: now().toISOString() });
+  writeRun(dir, "fixes.json", { fixes });
+  out({ ok: true, batch: batch.id, file: result.file, replaced: 1, backedUp: result.backedUp });
+}
+
+/** The scanners install-tool may name, each a plugin the scan lists in missingTools with its install line. */
+const INSTALLABLE_TOOLS = new Set(["cargo-outdated", "cargo-audit", "pip-audit", "govulncheck"]);
+
+function cmdInstallTool(argv) {
+  const args = parseArgs(argv, { values: ["run", "tool"] });
+  const dir = runDir(args.run);
+  if (!args.tool) fail(EXIT.USAGE, "missing-tool", "--tool is required.", "Pass a tool name from the scan's missingTools.");
+  const scan = needScan(dir);
+  const listed = (scan.missingTools || []).find((t) => t && typeof t === "object" && t.tool === args.tool && t.install);
+  if (!INSTALLABLE_TOOLS.has(args.tool) || !listed) {
+    const offered = (scan.missingTools || []).filter((t) => t && typeof t === "object" && INSTALLABLE_TOOLS.has(t.tool) && t.install).map((t) => t.tool);
+    fail(EXIT.REFUSED, "tool-not-listed", `${args.tool} was not in the scan's missing list.`, offered.length ? `One of: ${offered.join(", ")}.` : "The scan found no missing tool to install.", { offered });
+  }
+  out({ ok: true, tool: listed.tool, command: listed.install, step: listed.step });
+}
+
+/* ======================================================================
  * Dispatch
  * ==================================================================== */
 
@@ -4167,10 +5057,17 @@ const COMMANDS = {
   scan: cmdScan,
   notes: cmdNotes,
   label: cmdLabel,
+  pins: cmdPins,
+  fit: cmdFit,
+  checks: cmdChecks,
+  baseline: cmdBaseline,
+  compare: cmdCompare,
   batches: cmdBatches,
   backup: cmdBackup,
   apply: cmdApply,
+  fix: cmdFix,
   restore: cmdRestore,
+  "install-tool": cmdInstallTool,
   handoff: cmdHandoff,
   cleanup: cmdCleanup,
 };

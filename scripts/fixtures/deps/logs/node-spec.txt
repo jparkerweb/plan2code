@@ -1,0 +1,10 @@
+✔ adds numbers (1.2ms)
+✖ parses dates (3.4ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ failing tests:
+
+test at scripts/a.mjs:3:1
+✖ parses dates (3.4ms)

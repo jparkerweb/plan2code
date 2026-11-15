@@ -1,0 +1,9 @@
+TAP version 13
+ok 1 - adds numbers
+not ok 2 - parses dates
+  ---
+  message: 'expected 2 to equal 3'
+  ...
+not ok 3 - writes the cache # TODO later
+ok 4 - reads the cache # SKIP no disk
+1..4

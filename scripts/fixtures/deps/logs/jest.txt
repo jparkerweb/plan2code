@@ -1,0 +1,5 @@
+PASS src/a.test.js
+FAIL src/b.test.js
+  math
+    ✓ adds (2 ms)
+    ✕ divides by zero (5 ms)

@@ -1,0 +1,2 @@
+ ✓ src/a.test.ts (1 test) 2ms
+ FAIL  src/b.test.ts > math > divides by zero

@@ -1,0 +1,2 @@
+  Passed MyApp.Tests.Adds [1 ms]
+  Failed MyApp.Tests.Divides [3 ms]
