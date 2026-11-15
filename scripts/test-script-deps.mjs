@@ -7,7 +7,7 @@
 // folder used as the whole PATH, replaying recorded tool output, so the suite
 // passes on a machine with none of the tools installed.
 
-import { test, after } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -2215,12 +2215,14 @@ const HTTP_ROUTES = {
   "/hang": { hang: true },
 };
 
+let httpChild = null;
+
 async function httpServer(routes) {
   const dir = tmp("deps-http");
   fs.writeFileSync(path.join(dir, "server.mjs"), HTTP_SERVER);
   fs.writeFileSync(path.join(dir, "routes.json"), JSON.stringify(routes));
   const child = spawn(process.execPath, [path.join(dir, "server.mjs"), path.join(dir, "routes.json")], { stdio: ["ignore", "pipe", "inherit"] });
-  after(() => child.kill());
+  httpChild = child;
   const port = await new Promise((resolve, reject) => {
     child.stdout.once("data", (d) => resolve(Number(String(d).trim())));
     child.once("exit", (code) => reject(new Error(`the test HTTP server exited (${code})`)));
@@ -2228,7 +2230,15 @@ async function httpServer(routes) {
   return `http://127.0.0.1:${port}`;
 }
 
-const HTTP = await httpServer(HTTP_ROUTES);
+// Started in a root before hook, never with a top-level await here: tests are
+// already registered above, so node:test starts running them during such an
+// await, sees the root suite finish, and runs its after hooks (this server's
+// kill and fixtureCleanup) before the notes tests below ever run.
+let HTTP = null;
+before(async () => {
+  HTTP = await httpServer(HTTP_ROUTES);
+});
+after(() => httpChild?.kill());
 
 const noteRow = (lockfile, pkg, current, target, extra = {}) => ({ id: `${lockfile}#${pkg}`, package: pkg, current, target, jump: deps.jumpOf("npm", current, target), inRange: true, range: null, pinned: false, security: null, repo: null, pair: null, ...extra });
 
