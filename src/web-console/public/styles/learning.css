@@ -193,14 +193,19 @@
 .lessons-first-about { margin: 12px 0 0; }
 .lessons-later { margin-top: 8px; }
 
-/* Review from the dashboard: the same card in a dialog over the menu. */
-.modal.lessons-dialog { width: min(720px, calc(100vw - 32px)); }
-.lessons-dialog .card { margin: 0; box-shadow: none; border: 0; padding: 0; }
+/* Review from the dashboard: the same card in a dialog over the menu. Sized
+   like the Notebook dialog; max-width: none lifts the base .modal 440px cap. */
+.modal.lessons-dialog { width: min(1200px, 90vw); max-width: none; }
+.lessons-dialog .card { margin: 0; box-shadow: none; border: 0; padding: 0; max-width: none; }
 
 /* The lessons dialog: closable (the corner ×, Not now, Escape), and locked
    while Save lessons goes. */
 .lessons-dialog .modal-actions { align-items: center; justify-content: flex-end; }
 .lessons-dialog .modal-actions .btn { margin: 0; }
+.lessons-suggestions { flex: 1 1 100%; padding: 10px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: calc(var(--radius) * 0.5); }
+.lessons-suggestions h3 { margin: 0 0 6px; font-size: 13.5px; }
+.lessons-suggestions .md { max-height: 40vh; overflow: auto; font-size: 13.5px; }
+.lessons-dialog .modal-actions { flex-wrap: wrap; }
 .lessons-dialog .modal-actions .btn .spinner { margin-right: 8px; }
 .modal-x {
   position: absolute;

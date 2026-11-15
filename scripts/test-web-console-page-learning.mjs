@@ -517,6 +517,28 @@ test("lessons card: Not now and the corner close leave every lesson waiting and 
   }
 });
 
+test("lessons card: the dialog has Ask for suggestions, which sends one request and shows the reply in a Suggestions box", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  postCard(s);
+  await dlg.locator(".lessons-row").waitFor();
+  const ask = dlg.getByRole("button", { name: "Ask for suggestions" });
+  assert.equal(await ask.isDisabled(), false);
+  assert.equal(await dlg.locator(".lessons-suggestions").count(), 0, "nothing asked yet");
+  await ask.click();
+  const got = s.wait(10);
+  assert.equal(got.code, 0);
+  const sentAction = got.actions.find((a) => a.suggest === true);
+  assert.ok(sentAction, JSON.stringify(got.actions));
+  assert.equal(sentAction.i, "lessons");
+  assert.match(got.reply, /^Suggestions wanted on Lessons to keep:/m);
+  await dlg.locator(".lessons-suggestions", { hasText: "Asking Plan2Code" }).waitFor();
+  assert.equal(await dlg.getByRole("button", { name: "Ask for suggestions" }).isDisabled(), true, "one request waits at a time");
+  assert.equal(await dlg.getByRole("button", { name: "Keep" }).count(), 1, "the lessons stay open to choose");
+  s.post({ items: [{ id: "lessons", thread: [{ who: "agent", text: "1. Keep it: a real trap." }] }], agent: { status: "waiting" } });
+  await dlg.locator(".lessons-suggestions", { hasText: "Keep it: a real trap." }).waitFor();
+});
+
 test("lessons card: closing with choices made asks first, and Keep editing goes back", async (t) => {
   const { s, dlg } = await reviewOpen(t);
   s.wait(10);

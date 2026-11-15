@@ -392,7 +392,7 @@ const chipOf = (s) => s.page.locator("#aside").getByRole("button", { name: "Ask 
 
 // What a person sees break: the chip on a card where there is nothing to pick,
 // on a settled record, or missing where they are unsure what to pick.
-test("the Ask for suggestions chip shows on open choice, multi and confirm cards only", async (t) => {
+test("the Ask for suggestions chip shows on open choice, multi, confirm and lessons cards only", async (t) => {
   const s = await openSession(await suite.browser(), {
     t,
     workflow: "plan",
@@ -401,13 +401,14 @@ test("the Ask for suggestions chip shows on open choice, multi and confirm cards
         { id: "c1", kind: "choice", title: "Export format", body: "Which format?", options: [opt("A", "CSV"), opt("B", "JSON")] },
         { id: "m1", kind: "multi", title: "Columns", body: "Which?", options: [opt("1", "Date"), opt("2", "User")] },
         { id: "y1", kind: "confirm", title: "Keep going", body: "Carry on?" },
+        { id: "l1", kind: "lessons", title: "Lessons to keep", body: "Choose for each one.", required: false, rows: [{ id: "r1", type: "lesson", text: "A lesson.", why: "", origin: "You said this.", note: "", flags: [], refused: null, area: "General", kind: "convention", about: ["a.js"], areas: ["General"], choices: ["Keep", "Reword", "Drop"] }] },
         { id: "t1", kind: "text", title: "What to call it", body: "A name.", required: false },
         { id: "d1", kind: "choice", title: "Old pick", body: "Which?", options: [opt("A", "CSV"), opt("B", "JSON")], status: "answered", answer: { k: "B" } },
       ],
       agent: { status: "waiting" },
     },
   });
-  for (const [id, title, shown] of [["c1", "Export format", 1], ["m1", "Columns", 1], ["y1", "Keep going", 1], ["t1", "What to call it", 0], ["d1", "Old pick", 0]]) {
+  for (const [id, title, shown] of [["c1", "Export format", 1], ["m1", "Columns", 1], ["y1", "Keep going", 1], ["l1", "Lessons to keep", 1], ["t1", "What to call it", 0], ["d1", "Old pick", 0]]) {
     await goTo(s, id, title);
     assert.equal(await chipOf(s).count(), shown, `chip on ${id}`);
     if (shown) assert.equal(await textOf(chipOf(s)), "Ask for suggestions");

@@ -14,6 +14,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: a swaying question mark beside Ask for suggestions, and a chevron before Send.
 - **Snake**: lives, bonus lives at score marks, and three bosses (Grumpy Golem, Comet Queen, Thunder Toad).
 - **Bounce Road**: four new music tracks and extras.
+- **web console**: Ask for suggestions is on the Lessons to keep card, in the Notes panel and in the Lessons modal, where the reply shows in a Suggestions box.
 
 ### 🔧 Changed
 
@@ -28,6 +29,7 @@ All notable changes to Plan2Code will be documented in this file.
 ### 🐛 Fixed
 
 - **Quick Task**: a finish that offers the review again after a review already ran in that launch is refused.
+- **web console**: the Lessons modal is as wide as the Notebook (it was stuck at the 440px default).
 
 ## v3.0.6
 

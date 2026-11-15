@@ -10,9 +10,10 @@
 // and is disabled whenever a card would be.
 
 import { page, redraw, hooks, stage } from "../state.js";
-import { el, mdInto, lightDismiss } from "../render.js";
+import { el, md, mdInto, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
-import { sendState } from "../send-state.js";
+import { sendState, suggestState } from "../send-state.js";
+import { threadWho, threadText } from "../answers.js";
 import { loopDriving, isOpen, stagedCount, learningBusyNow } from "../selectors.js";
 
 const TOP_STATES = new Set(["not-set-up", "off", "paused"]);
@@ -345,6 +346,17 @@ export function renderLessonsDialog(on) {
     ask.appendChild(row);
     actions.appendChild(ask);
   } else {
+    const suggest = suggestionsBox(item);
+    if (suggest) actions.appendChild(suggest);
+    // The Notes panel is not on this dialog, so its Ask for suggestions chip
+    // is here: the same request, answered in the Suggestions box above.
+    const st = suggestState(item);
+    const ask = el("button", "btn ghost", "Ask for suggestions");
+    ask.type = "button";
+    ask.id = "lessons-suggest";
+    ask.disabled = saving || st.disabled;
+    ask.title = st.why || "";
+    ask.addEventListener("click", () => hooks.askSuggestions(item.id));
     const later = el("button", "btn ghost", "Not now");
     later.type = "button";
     later.id = "lessons-later";
@@ -356,13 +368,36 @@ export function renderLessonsDialog(on) {
     if (saving) go.appendChild(spinnerLabel("Saving…"));
     else go.textContent = "Save lessons";
     go.addEventListener("click", () => saveLessons(item));
-    actions.append(later, go);
+    actions.append(ask, later, go);
     if (stagedCount() > 1) actions.appendChild(el("p", "help", "Anything else ready to send goes with it."));
   }
   dlg.replaceChildren(card, actions, x);
   refreshLessonsSend();
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = scroll;
+}
+
+/**
+ * The Suggestions box above the dialog's buttons: "Asking Plan2Code…" while a
+ * request waits, then the agent's latest reply in the card's thread after the
+ * last request. Null when nothing was asked.
+ */
+function suggestionsBox(item) {
+  const thread = Array.isArray(item.thread) ? item.thread : [];
+  let asked = -1;
+  thread.forEach((m, i) => {
+    if (m && m.suggest === true && threadWho(m) === "user") asked = i;
+  });
+  const waiting = item.sentNote && item.sentNote.suggest === true && !thread.slice(asked + 1).some((m) => threadWho(m) === "agent");
+  const reply = asked >= 0 ? thread.slice(asked + 1).filter((m) => threadWho(m) === "agent").pop() : null;
+  if (!waiting && !reply) return null;
+  const box = el("div", "lessons-suggestions");
+  box.id = "lessons-suggestions";
+  box.setAttribute("role", "status");
+  box.appendChild(el("h3", null, "Suggestions"));
+  if (reply && !waiting) box.appendChild(md(threadText(reply), "md"));
+  else box.appendChild(el("p", "help", "Asking Plan2Code. Its answer shows here."));
+  return box;
 }
 
 /**

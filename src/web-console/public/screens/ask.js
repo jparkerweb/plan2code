@@ -834,7 +834,7 @@ export function renderAside() {
 
 // The cards with options to pick from, where asking what Plan2Code would pick
 // makes sense.
-const SUGGEST_KINDS = ["choice", "multi", "confirm"];
+const SUGGEST_KINDS = ["choice", "multi", "confirm", "lessons"];
 
 // Ask for suggestions: its own send, beside the main one (core.js). Focus
 // stays in the panel: on the chip when it is live again, else the note box.
