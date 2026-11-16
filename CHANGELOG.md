@@ -6,30 +6,34 @@ All notable changes to Plan2Code will be documented in this file.
 
 ### ✨ Added
 
-- **Learning**: a dashboard row (and a banner) that keeps lessons about the codebase, approved by you. Switch it on or off per project, and the row shows "Switching on…" or "Switching off…" the moment you press the button. Lessons live under `.plan2code/lessons/`, and the failure log can be moved into them.
-- **Update dependencies**: a new `/plan2code-deps` skill that updates a project's dependencies using each package manager's own outdated and audit output, and writes a held-back upgrade up as an `UPGRADE-<date>.md` brief. Quick Task or Plan can pick that brief up, and the dashboard shows it as "Upgrade ready" and "Upgrade done".
-- **UI Prototype**: a new skill, and Quick Task confirms a saved prototype's brief before planning. It can also start from a Notebook tab.
+- **Learning**: a dashboard row (and a banner) that keeps lessons about the codebase, approved by you. Switch it on or off per project, and the row shows "Switching on…" or "Switching off…" the moment you press the button. Lessons live under `.plan2code/lessons/`, and the failure log can be moved into them. The Lessons review shows that it is working while it saves, and always offers a way out.
+- **Update dependencies**: a new `/plan2code-deps` skill that updates a project's dependencies using each package manager's own outdated and audit output, labels each update Safe, Check first or Warning in plain words, checks the untouched tree first so a group is blamed only for what it broke, honors versions the project pins, and writes a held-back upgrade up as an `UPGRADE-<date>.md` brief. It fixes a small break in your code or installs a missing scanner only after you approve that exact change, and its report names the files it fixed. Quick Task or Plan can pick that brief up, and the dashboard shows it as "Upgrade ready" and "Upgrade done".
+- **UI Prototype**: a new skill, and Quick Task confirms a saved prototype's brief before planning. It can also start from a Notebook tab, and Pathfinder, Plan, Revise plan and Quick Task can offer one when a decision is about how a screen looks or flows.
+- **web console**: a **Changes** tab at sign-off in Implement, Implement + Review and Quick Task. The run snapshots the working tree when it starts and draws the diff of everything it changed at the end, without touching the index or branches.
 - **web console**: a **Prototypes** tab lists a spec's saved prototypes. An `.md` is read in place, and an `.html` opens in the default browser.
 - **web console**: the Activities picker is a two-column Score ledger, ordered by recently played or A to Z.
 - **web console**: a swaying question mark beside Ask for suggestions, and a chevron before Send.
+- **launcher**: `plan2code` and the desktop shortcut offer the project folders you opened lately (the last five), and the desktop app asks for a folder the same way, with Choose a folder first.
 - **Snake**: lives, bonus lives at score marks, and three bosses (Grumpy Golem, Comet Queen, Thunder Toad).
 - **Bounce Road**: four new music tracks and extras.
 - **web console**: Ask for suggestions is on the Lessons to keep card, in the Notes panel and in the Lessons modal, where the reply shows in a Suggestions box.
 
 ### 🔧 Changed
 
-- **tooling**: tool folders (Dead Code's keep list and reports, Learning's settings) now live under `.plan2code/`, which is gitignored.
+- **tooling**: tool folders (Dead Code's keep list and reports, the metrics data, Learning's settings) now live under `.plan2code/`; the generated folders in it are gitignored, and the Learning settings and lessons are kept with the repository.
 - **web console**: a new Notebook tab opens with its name as a `## heading`, and the caret waits under it.
 - **web console**: the git board's branch title links to the branch on its host.
 - **web console**: the dashboard keeps each group at one card width with no card left alone on a row, and the approval tip sits centered under the cards.
 - **web console**: the Diagnose finish shows the saved diagnosis in full, with Copy report for a ticket elsewhere.
 - **Quick Task**: offers to archive a prototype-only spec folder once it has built from it.
-- **desktop app**: the window no longer takes file drops, and the Loop driver was updated.
+- **desktop app**: the window no longer takes file drops, the Loop driver was updated, and when the reconnect countdown ends the app tries reconnecting once on its own.
+- **docs**: a Test map section in AGENTS.md, and Learning turned on for this repository.
 
 ### 🐛 Fixed
 
 - **Quick Task**: a finish that offers the review again after a review already ran in that launch is refused.
 - **web console**: the Lessons modal is as wide as the Notebook (it was stuck at the 440px default).
+- **tooling**: the deps test starts its fixture server in a root before hook, so after hooks can no longer run early (it failed on Ubuntu and macOS CI).
 
 ## v3.0.6
 
