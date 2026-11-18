@@ -36,10 +36,10 @@ export const STRENGTHS = Object.freeze(["balanced", "thrifty", "best", "session"
 export const DEFAULT_STRENGTH = "balanced";
 // The line under the dialog's strength radios for the picked one.
 export const STRENGTH_HELP = Object.freeze({
-  balanced: "Each helper gets the strength its job needs: light for lookups, stronger for reviews and design work.",
+  balanced: "Each subagent gets the strength its job needs: light for lookups, stronger for reviews and design work.",
   thrifty: "One step lighter everywhere to save cost; reviews stay at standard or above.",
   best: "The strongest model and high effort for everything except lookups.",
-  session: "Helpers run on whatever your session uses; nothing is set for them.",
+  session: "Subagents run on whatever your session uses; nothing is set for them.",
 });
 // What a reported helper may say it actually ran with.
 export const HELPER_STRENGTHS = Object.freeze(["light", "standard", "strongest", "inherit"]);

@@ -43,7 +43,7 @@ const fieldsetOf = (node) => node.closest("fieldset");
 // and Back to default are prefs-dialog.js's.
 export function wireLooks() {
   $("looks-modal").addEventListener("close", () => {
-    if (isDashboard() && !needsRoleNudge(looks) && $("main").querySelector(".dash-nudge")) redraw();
+    if (isDashboard() && !needsRoleNudge(looks) && $("main").querySelector(".dash-extras")) redraw();
   });
   for (const [value, label] of [[ROLE_NOT_SET, ROLE_NOT_SET_LABEL], ...ROLES.map((r) => [r.id, r.label])]) {
     const option = el("option", null, label);

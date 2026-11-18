@@ -110,7 +110,7 @@ function buildRoot(mountAgents) {
   const agents = el("div", "setup-agents");
   box.appendChild(agents);
   const actions = el("div", "setup-actions");
-  const again = el("button", "btn small", "Check again");
+  const again = el("button", "btn sm", "Check again");
   again.type = "button";
   again.addEventListener("click", () => view?.load());
   actions.appendChild(again);
@@ -149,7 +149,7 @@ function startingPane(started) {
   pane.appendChild(noPage);
   // A wait that died unmoved should not park the page on "Starting" forever:
   // once the grace hint is up, the way back to the pick list shows beside it.
-  const back = el("button", "btn small setup-back", "Show the agent list again");
+  const back = el("button", "btn sm setup-back", "Show the agent list again");
   back.type = "button";
   back.hidden = !graceShown;
   back.addEventListener("click", () => {

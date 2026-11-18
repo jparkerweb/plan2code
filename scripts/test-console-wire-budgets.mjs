@@ -46,7 +46,7 @@ export const BUDGETS = {
     "review.md": 1140, // raised by the lessons card line's bytes only
     "revise-plan.md": 1422, // raised by the UI prototype line's bytes only
     "test.md": 5540, // raised by the lessons card line's bytes only
-    "ui-prototype.md": 4000,
+    "ui-prototype.md": 4600,
     "xray.md": 2500,
   },
   // One printed line each, for a session with one choice card.

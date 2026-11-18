@@ -110,7 +110,7 @@
     <header class="topbar">
       <div class="topbar-row">
         <div class="ident">
-          <span class="badge" id="badge">Pathfinder</span>
+          <span class="pill is-accent is-caps badge" id="badge">Pathfinder</span>
           <h1 id="title">Plan2Code Console</h1>
           <!-- The session meter: how much this console session has done. The
                ring fills with the points (full at 15); the color is the
@@ -138,10 +138,12 @@
                   stroke-dashoffset="100"
                 />
               </svg>
-              <span id="meter-words">Session: fresh</span>
+              <span id="meter-words">Conversation: fresh</span>
             </button>
             <div class="meter-pop" id="meter-pop" role="dialog" aria-label="Session meter" hidden>
               <p class="meter-tip" id="meter-tip"></p>
+              <!-- Shown once, the first time the pill leaves green; looks.meterTipSeen. -->
+              <p class="meter-once" id="meter-once" hidden></p>
               <ul class="meter-list" id="meter-list" aria-label="What the points are made of" hidden></ul>
               <div class="meter-fresh" id="meter-fresh" hidden></div>
               <button type="button" class="linky" id="meter-help">What is this?</button>
@@ -160,62 +162,65 @@
             <div class="progress-fill" id="progress-fill"></div>
           </div>
         </div>
-        <button
-          type="button"
-          class="icon-btn"
-          id="btn-looks"
-          title="Colors, theme and sound"
-          aria-label="Colors, theme and sound"
-        >
-          <!-- A gear: ring, hub and eight teeth. -->
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <path class="gr-teeth" d="M12 8h2.6M8 12v2.6M4 8H1.4M8 4V1.4M10.83 10.83l1.84 1.84M5.17 10.83l-1.84 1.84M5.17 5.17L3.33 3.33M10.83 5.17l1.84-1.84" />
-            <circle cx="8" cy="8" r="4.2" class="gr-ring" />
-            <circle cx="8" cy="8" r="1.6" class="gr-hub" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          id="btn-about"
-          title="Help"
-          aria-label="Help"
-        >
-          <!-- Drawn, not a "?" glyph, so it does not depend on a font. -->
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <circle cx="8" cy="8" r="7" class="ab-ring" />
-            <path class="ab-mark" d="M6.1 6.05a1.95 1.95 0 1 1 2.4 1.9v1.25" />
-            <circle cx="8" cy="11.7" r="0.85" class="ab-dot" />
-          </svg>
-        </button>
-        <a
-          class="icon-btn"
-          id="btn-feedback"
-          href="https://github.com/jparkerweb/plan2code/issues/new/choose"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Report a bug or suggest an idea"
-          aria-label="Report a bug or suggest an idea (opens GitHub in a new tab)"
-        >
-          <!-- A megaphone: horn, handle and two sound waves. -->
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <path class="mg-body" d="M1.8 6.2h2.8L10.4 3v10L4.6 9.8H1.8z" />
-            <path class="mg-line" d="M4.6 9.8l.9 3.4h1.6l-.6-2.7M12.4 6.1a2.6 2.6 0 0 1 0 3.8M13.8 4.5a5 5 0 0 1 0 7" />
-          </svg>
-        </a>
-        <!-- Activities: small games for a long wait. Opens a dialog that pauses
-             the moment Plan2Code needs the person; nothing in it reaches the agent. -->
-        <button type="button" class="icon-btn" id="btn-activities" title="Activities" aria-label="Activities">
-          <!-- A die: a rounded square and five pips. -->
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <rect class="dc-body" x="2" y="2" width="12" height="12" rx="2.6" />
-            <circle class="dc-pip" cx="5.4" cy="5.4" r="1" />
-            <circle class="dc-pip" cx="10.6" cy="5.4" r="1" />
-            <circle class="dc-pip" cx="8" cy="8" r="1" />
-            <circle class="dc-pip" cx="5.4" cy="10.6" r="1" />
-            <circle class="dc-pip" cx="10.6" cy="10.6" r="1" />
-          </svg>
-        </button>
+        <!-- The four tools, one group: the margin and gap live here, not on each button. -->
+        <div class="topbar-tools">
+          <button
+            type="button"
+            class="icon-btn"
+            id="btn-looks"
+            title="User Preferences"
+            aria-label="User Preferences"
+          >
+            <!-- A gear: ring, hub and eight teeth. -->
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path class="gr-teeth" d="M12 1v2M12 21v2M1 12h2M21 12h2M18.4 5.6l1.4-1.4M5.6 5.6L4.2 4.2M18.4 18.4l1.4 1.4M5.6 18.4l-1.4 1.4" />
+              <circle cx="12" cy="12" r="6.5" class="gr-ring" />
+              <circle cx="12" cy="12" r="2.5" class="gr-hub" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            id="btn-about"
+            title="Help"
+            aria-label="Help"
+          >
+            <!-- Drawn, not a "?" glyph, so it does not depend on a font. -->
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="10" class="ab-ring" />
+              <path class="ab-mark" d="M9.2 9.2a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1-1.4 2" />
+              <circle cx="12" cy="17.3" r="0.9" class="ab-dot" />
+            </svg>
+          </button>
+          <a
+            class="icon-btn"
+            id="btn-feedback"
+            href="https://github.com/jparkerweb/plan2code/issues/new/choose"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Report a bug or suggest an idea"
+            aria-label="Report a bug or suggest an idea (opens GitHub in a new tab)"
+          >
+            <!-- A megaphone: horn, handle and two sound waves. -->
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path class="mg-body" d="M3 9.5h4l7-4v13l-7-4H3z" />
+              <path class="mg-line" d="M7 14.5l1.2 5h2.4l-.9-3.8M17.5 9.5a4 4 0 0 1 0 5M20 7a7.5 7.5 0 0 1 0 10" />
+            </svg>
+          </a>
+          <!-- Activities: small games for a long wait. Opens a dialog that pauses
+               the moment Plan2Code needs the person; nothing in it reaches the agent. -->
+          <button type="button" class="icon-btn" id="btn-activities" title="Activities" aria-label="Activities">
+            <!-- A die: a rounded square and five pips. -->
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect class="dc-body" x="3" y="3" width="18" height="18" rx="4" />
+              <circle class="dc-pip" cx="8" cy="8" r="1.3" />
+              <circle class="dc-pip" cx="16" cy="8" r="1.3" />
+              <circle class="dc-pip" cx="12" cy="12" r="1.3" />
+              <circle class="dc-pip" cx="8" cy="16" r="1.3" />
+              <circle class="dc-pip" cx="16" cy="16" r="1.3" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="topbar-row second">
         <div class="row-left">
@@ -223,39 +228,41 @@
                filled triangle in the highlight color, pointing the way home. -->
           <button
             type="button"
-            class="btn ghost small home-btn"
+            class="btn ghost sm home-btn"
             id="btn-home"
             title="Back to the dashboard"
             aria-label="Back to the dashboard"
             hidden
           >
-            <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M9.5 1.5v9L2 6z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 4.5v15L5.5 12z" /></svg>
+            <span class="topbar-label">Dashboard</span>
           </button>
-          <button type="button" class="btn ghost small stop-btn" id="btn-stop">Stop session</button>
-          <button type="button" class="btn ghost small brief-btn" id="btn-brief" hidden>
+          <button type="button" class="btn ghost sm stop-btn" id="btn-stop">Stop session</button>
+          <button type="button" class="btn ghost sm brief-btn" id="btn-brief" hidden>
             Write a brief
           </button>
           <!-- Subagents: opted-in skills only. Lit while helpers are on; a click
                opens the Subagents dialog and never toggles them itself. -->
-          <button type="button" class="btn ghost small subagents-btn" id="btn-subagents" aria-pressed="false" hidden>
+          <button type="button" class="btn ghost sm subagents-btn" id="btn-subagents" aria-haspopup="dialog" hidden>
             <!-- An orchestrator and its helpers: one larger node linked to three smaller ones. -->
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path class="sa-link" d="M6.9 6.6L10.9 3.9M7.4 8h3.5M6.9 9.4l4 2.7" />
-              <circle cx="4.6" cy="8" r="2.6" class="sa-hub" />
-              <circle cx="12.4" cy="3" r="1.5" class="sa-node" />
-              <circle cx="12.4" cy="8" r="1.5" class="sa-node" />
-              <circle cx="12.4" cy="13" r="1.5" class="sa-node" />
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path class="sa-link" d="M9.7 10.3l5.9-4.2M10 12h5.8M9.7 13.7l5.9 4.2" />
+              <circle cx="6.5" cy="12" r="3.5" class="sa-hub" />
+              <circle cx="18" cy="4.5" r="2.2" class="sa-node" />
+              <circle cx="18" cy="12" r="2.2" class="sa-node" />
+              <circle cx="18" cy="19.5" r="2.2" class="sa-node" />
             </svg>
+            <span class="topbar-label" id="subagents-label">Subagents: off</span>
           </button>
           <!-- Notebook: every screen, never hidden. The person's private notes for this
                folder; a tab reaches the agent only through a send the person
                starts on the dashboard. -->
-          <button type="button" class="btn ghost small notepad-btn" id="btn-notepad" title="Notebook" aria-label="Notebook">
+          <button type="button" class="btn ghost sm notepad-btn" id="btn-notepad" title="Notebook" aria-label="Notebook">
             <!-- A pocket notebook: a closed cover with a spine line and an elastic band. -->
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <rect class="np-page" x="3.5" y="1.8" width="9" height="12.4" rx="1.3" />
-              <path class="np-line" d="M10.2 1.8v12.4" />
-              <rect class="np-band" x="9.4" y="6.5" width="1.6" height="3" rx=".5" />
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect class="np-page" x="5" y="2.5" width="14" height="19" rx="2" />
+              <path class="np-line" d="M15 2.5v19" />
+              <rect class="np-band" x="13.8" y="9.5" width="2.4" height="4.5" rx="0.8" />
             </svg>
             <span class="notepad-label">Notebook</span>
           </button>
@@ -481,6 +488,33 @@
         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
         <path d="m3.3 7 8.7 5 8.7-5" />
         <path d="M12 21.5V12" />
+      </symbol>
+      <!-- State marks and controls, drawn to the same standard (24 units, 1.8
+           stroke, round caps) and used through <use> (render.js icon()): a
+           check, an empty and a half and a filled circle, a grip and a close. -->
+      <symbol id="ci-check" viewBox="0 0 24 24" fill="none">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </symbol>
+      <symbol id="ci-circle" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="7.5" />
+      </symbol>
+      <symbol id="ci-half" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="7.5" />
+        <path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" />
+      </symbol>
+      <symbol id="ci-dot" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="5.5" fill="currentColor" />
+      </symbol>
+      <symbol id="ci-grip" viewBox="0 0 24 24" fill="none">
+        <circle cx="9" cy="6" r="1.4" fill="currentColor" />
+        <circle cx="15" cy="6" r="1.4" fill="currentColor" />
+        <circle cx="9" cy="12" r="1.4" fill="currentColor" />
+        <circle cx="15" cy="12" r="1.4" fill="currentColor" />
+        <circle cx="9" cy="18" r="1.4" fill="currentColor" />
+        <circle cx="15" cy="18" r="1.4" fill="currentColor" />
+      </symbol>
+      <symbol id="ci-close" viewBox="0 0 24 24" fill="none">
+        <path d="M6 6l12 12M18 6L6 18" />
       </symbol>
     </svg>
 
@@ -1252,7 +1286,7 @@
           This page and <span data-app="Plan2Code in the terminal panel">Plan2Code in your terminal</span> are two programs, and either
           can stop without the other. Nothing you have typed is lost either way.
         </p>
-        <div class="help-callout" role="note">
+        <div class="callout is-stage help-callout" role="note">
           <svg class="help-callout-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 3.5 22 20.5H2Z" />
             <path d="M12 10v5" />
@@ -1589,8 +1623,8 @@
             on.
           </li>
           <li>
-            Images go in the strip under the text. Paste one, drop one on the
-            notebook or press <strong>Add image</strong>. Click a picture to see
+            Pictures go in the strip under the text. Paste one, drop one on the
+            notebook or press <strong>Add picture</strong>. Click a picture to see
             it full screen: the arrow keys step through them and
             <kbd>Esc</kbd> closes it. The <strong>×</strong> on a picture asks
             before it deletes it.
@@ -1602,14 +1636,14 @@
           <li>
             It is private to this machine and never sent to Plan2Code.
             Private: the agent never reads your Notebook. A tab reaches it only
-            when you start a workflow with it.
+            when you start a skill with it.
           </li>
           <li>
             A lit card's confirm pane can offer <strong>Start with a note from
             your Notebook</strong>. On the dashboard, Pathfinder, Plan, Quick
             Task and UI Prototype offer it on Start fresh, Diagnose whenever
             it is lit, and Revise plan on a picked spec with no plan change
-            waiting. A tab you started a workflow with wears a
+            waiting. A tab you started a skill with wears a
             small <strong>sent</strong> badge.
           </li>
           <li>
@@ -1893,8 +1927,8 @@
             while there is something to send.
           </li>
           <li>
-            <strong>Clear</strong> throws away everything you have not sent yet. It
-            asks first.
+            <strong>Clear</strong> throws away everything you have not sent yet, at
+            once, and offers <strong>Undo</strong> for ten seconds.
           </li>
         </ul>
         <h4>Sending</h4>
@@ -2110,17 +2144,18 @@
         </figure>
         <h4>Asking for your role</h4>
         <p>
-          Until you pick a role, a one-line banner at the top asks for it, so the
-          starter templates can be ordered for you.
-          <strong>Set up preferences</strong> opens User Preferences;
-          <strong>Not now</strong> puts the banner away. Either way it does not
-          come back, and you can change your role any time from the swatch
-          button.
+          Your first dashboard offers only the cards. After you have started a
+          skill, one quiet line at the top mentions two optional extras:
+          <strong>set your role</strong>, so the starter templates can be
+          ordered for you, and <strong>switch on Learning</strong>. Setting a
+          role opens User Preferences; <strong>Not now</strong> puts the line
+          away. Either way it does not come back, and you can change your role
+          any time from the gear button.
         </p>
         <h4>When an update is out</h4>
         <p id="help-update-text">
           When a newer Plan2Code release is out, the dashboard shows
-          <strong>UPDATE AVAILABLE</strong> at the top. Click it for the command
+          <strong>Update available</strong> at the top. Click it for the command
           to run in your terminal, <code>plan2code update</code>; × hides it until the next
           <code>/plan2code</code>. The version at the bottom of Help links to
           the Releases page.
@@ -2140,7 +2175,7 @@
           why.
         </p>
         <p>
-          <strong>Hide unavailable workflows</strong>, under the picker, hides
+          <strong>Hide unavailable skills</strong>, under the picker, hides
           them instead. It is on to begin with, and remembered on this machine.
         </p>
         <p>
@@ -2307,16 +2342,16 @@
         <h4>The three colors</h4>
         <ul>
           <li>
-            <strong>Green, "Session: fresh".</strong> Under
+            <strong>Green, "Conversation: fresh".</strong> Under
             <span data-fact="meterYellow">5</span> points. Carry on.
           </li>
           <li>
-            <strong>Yellow, "Session: getting long".</strong> From
+            <strong>Yellow, "Conversation: getting long".</strong> From
             <span data-fact="meterYellow">5</span> points. Fine for now; think
             about a fresh start after this step.
           </li>
           <li>
-            <strong>Red, "Session: time for a fresh start".</strong> From
+            <strong>Red, "Conversation: time for a fresh one".</strong> From
             <span data-fact="meterRed">10</span> points. The dashboard also says so
             in a banner.
           </li>
@@ -2489,7 +2524,7 @@
           or <strong>Match my session</strong>. A phase you leave untouched runs on
           the launch model. The one retry after a crash or a quiet agent (when retry
           is on) goes one step up (Match my session stays on the launch model),
-          and the phase's helpers follow.
+          and the phase's subagents follow.
         </p>
         <p>
           Click a dot in a phase's row to pick (the arrow keys move along a row);
@@ -2497,7 +2532,7 @@
         </p>
         <h4>What is locked while it runs</h4>
         <p>
-          Answers, sign-offs, launches, Workspace, Helpers and
+          Answers, sign-offs, launches, Workspace, Subagents and
           <strong>Back</strong> are read-only, starting a new session is held
           back, and Ask is off, except for a question the loop is waiting on. Still
           open: Activities, Notebook, Help, Preferences, the docs and the code
@@ -2739,22 +2774,22 @@
         </p>
       </section>
 
-      <!-- Tab 16: Helpers (subagents) -->
+      <!-- Tab 16: Subagents -->
       <section class="help-panel" data-tab="subagents">
-        <h3>Helpers (subagents)</h3>
+        <h3>Subagents</h3>
         <p>
           On most skills (all but the dashboard, Finalize, Changelog, Git and
           Handoff), Plan2Code
-          can hand independent pieces of work to helpers (subagents) while it
+          can hand independent pieces of work to subagents while it
           keeps the conversation with you. The <strong>Subagents</strong> button in the top bar, after
-          Stop session, is lit while helpers are on.
+          Stop session, is lit while subagents are on.
         </p>
         <h4>The switch</h4>
         <ul>
           <li>
             Clicking the button opens the <strong>Subagents</strong> dialog; it
-            never switches helpers on or off by itself. Pick <strong>Use
-            helpers</strong> or <strong>Work alone</strong>, edit the instruction
+            never switches subagents on or off by itself. Pick <strong>Use
+            subagents</strong> or <strong>Work alone</strong>, edit the instruction
             Plan2Code follows (<strong>Reset to default</strong> puts the
             shipped one back), and say how many may run at once.
           </li>
@@ -2764,20 +2799,20 @@
           </li>
           <li>
             The change reaches Plan2Code at its next check-in, as a setting,
-            not as something you typed. How many helpers it can really start is
-            up to your agent; some have no helpers at all.
+            not as something you typed. How many subagents it can really start is
+            up to your agent; some have no subagents at all.
           </li>
-          <li>The button only appears on skills that use helpers, and only when Plan2Code can pass the setting on.</li>
+          <li>The button only appears on skills that use subagents, and only when Plan2Code can pass the setting on.</li>
         </ul>
-        <h4>Helper strength</h4>
+        <h4>Subagent strength</h4>
         <p>
-          Under Helpers, the dialog also asks how strong the helpers should be.
+          Under Subagents, the dialog also asks how strong the subagents should be.
           Like the rest of the dialog it is saved for this project and this
           skill, and it does nothing under <strong>Work alone</strong>.
         </p>
         <ul>
           <li>
-            <strong>Balanced</strong> (the default): each helper gets the
+            <strong>Balanced</strong> (the default): each subagent gets the
             strength its job needs: light for lookups, stronger for reviews and
             design work.
           </li>
@@ -2790,36 +2825,36 @@
             everything except lookups.
           </li>
           <li>
-            <strong>Match my session</strong>: helpers run on whatever your
+            <strong>Match my session</strong>: subagents run on whatever your
             session uses; nothing is set for them.
           </li>
         </ul>
         <h4>The Subagents tab</h4>
         <ul>
           <li>
-            With the first helper, a <strong>Subagents</strong> tab appears before
+            With the first subagent, a <strong>Subagents</strong> tab appears before
             Ask: one row each, with what it was asked, whether it is running, done
             or failed, and a one-line result at the end. The number on the tab is
             how many are still running.
           </li>
           <li>
-            Helpers report through Plan2Code, so the rows change at its
-            check-ins, not live. The page cannot stop a helper; ask Plan2Code
+            Subagents report through Plan2Code, so the rows change at its
+            check-ins, not live. The page cannot stop a subagent; ask Plan2Code
             on the Ask tab if one should stop.
           </li>
           <li>
-            Under each helper, a line such as "Standard, medium effort" shows
-            what that helper actually ran with. "Session model" means the agent
+            Under each subagent, a line such as "Standard, medium effort" shows
+            what that subagent actually ran with. "Session model" means the agent
             could not set a strength for it, so it ran on the session's own
-            model. A helper that reported neither shows no line.
+            model. A subagent that reported neither shows no line.
           </li>
           <li>
             <strong>Working alone</strong> means your agent reported it has no
-            way to start helpers here. If it starts one after all, the note
-            goes away and the helper's row shows instead.
+            way to start subagents here. If it starts one after all, the note
+            goes away and the subagent's row shows instead.
           </li>
           <li>
-            Pathfinder always uses helpers for its research questions, whatever
+            Pathfinder always uses subagents for its research questions, whatever
             the switch says, and they show here too.
           </li>
           <li>The tab clears when you go back to the dashboard.</li>
@@ -2919,7 +2954,7 @@
           <li class="for-app">
             "No agent is available right now" means the session has finished or
             Plan2Code has gone quiet. Check the terminal panel, or press
-            <strong>New Session</strong> if the agent has ended, to ask.
+            <strong>New Session</strong> if the agent has stopped, to ask.
           </li>
         </ul>
         <p>Either way, the conversation above stays readable.</p>
@@ -3459,14 +3494,14 @@
             nothing to copy but the command that opens the dashboard.
           </li>
           <li>
-            <strong>Paused.</strong> You pressed <strong>Stop session</strong>.
+            <strong>Stopped.</strong> You pressed <strong>Stop session</strong>.
             The screen names what was saved and gives the command that picks it
             up later. Nothing else is offered.
           </li>
         </ul>
         <p>
-          Paused means there is more to do and your place is kept. Finished means
-          this step is over.
+          Stopped means there is more to do and your place is kept. Finished means
+          this skill is over.
         </p>
         <h4>Running the next command</h4>
         <p id="help-finishing-command-text">
@@ -3527,6 +3562,10 @@
               <td>Send your answers (not while this Help is open). In the Ask box, send the question.</td>
             </tr>
             <tr>
+              <td><kbd>?</kbd></td>
+              <td>Open Help on the topic for where you are. It does nothing while you type in a box, an editor or a dialog, or play a game.</td>
+            </tr>
+            <tr>
               <td><kbd>Enter</kbd> in the Ask box</td>
               <td>Start a new line.</td>
             </tr>
@@ -3561,8 +3600,8 @@
         </p>
         <ul>
           <li>
-            <strong>Appearance</strong>: Theme, Card width, Highlight color and
-            Role.
+            <strong>Appearance</strong>: Theme, Card width, Highlight color,
+            Role and Intro.
           </li>
           <li>
             <strong>Agents &amp; models</strong>: the agents you can start and
@@ -3709,7 +3748,8 @@
           </li>
         </ul>
         <p>
-          <strong>Back to default</strong> resets only the tab on screen:
+          <strong>Reset this tab</strong> resets only the tab on screen, and offers
+          Undo for a few seconds:
           Appearance's four settings (Role goes back to Not set), or every sound
           and the two Activities switches. Agents &amp; models and System have
           nothing to reset, so it is not shown there. Your Activities best
@@ -3879,6 +3919,7 @@
 
     <dialog class="modal looks prefs" id="looks-modal" aria-labelledby="looks-title">
       <h2 id="looks-title">User Preferences</h2>
+      <p class="prefs-lead" id="prefs-lead">Changes save as you make them. Agents have their own Save.</p>
       <div class="prefs-body">
         <div class="prefs-layout">
           <div id="prefs-tabs" class="prefs-tabs" role="tablist" aria-orientation="vertical" aria-label="Preference groups"></div>
@@ -3920,7 +3961,7 @@
               </fieldset>
               <fieldset data-section="intro" class="modal-ranges">
                 <legend>Intro</legend>
-                <label><input type="checkbox" id="looks-skip-intro" /> <span>Always SKIP Intro</span></label>
+                <label><input type="checkbox" id="looks-skip-intro" /> <span>Skip the wake-up intro</span></label>
                 <p class="help">A newly opened dashboard starts with Planny asleep, waiting to be woken. Tick this to go straight to the dashboard every time.</p>
               </fieldset>
             </section>
@@ -3928,7 +3969,7 @@
               <div class="prefs-agents" data-section="agents">
                 <div class="roster-head">
                   <p class="help" id="agents-intro" data-av="intro">Most people never need to change this. Plan2Code finds the agents installed on this machine and ships an up-to-date model list with every release. Open an agent to choose the models the loop uses for each strength.</p>
-                  <button type="button" class="btn small primary" id="agents-add" data-av="add">Add agent</button>
+                  <button type="button" class="btn sm primary" id="agents-add" data-av="add">Add agent</button>
                 </div>
                 <div class="roster" id="agents-table" data-av="table"></div>
                 <span class="help" id="agents-status" data-av="status" role="status"></span>
@@ -3942,11 +3983,15 @@
             <section class="prefs-panel" data-tab="system">
               <fieldset data-section="cleanup" class="modal-ranges">
                 <legend>Cleanup</legend>
-                <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days, and deletes one only when git tracks it, so git can restore it; one git does not track (the folder is usually gitignored) is kept, with the reason shown. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
+                <p class="help">Finds sessions nobody has opened for 30 days, stray files in your <code>~/.plan2code</code> folder, Notebooks untouched for a month and this project's <code>specs--completed/</code> folders untouched for 30 days. You see the list and tick what to delete before anything goes.</p>
+                <details class="cleanup-kept-note">
+                  <summary>What is kept</summary>
+                  <p class="help">Your preferences, saved folders, models, the launcher and this session always stay. A completed spec is deleted only when git tracks it, so git can restore it; one git does not track (the folder is usually gitignored) is kept, with the reason shown. A Notebook starts unticked, since it is your own writing.</p>
+                </details>
                 <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
                 <div class="models-actions">
-                  <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>
-                  <button type="button" class="btn small danger" id="cleanup-delete" hidden>Delete these</button>
+                  <button type="button" class="btn sm" id="cleanup-scan">Find files to clean up</button>
+                  <button type="button" class="btn sm danger" id="cleanup-delete" hidden>Delete these</button>
                   <span class="help" id="cleanup-status" role="status"></span>
                 </div>
               </fieldset>
@@ -4022,7 +4067,7 @@
         </div>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
+        <button type="button" class="btn ghost" id="looks-reset">Reset this tab</button>
         <button type="button" class="btn primary" id="looks-done">Close</button>
       </div>
     </dialog>
@@ -4034,22 +4079,22 @@
     <dialog class="modal looks subagents" id="subagents-modal" aria-labelledby="subagents-title">
       <h2 id="subagents-title">Subagents</h2>
       <p class="modal-blurb">
-        Let Plan2Code hand independent work to helpers in this skill. Saved for this
+        Let Plan2Code hand independent work to subagents in this skill. Saved for this
         project and this skill.
       </p>
       <!-- On a wide dialog the switch and the cap share a row, and the four
            strengths sit side by side, so the dialog stays short. -->
       <div class="subagents-top">
         <fieldset class="modal-ranges looks-row">
-          <legend>Helpers</legend>
-          <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
+          <legend>Subagents</legend>
+          <label><input type="radio" name="subagents-on" value="on" /> <span>Use subagents</span></label>
           <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
         </fieldset>
         <fieldset class="modal-ranges">
           <legend>At most</legend>
           <label>
-            <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many helpers at once" />
-            <span>helpers at once</span>
+            <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many subagents at once" />
+            <span>subagents at once</span>
           </label>
           <p class="help">Advisory: your agent's own limit still applies.</p>
         </fieldset>
@@ -4058,7 +4103,7 @@
            to: Thrifty light, Balanced standard, Best strongest, and the
            session's own model with no rank. -->
       <fieldset class="modal-ranges looks-row" id="subagents-strength-row">
-        <legend>Helper strength</legend>
+        <legend>Subagent strength</legend>
         <label><input type="radio" name="subagents-strength" value="thrifty" /> <span class="sa-badge lvl-1"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i></i><i></i></span>Thrifty</span></label>
         <label><input type="radio" name="subagents-strength" value="balanced" checked /> <span class="sa-badge lvl-2"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i></span>Balanced</span></label>
         <label><input type="radio" name="subagents-strength" value="best" /> <span class="sa-badge lvl-3"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Best</span></label>
@@ -4069,7 +4114,7 @@
         <legend>Instruction</legend>
         <div id="subagents-instruction"></div>
         <div class="models-actions">
-          <button type="button" class="btn small ghost" id="subagents-default">Reset to default</button>
+          <button type="button" class="btn sm ghost" id="subagents-default">Reset to default</button>
           <span class="help">Passed to the agent as written, at its next check-in.</span>
         </div>
       </fieldset>
@@ -4089,26 +4134,27 @@
          fills the editor on open. -->
     <dialog class="modal notepad" id="notepad-modal" aria-labelledby="notepad-title">
       <h2 id="notepad-title">Notebook</h2>
-      <p class="modal-blurb">A private space to keep track of notes and uploaded images related to your in-progress work on this project. Saved on this machine. <strong class="private-note">Private</strong>: the agent never reads your Notebook. A tab reaches it only when you start a workflow with it.</p>
+      <p class="modal-blurb">A private space to keep track of notes and uploaded pictures related to your in-progress work on this project. Saved on this machine. <strong class="private-note">Private</strong>: the agent never reads your Notebook. A tab reaches it only when you start a skill with it.</p>
       <div class="notepad-tabbar">
         <div class="notepad-tabs" id="notepad-tabs" role="tablist" aria-label="Notebook tabs"></div>
-        <button type="button" class="btn small ghost notepad-tab-new" id="notepad-tab-new">+ New tab</button>
+        <button type="button" class="btn sm ghost notepad-tab-new" id="notepad-tab-new">+ New tab</button>
       </div>
       <div class="notepad-empty" id="notepad-empty" hidden>
         <p>No tabs yet. Make one to start writing.</p>
-        <button type="button" class="btn small primary" id="notepad-empty-new">+ New tab</button>
+        <button type="button" class="btn sm primary" id="notepad-empty-new">+ New tab</button>
       </div>
       <div class="notepad-body" id="notepad-body">
         <div class="notepad-editor" id="notepad-editor"></div>
         <p class="help notepad-sent" id="notepad-sent" hidden></p>
         <div class="notepad-images" id="notepad-images">
-          <button type="button" class="btn small ghost notepad-add" id="notepad-add">Add image</button>
+          <button type="button" class="btn sm ghost notepad-add" id="notepad-add">Add picture</button>
           <input type="file" accept="image/*" multiple id="notepad-file" hidden />
-          <ul class="notepad-strip" id="notepad-strip" role="list" aria-label="Notebook images"></ul>
+          <ul class="notepad-strip" id="notepad-strip" role="list" aria-label="Notebook pictures"></ul>
         </div>
       </div>
       <div class="modal-actions notepad-actions">
         <p class="help notepad-status" id="notepad-status" aria-live="polite"></p>
+        <button type="button" class="btn sm ghost" id="notepad-retry" hidden>Try again</button>
         <button type="button" class="btn ghost" id="notepad-close">Close</button>
       </div>
     </dialog>
@@ -4119,7 +4165,7 @@
     <dialog class="modal notepad-sub" id="notepad-name-dlg" aria-labelledby="notepad-name-label">
       <form class="notepad-name-form" id="notepad-name-form" novalidate>
         <h2 id="notepad-name-label">Name this tab</h2>
-        <input type="text" id="notepad-name" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error notepad-name-count" />
+        <input type="text" id="notepad-name" class="is-compact" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error notepad-name-count" />
         <p class="help notepad-name-count" id="notepad-name-count"></p>
         <p class="help notepad-name-error" id="notepad-name-error" aria-live="polite"></p>
         <div class="modal-actions">
@@ -4146,7 +4192,7 @@
       <button type="button" class="picview-step is-next" id="picview-next" aria-label="Next image">›</button>
       <div class="picview-bar">
         <p class="picview-count" id="picview-count" aria-live="polite"></p>
-        <button type="button" class="btn small picview-close" id="picview-close">Close</button>
+        <button type="button" class="btn sm picview-close" id="picview-close">Close</button>
       </div>
     </dialog>
 
@@ -4158,8 +4204,8 @@
       <p class="modal-blurb">Something to play while you wait. Private to this page, and it pauses whenever Plan2Code needs you.</p>
       <div class="activities-banner" id="activities-banner" role="status" hidden>
         <span class="activities-banner-text" id="activities-banner-text"></span>
-        <button type="button" class="btn small" id="activities-unpause" hidden>Unpause game</button>
-        <button type="button" class="btn small primary" id="activities-goto">Go to it</button>
+        <button type="button" class="btn sm" id="activities-unpause" hidden>Unpause game</button>
+        <button type="button" class="btn sm primary" id="activities-goto">Go to it</button>
       </div>
       <div class="activities-picker" id="activities-picker" hidden></div>
       <!-- The stage: the board, and in full screen the side panel beside it,
@@ -4175,7 +4221,7 @@
           <p class="activities-rail-best" id="activities-rail-best"></p>
           <div class="activities-rail-score" id="activities-rail-score"></div>
           <p class="activities-rail-keys"><kbd>P</kbd> pauses · <kbd>R</kbd> restarts · <kbd>F</kbd> or <kbd>Esc</kbd> leaves full screen</p>
-          <button type="button" class="btn small" id="activities-rail-exit">Exit full screen</button>
+          <button type="button" class="btn sm" id="activities-rail-exit">Exit full screen</button>
         </aside>
       </div>
       <p class="activities-score" id="activities-score"></p>
@@ -4223,10 +4269,10 @@
           title="Help on the workspace"
           aria-label="Help on the workspace"
         >
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <circle cx="8" cy="8" r="7" class="ab-ring" />
-            <path class="ab-mark" d="M6.1 6.05a1.95 1.95 0 1 1 2.4 1.9v1.25" />
-            <circle cx="8" cy="11.7" r="0.85" class="ab-dot" />
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10" class="ab-ring" />
+            <path class="ab-mark" d="M9.2 9.2a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1-1.4 2" />
+            <circle cx="12" cy="17.3" r="0.9" class="ab-dot" />
           </svg>
         </button>
         <button type="button" class="btn primary" id="workspace-done">Close</button>
@@ -4238,7 +4284,11 @@
     <dialog class="modal help" id="help-modal" aria-labelledby="help-title">
       <h2 id="help-title">Help</h2>
       <div class="help-layout">
-        <div id="help-tabs" class="help-tabs" role="tablist" aria-orientation="vertical" aria-label="Help topics"></div>
+        <div class="help-side">
+          <input type="search" class="help-filter" id="help-filter" placeholder="Filter topics" aria-label="Filter topics" autocomplete="off" />
+          <p class="help-filter-empty" id="help-filter-empty" role="status" hidden>No topic matches.</p>
+          <div id="help-tabs" class="help-tabs" role="tablist" aria-orientation="vertical" aria-label="Help topics"></div>
+        </div>
         <div id="help-panels" class="help-panels"></div>
       </div>
       <div class="modal-actions">
@@ -4268,28 +4318,28 @@
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="9" width="12" height="9" rx="1.6" transform="rotate(-12 9.5 13.5)" /><rect x="8.5" y="6" width="12" height="9" rx="1.6" /></svg>
           </span>
           <h3>Pick a card</h3>
-          <p>Start with <strong>Suggested</strong>. Pathfinder for a foggy idea, Quick Task for something small.</p>
+          <p>Start with <strong>Suggested</strong>.</p>
         </div>
         <div class="welcome-col">
           <span class="welcome-dot is-stage">
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7" opacity="0.35" /><circle cx="10" cy="10" r="7" pathLength="100" stroke-dasharray="50 100" stroke-dashoffset="25" transform="rotate(-90 10 10)" /></svg>
           </span>
-          <h3>Refresh at half way</h3>
-          <p id="welcome-refresh-text">Once the session meter passes half, finish the step and start a new conversation.</p>
+          <h3>Answer, then Send</h3>
+          <p>Nothing leaves this page until you press <strong>Send to Plan2Code</strong>.</p>
         </div>
         <div class="welcome-col">
           <span class="welcome-dot is-bare">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="M7.5 10l3 2-3 2M12.5 14.5h4" /></svg>
           </span>
-          <h3>Come back</h3>
-          <p><code>/plan2code</code> in your agent, or <code>plan2code</code> in any folder.</p>
+          <h3>Watch the terminal</h3>
+          <p id="welcome-terminal-text">If the page goes quiet, your agent may be asking permission there.</p>
         </div>
         <div class="welcome-col">
           <span class="welcome-dot is-plain">
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12 8h2.6M8 12v2.6M4 8H1.4M8 4V1.4M10.83 10.83l1.84 1.84M5.17 10.83l-1.84 1.84M5.17 5.17L3.33 3.33M10.83 5.17l1.84-1.84" /><circle cx="8" cy="8" r="4.2" /><circle cx="8" cy="8" r="1.6" /></svg>
           </span>
           <h3>Get help</h3>
-          <p><kbd>?</kbd> opens Help. The gear holds your role, theme and sounds.</p>
+          <p>Press <kbd>?</kbd> or the <strong>?</strong> button for Help; the gear holds your preferences.</p>
         </div>
       </div>
       <div class="modal-actions">
@@ -4355,7 +4405,7 @@
     </dialog>
 
     <dialog class="modal" id="home-modal" aria-labelledby="home-title">
-      <h2 id="home-title">Leave this workflow?</h2>
+      <h2 id="home-title">Leave this skill?</h2>
       <p class="modal-blurb" id="home-blurb"></p>
       <!-- The same warning Stop shows: going home saves the way a stop does,
            so it loses what a stop would lose. -->
@@ -4403,7 +4453,7 @@
       </div>
     </dialog>
 
-    <!-- Opened from the dashboard's UPDATE AVAILABLE banner. The versions and
+    <!-- Opened from the dashboard's Update available banner. The versions and
          the two copy rows are filled by app.js; the update itself runs in a
          terminal, never from this page. -->
     <dialog class="modal" id="update-modal" aria-labelledby="update-title">
@@ -4413,13 +4463,20 @@
         <li>
           <span id="update-step-run">Run this in your terminal (not in this page or your agent):</span>
           <div class="update-command" id="update-command"></div>
-          It updates everything that was installed (the skills, the <code>plan2code</code>
-          command and any extras you added), with no menu. If the <code>plan2code</code>
-          command is not installed, run this instead:
-          <div class="update-command" id="update-fallback"></div>
-          Back at your prompt with no output at all? npm
-          could not reach the repository and hid the reason: run
-          <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> to see it.
+          <details class="update-more" id="update-more">
+            <summary>Command not found, or nothing happened?</summary>
+            <p>
+              The command updates everything that was installed (the skills, the
+              <code>plan2code</code> command and any extras you added), with no menu. If the
+              <code>plan2code</code> command is not installed, run this instead:
+            </p>
+            <div class="update-command" id="update-fallback"></div>
+            <p>
+              Back at your prompt with no output at all? npm
+              could not reach the repository and hid the reason: run
+              <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> to see it.
+            </p>
+          </details>
         </li>
         <li id="update-step-restart">When it finishes, close this console and start <code>plan2code</code> again.</li>
       </ol>

@@ -1,0 +1,61 @@
+{
+  "title": "task-api: Phase 3",
+  "headline": { "stage": "Phase 3: API endpoints", "cleared": 11, "total": 11 },
+  "items": [
+    {
+      "id": "lessons",
+      "kind": "lessons",
+      "title": "Lessons to keep",
+      "body": "Choose for each one. Nothing is kept unless you choose it, and anything you leave keeps waiting.",
+      "opening": null,
+      "rows": [
+        {
+          "id": "l1",
+          "type": "lesson",
+          "text": "Every list endpoint pages with a cursor, never an offset.",
+          "why": "Offsets skip rows when tasks are created while a client is paging.",
+          "origin": "You said this.",
+          "note": "",
+          "flags": [],
+          "refused": null,
+          "area": "General",
+          "kind": "convention",
+          "about": ["src/tasks"],
+          "areas": ["General"],
+          "choices": ["Keep", "Reword", "Drop"]
+        },
+        {
+          "id": "l2",
+          "type": "lesson",
+          "text": "Run a single test file with node --test test/tasks.test.js; npm test also starts the Postgres container.",
+          "why": "",
+          "origin": "Found by reading the code.",
+          "note": "",
+          "flags": [],
+          "refused": null,
+          "area": "General",
+          "kind": "command",
+          "about": ["test/tasks.test.js"],
+          "areas": ["General"],
+          "choices": ["Keep", "Reword", "Drop"]
+        },
+        {
+          "id": "l3",
+          "type": "lesson",
+          "text": "Every error goes through errorShape() in src/app.js, so 400, 404 and 409 answer in one shape.",
+          "why": "",
+          "origin": "Found by reading the code.",
+          "note": "",
+          "flags": [],
+          "refused": null,
+          "area": "General",
+          "kind": "how-it-works",
+          "about": ["src/app.js"],
+          "areas": ["General"],
+          "choices": ["Keep", "Reword", "Drop"]
+        }
+      ]
+    }
+  ],
+  "agent": { "status": "waiting" }
+}

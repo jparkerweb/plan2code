@@ -252,3 +252,82 @@ test("a tab deleted between Start and the box leaves the box empty, with a banne
   assert.equal(await boxValue(boxOf(s)), "");
   assert.equal(await readyPictures(s).count(), 0);
 });
+
+// Clear needs no native confirm: it clears at once and offers Undo for ten
+// seconds, deleting the attachments' files on the server only when the window
+// closes.
+const CHOICE = {
+  items: [{ id: "q1", kind: "text", title: "Name it", body: "A name." }],
+  agent: { status: "waiting" },
+};
+
+test("Clear clears at once with an Undo that restores it, and deletes attachments only once the window closes", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: CHOICE, clock: true });
+  s.page.on("dialog", (d) => {
+    assert.fail("Clear must not open a native dialog: " + d.message());
+  });
+  const deletes = [];
+  await s.page.route("**/uploads/**", (route) => {
+    if (route.request().method() === "DELETE") deletes.push(route.request().url());
+    return route.fulfill({ status: 200, body: "{}" });
+  });
+  const box = itemCard(s.page, "q1").locator(".md-host, input[type=text]").first();
+  await fillBox(box, "audit-export");
+  // An attachment on that note, as the page holds it after an upload.
+  await s.page.evaluate(async () => {
+    const { page, saveNow, redraw } = await import("/state.js");
+    page.local.images.q1 = [{ key: "k1", id: "abc123", path: "uploads/abc123.png", name: "shot.png" }];
+    saveNow();
+    redraw();
+  });
+  const clear = s.page.locator("#btn-clear");
+  await clear.waitFor();
+  await clear.click();
+  const banner = s.page.locator("#banner");
+  await banner.getByText(/^Cleared/).waitFor();
+  assert.equal(await boxValue(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first()), "", "the box is empty at once");
+  assert.equal(deletes.length, 0, "nothing deleted on the server yet");
+  // Undo puts the text and the picture back, and the file is never deleted.
+  await banner.getByRole("button", { name: "Undo" }).click();
+  assert.equal(await boxValue(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first()), "audit-export", "undo restores the answer");
+  assert.equal(await s.page.evaluate(async () => (await import("/state.js")).page.local.images.q1?.length), 1, "and the picture");
+  await s.page.clock.fastForward(12_000);
+  assert.equal(deletes.length, 0, "an undone clear deletes nothing");
+
+  // Clear again and let the window close: the file goes.
+  await clear.click();
+  await banner.getByText(/^Cleared/).waitFor();
+  await s.page.clock.fastForward(11_000);
+  await until(() => deletes.length === 1);
+  assert.match(deletes[0], /abc123/);
+  await banner.waitFor({ state: "hidden" });
+});
+
+test("Clear while a picture is uploading: Undo brings it back finished, not stuck uploading", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: CHOICE });
+  let release;
+  const gate = new Promise((r) => (release = r));
+  await s.page.route("**/upload", async (route) => {
+    await gate;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, id: "up1", path: "uploads/up1.jpg", name: "p.jpg", size: 5, kind: "image" }) });
+  });
+  await s.page.route("**/uploads/**", (route) => route.fulfill({ status: 200, body: "{}" }));
+  await itemCard(s.page, "q1").waitFor();
+  await s.page.evaluate(async () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 8;
+    c.getContext("2d").fillRect(0, 0, 8, 8);
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    const { attachFiles } = await import("/uploads.js");
+    attachFiles("q1", [new File([blob], "p.png", { type: "image/png" })]);
+  });
+  await until(() => s.page.evaluate(async () => ((await import("/state.js")).page.local.images.q1 || []).some((i) => i.status === "uploading")));
+  await s.page.locator("#btn-clear").click();
+  const banner = s.page.locator("#banner");
+  await banner.getByText(/^Cleared/).waitFor();
+  release();
+  await s.page.waitForTimeout(300);
+  await banner.getByRole("button", { name: "Undo" }).click();
+  const back = await s.page.evaluate(async () => ((await import("/state.js")).page.local.images.q1 || []).map((i) => ({ status: i.status, id: i.id })));
+  assert.deepEqual(back, [{ status: "ready", id: "up1" }], "the upload finished into the set-aside picture, and Undo restored it");
+});

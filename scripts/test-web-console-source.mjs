@@ -325,10 +325,14 @@ test("update banner: the modal is in the page, with the exact command and no inl
   assert.doesNotMatch(dialog[1], /<script/i);
   const panel = helpTemplate().match(/<section class="help-panel" data-tab="dashboard">([\s\S]*?)<\/section>/);
   assert.ok(panel, "the help has a dashboard topic");
-  assert.match(panel[1], /UPDATE AVAILABLE/, "the dashboard topic explains the banner");
+  assert.match(panel[1], /Update available/, "the dashboard topic explains the banner");
   assert.doesNotMatch(panel[1], /\sstyle=/);
   assert.doesNotMatch(panel[1], /<script/i);
-  assert.ok(dash.includes('"npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git"'), "the dashboard copies the exact command");
+  assert.ok(dash.includes('"npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release"'), "the dashboard copies the exact command");
+  // One sentence and the command up front; the rest sits in a closed details element.
+  assert.match(dialog[1], /<details class="update-more" id="update-more">\s*<summary>Command not found, or nothing happened\?<\/summary>/);
+  assert.ok(dialog[1].indexOf("update-command") < dialog[1].indexOf("<details"), "the command comes before the disclosure");
+  assert.ok(dialog[1].indexOf("git ls-remote") > dialog[1].indexOf("<details"), "the ls-remote note is inside the disclosure");
 });
 
 test("update banner: built only on the dashboard, dismissed per session, and Help's version links to Releases", () => {
@@ -366,7 +370,7 @@ test("help: the stuck tab is second, with a callout and four symptom rows before
   assert.equal(HELP_TABS[1].id, "stuck");
   const tpl = helpTemplate();
   const panel = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
-  assert.match(panel, /<div class="help-callout" role="note">/);
+  assert.match(panel, /<div class="callout is-stage help-callout" role="note">/);
   assert.match(panel, /Check this first/);
   assert.match(panel, /look at your terminal/);
   assert.equal((panel.match(/class="help-row"/g) || []).length, 4, "four symptom rows");
@@ -388,7 +392,7 @@ test("help: privacy names the handoffs folder and preferences says Cleanup never
     "the lead no longer says everything lives under the console folder"
   );
   const prefs = tpl.match(/<section class="help-panel" data-tab="prefs">([\s\S]*?)<\/section>/)[1];
-  const cleanup = prefs.slice(prefs.indexOf("<strong>Cleanup</strong>"), prefs.indexOf("<strong>Back to default</strong>"));
+  const cleanup = prefs.slice(prefs.indexOf("<strong>Cleanup</strong>"), prefs.indexOf("<strong>Reset this tab</strong>"));
   assert.match(cleanup, /handoffs/, "the Cleanup text names the handoffs folder");
   assert.match(cleanup, /never\s+offered/, "the Cleanup text says the handoffs folder is never offered for removal");
 });
@@ -553,4 +557,16 @@ test("Diagnose's opening cards: only What is wrong is required", () => {
   assert.deepEqual(required, { bug: true, expected: false, "see-it": false });
   const prompt = fs.readFileSync(path.join(ROOT, "src", "plan2code-diagnose.md"), "utf8");
   assert.match(prompt, /the last two `"required":false`/, "the prompt says the last two cards are optional");
+});
+
+test("help: the four group headings split the topics in order, so grouping never moves a tab", async () => {
+  const { HELP_GROUPS, helpGroupStart } = await import("../src/web-console/public/help.js");
+  assert.deepEqual(HELP_GROUPS.map((g) => g.title), ["Start here", "Working in a session", "Tools", "Reference"]);
+  const ids = HELP_TABS.map((t) => t.id);
+  const at = HELP_GROUPS.map((g) => ids.indexOf(g.from));
+  assert.equal(at[0], 0, "the first group starts at the first topic");
+  assert.deepEqual(at, [...at].sort((a, b) => a - b), "groups run in the topics' own order");
+  assert.ok(at.every((i) => i >= 0), "every group starts at a real topic");
+  assert.equal(helpGroupStart("planny"), null, "a topic inside a group opens no heading");
+  assert.equal(HELP_TABS.findIndex((t) => t.id === "stuck"), 1, "stuck stays second");
 });

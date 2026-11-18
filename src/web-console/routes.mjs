@@ -380,8 +380,8 @@ function renderIndex(ctx) {
     )
     .replace('<h1 id="title">Plan2Code Console</h1>', () => `<h1 id="title">${escHtml(title)}</h1>`)
     .replace(
-      '<span class="badge" id="badge">Pathfinder</span>',
-      () => `<span class="badge" id="badge">${escHtml(workflowLabel(workflow))}</span>`
+      '<span class="pill is-accent is-caps badge" id="badge">Pathfinder</span>',
+      () => `<span class="pill is-accent is-caps badge" id="badge">${escHtml(workflowLabel(workflow))}</span>`
     )
     .replace(
       '<h2 class="launch-title" id="boot-title">Opening the console</h2>',

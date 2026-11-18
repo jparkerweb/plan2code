@@ -23,20 +23,21 @@ export const BADGES = {
   unknown: "Not checked",
 };
 
+const TONE_OF = { ok: "is-ok", missing: "is-warn" };
+
 export function drawBadge(badge, state) {
   badge.textContent = BADGES[state];
-  badge.classList.remove("ok", "missing");
-  if (state !== "unknown") badge.classList.add(state);
+  badge.classList.remove("ok", "missing", "is-ok", "is-warn");
+  if (state !== "unknown") badge.classList.add(state, TONE_OF[state]);
 }
 
 /* -------------------------------------------------------- the prefs cards */
 
-// A model's name without its gloss ("Sonnet, latest Sonnet" or "Opus plan: Opus in plan mode" is cut at the first separator), so a card line stays one line.
-const GLOSS = new RegExp(" " + String.fromCharCode(8212) + " |, |: ");
-const shortLabel = (label) => label.split(GLOSS)[0];
-
-// The model each strength resolves to for one row, as [word, label, effort]
-// triples; empty while the strengths did not load.
+// The model each strength resolves to for one row, as [word, model, effort]
+// triples (model a { id, label } row, or null); empty while the strengths did
+// not load. A card line names the model by its id, the name the launcher's
+// menu, --model and the loop setup use; a label is the description only
+// ("latest Sonnet"), so it rides along as the line's tooltip.
 function strengthLines(ctx, row) {
   if (!ctx.modelsLoaded) return [];
   const isCli = row.key.startsWith("cli:");
@@ -50,7 +51,7 @@ function strengthLines(ctx, row) {
   return STRENGTH_ORDER.map((word) => {
     const pick = resolved[word];
     const model = pick && row.models.find((m) => m.id === pick.model);
-    return [word, model ? shortLabel(model.label || model.id) : null, pick && pick.effort];
+    return [word, model || null, pick && pick.effort];
   });
 }
 
@@ -66,10 +67,10 @@ function agentCard(ctx, row, check) {
   const top = el("span", "card-top");
   const who = el("span", "card-who");
   const name = el("span", "row-name", row.name);
-  if (row.key.startsWith("agent:")) name.append(" ", el("span", "tag", "Custom"));
+  if (row.key.startsWith("agent:")) name.append(" ", el("span", "pill is-neutral tag", "Custom"));
   who.append(name, el("code", null, row.command));
   top.appendChild(who);
-  const badge = el("span", "prefs-badge");
+  const badge = el("span", "pill is-neutral prefs-badge");
   const known = serverStateFor(ctx.saved, row);
   if (known) {
     ctx.found.set(row.key, { command: row.command, state: known });
@@ -87,9 +88,14 @@ function agentCard(ctx, row, check) {
   const lines = strengthLines(ctx, row);
   if (lines.length) {
     const tiers = el("span", "card-tiers");
-    for (const [word, label, effort] of lines) {
+    for (const [word, model, effort] of lines) {
       const line = el("span", "card-tier");
-      line.append(wordChip(word), label ? el("span", null, effort ? `${label} · ${effort}` : label) : el("span", "muted", "not mapped"));
+      let named = el("span", "muted", "not mapped");
+      if (model) {
+        named = el("span", null, effort ? `${model.id} · ${effort}` : model.id);
+        if (model.label && model.label !== model.id) named.title = model.label;
+      }
+      line.append(wordChip(word), named);
       tiers.appendChild(line);
     }
     r.appendChild(tiers);
@@ -106,16 +112,16 @@ function agentCard(ctx, row, check) {
 // The badge a setup row's state gets: the glanceable half, with the pane
 // beside it saying what the state means and what can be done about it.
 function setupStateBadge(entry) {
-  const badge = el("span", "prefs-badge");
+  const badge = el("span", "pill is-neutral prefs-badge");
   if (entry.state === "found") {
     badge.textContent = "Found";
-    badge.classList.add("ok");
+    badge.classList.add("ok", "is-ok");
   } else if (entry.state === "outside") {
     badge.textContent = "Found outside PATH";
-    badge.classList.add("missing");
+    badge.classList.add("missing", "is-warn");
   } else if (entry.state === "missing") {
     badge.textContent = "Not found";
-    badge.classList.add("missing");
+    badge.classList.add("missing", "is-warn");
   } else {
     badge.textContent = "Not checked";
   }
@@ -196,7 +202,7 @@ function setupStateArea(ctx, entry) {
     area.appendChild(line);
     // A session opened for one CLI only offers that one's Start.
     if (ctx.onStart && (!ctx.forCli() || entry.id === ctx.forCli())) {
-      const start = el("button", "btn small primary", "Start with this agent");
+      const start = el("button", "btn sm primary", "Start with this agent");
       start.type = "button";
       start.addEventListener("click", () => ctx.onStart(entry));
       area.appendChild(start);
@@ -205,7 +211,7 @@ function setupStateArea(ctx, entry) {
     const line = el("p", "setup-agent-line");
     line.append(badge, ` Found at ${entry.path || ""}, but not on PATH`);
     area.appendChild(line);
-    const use = el("button", "btn small", "Use it from here");
+    const use = el("button", "btn sm", "Use it from here");
     use.type = "button";
     use.addEventListener("click", () => ctx.useFromHere(entry));
     area.appendChild(use);
@@ -242,7 +248,7 @@ function templatePane(ctx, template) {
   head.appendChild(title);
   box.appendChild(head);
   if (template.note) box.appendChild(el("p", "help", template.note));
-  const use = el("button", "btn small", "Use this template");
+  const use = el("button", "btn sm", "Use this template");
   use.type = "button";
   use.addEventListener("click", () => {
     // Cloned: the form edits the draft in place, and saved.templates is
@@ -274,7 +280,7 @@ export function drawSummaryPane(ctx) {
     head.appendChild(title);
     box.append(head, setupStateArea(ctx, entry));
     if (ctx.saved.agents.includes(entry)) {
-      const edit = el("button", "btn small", "Edit");
+      const edit = el("button", "btn sm", "Edit");
       edit.type = "button";
       edit.setAttribute("aria-label", "Edit " + (entry.name || entry.id));
       edit.addEventListener("click", () => ctx.pick("agent:" + entry.id));
@@ -287,7 +293,7 @@ export function drawSummaryPane(ctx) {
     pane.appendChild(templatePane(ctx, template));
     return;
   }
-  pane.appendChild(el("div", "split-empty", "Pick an agent on the left to see its state and the way forward."));
+  pane.appendChild(el("div", "empty", "Pick an agent on the left to see its state and the way forward."));
 }
 
 /* ------------------------------------------------------ the Add agent chooser */
@@ -308,7 +314,7 @@ export function drawChooser(ctx) {
   const head = el("div", "chooser-head");
   const title = el("h3", null, "Add an agent");
   title.id = "agents-chooser-title";
-  const close = el("button", "btn small ghost", "Cancel");
+  const close = el("button", "btn sm ghost", "Cancel");
   close.type = "button";
   close.addEventListener("click", () => ctx.closeChooser());
   head.append(title, close);

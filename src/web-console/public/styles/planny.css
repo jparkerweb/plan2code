@@ -2,14 +2,12 @@
 
 /* ---------------------------------------------------------- the flight
 
-   While Plan2Code is thinking, stars stream past and Planny leans into it:
-   tilted forward, bobbing, with speed lines behind him. The motion belongs to
-   him, so it reads as "he is off working on it" rather than as a background
-   effect. Chosen from ten prototypes (prototypes/thinking-starfield.html).
+   While Plan2Code is thinking, stars stream past and Planny leans in, bobbing,
+   with speed lines behind him, so it reads as "he is off working on it", not
+   as a background effect.
 
    The flight and the spinner are one signal: every line that turns the ring
-   also flies. Every other state keeps the dock still, so the motion itself
-   carries meaning. */
+   also flies. Every other state keeps the dock still. */
 
 .sky {
   position: absolute;
@@ -24,9 +22,7 @@
 .dock.is-flying .sky { opacity: 0.85; }
 
 /* Each star rides a track as wide as the dock and moves by a percentage of
-   it, so the field fills whatever width the dock has: 250px, 210px on a
-   narrower window, the full width on a phone. The dot sits at the track's
-   right-hand end. */
+   it, so the field fills any dock width. The dot sits at the track's right end. */
 .sky .star {
   position: absolute;
   left: 0;
@@ -58,12 +54,11 @@
   50% { transform: translateY(-3px) rotate(6deg); }
 }
 
-/* Speed lines, trailing off his back. Hung off Planny rather than off the
-   dock, so they follow him into the phone layout, where he sits beside the
-   text instead of above it. */
+/* Speed lines off his back. Hung off Planny, not the dock, so they follow him
+   into the phone layout, where he sits beside the text. */
 .trail { position: absolute; right: 100%; top: 0; width: 40px; height: 100%; margin-right: 4px; opacity: 0; transition: opacity 0.5s; pointer-events: none; }
 .dock.is-flying .trail { opacity: 1; }
-.trail i { position: absolute; right: 0; height: 1.5px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--ink-3)); }
+.trail i { position: absolute; right: 0; height: 1.5px; border-radius: var(--radius-xs); background: linear-gradient(90deg, transparent, var(--ink-3)); }
 .trail i:nth-child(1) { top: 38%; width: 26px; }
 .trail i:nth-child(2) { top: 52%; width: 36px; }
 .trail i:nth-child(3) { top: 66%; width: 22px; }
@@ -75,12 +70,12 @@
   to { transform: translateX(-22px); opacity: 0; }
 }
 
-/* The line under him stays readable with stars passing behind it. */
+/* Keeps his line readable over passing stars. */
 .dock.is-flying .dock-say { text-shadow: 0 0 3px var(--panel-2), 0 0 6px var(--panel-2), 0 0 10px var(--panel-2); }
 
 .dock-say {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.45;
   color: var(--ink-2);
   text-wrap: balance;
@@ -88,10 +83,9 @@
 
 /* ------------------------------------------------------------ Planny */
 
-/* The mascot is the page's state, not decoration on top of it: his star eye
-   lights up when something is yours and turns while the agent works, his arms
-   take a pose for each mood, and he fades and shuts his eye when the
-   connection drops. One class from app.js switches all of it. */
+/* The mascot is the page's state: his star eye lights when something is yours
+   and turns while the agent works, his arms pose per mood, and he fades with
+   his eye shut when the connection drops. One class from app.js switches it. */
 .planny { width: 46px; height: 63px; flex: none; overflow: visible; }
 
 .planny .shell,
@@ -103,7 +97,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* The mouth is a lip, not a grin: at the body's own 1.3 it reads as lipstick. */
+/* Thinner than the body's 1.3, which reads as lipstick. */
 .planny .smile { stroke-width: 0.9; }
 .planny .arm path { stroke-width: 1.2; }
 .planny .arm circle,
@@ -120,10 +114,9 @@
   animation: planny-blink 6.5s ease-in-out infinite;
 }
 
-/* Arms: one set per mood, and only that set shows. Moods without a set of
-   their own (happy) keep the resting arms; adrift has none at all, which is
-   most of what makes him look lost. Arms that move pivot at the shoulder, so
-   they carry view-box origins rather than their own boxes. */
+/* Arms: one set per mood, only that set shows. Moods without one (happy) keep
+   the resting arms; adrift has none, which makes him look lost. Moving arms
+   pivot at the shoulder, so they use view-box origins. */
 .planny .arms { display: none; }
 .planny .a-rest { display: inline; }
 .planny:is(.is-point, .is-work, .is-done, .is-gone, .is-adrift, .is-setup) .a-rest { display: none; }
@@ -154,11 +147,11 @@
 @keyframes foot-step-a { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.1px); } }
 @keyframes foot-step-b { 0%, 100% { transform: translateY(-1.1px); } 50% { transform: translateY(0); } }
 
-/* Something for you to do: star lit in the highlight color, a wave. */
+/* Yours to do: star lit, a wave. */
 .planny.is-point { animation: planny-lean 2.6s ease-in-out infinite; }
 .planny.is-point .eye { fill: var(--accent); }
 
-/* The agent has it: the star turns, arms pump and his feet walk on the spot. */
+/* The agent has it: star turns, arms pump, feet walk in place. */
 .planny.is-work .eye { fill: var(--accent); animation: planny-spin 2.6s linear infinite; }
 .planny.is-work .foot.f1 { animation: foot-step-a 0.7s ease-in-out infinite; }
 .planny.is-work .foot.f2 { animation: foot-step-b 0.7s ease-in-out infinite; }
@@ -166,16 +159,13 @@
 /* Nothing outstanding. */
 .planny.is-happy .eye { fill: var(--ok); }
 
-/* The server is up, but nothing is answering at the other end of it. Not the
-   faded, eye-shut `gone` look: this page is working perfectly, and the thing
-   that is not is somewhere else. Gray, still, and no arms: he has nothing to
-   do with them until someone answers. */
+/* The server is up but nothing answers at the other end. Not the `gone` look:
+   this page works fine. Gray, still, no arms until someone answers. */
 .planny.is-adrift .eye { fill: var(--ink-3); animation: none; }
 .planny.is-adrift .smile { opacity: 0.6; }
 
-/* Finished. Settled rather than switched off: green star, arms up, eye open.
-   The `gone` look below would be wrong here -- the server IS about to go away,
-   and a faded Planny with his eye shut reads as a breakage. */
+/* Finished: green star, arms up, eye open. Not `gone`: a faded Planny with
+   his eye shut reads as a breakage. */
 .planny.is-done .eye { fill: var(--ok); animation: none; }
 .planny.is-done .smile { stroke-width: 1.5; }
 
@@ -183,21 +173,18 @@
 .planny.is-gone { opacity: 0.5; }
 .planny.is-gone .eye { fill: var(--warn); animation: none; transform: scaleY(0.12); }
 
-/* The setup page, waiting on a pick: the point look without the work
-   spinner -- a friendly lean and wave, star lit, while nothing runs yet. */
+/* The setup page, waiting on a pick: the point look, nothing running yet. */
 .planny.is-setup { animation: planny-lean 2.6s ease-in-out infinite; }
 .planny.is-setup .eye { fill: var(--accent); }
 
 /* ------------------------------------------------------ mood variants
 
-   Each mood above is a family, not a single drawing: app.js rolls a v0/v1/v2
-   every time the mood CHANGES, so "your turn" does not look identical every
-   time it comes around. v0 is always the plain version written above; the
-   variants below are the alternates. Rules stay on the parts (arms, eye,
-   feet) rather than on the svg where a variant can help it, so the flight
-   transform can keep owning the svg itself while the agent works. */
+   app.js rolls a v0/v1/v2 each time the mood CHANGES, so "your turn" does not
+   always look the same. v0 is the plain version above. Rules stay on the
+   parts (arms, eye, feet) where possible, so the flight transform keeps
+   owning the svg while the agent works. */
 
-/* Parts only the alternates use. Hidden here, woken by the variant. */
+/* Parts only the variants use; hidden until woken. */
 .planny .spark { opacity: 0; }
 .planny .spark path {
   fill: var(--accent);
@@ -256,17 +243,16 @@
 }
 
 /* point -- something is yours to do. */
-/* v1: an eager little hop while he waves. */
+/* v1: a little hop while he waves. */
 .planny.is-point.v1 { animation: planny-float 1.4s ease-in-out infinite; }
-/* v2: still leaning, but his star darts like he is pointing things out. */
+/* v2: leaning, star darting as if pointing things out. */
 .planny.is-point.v2 { animation: planny-lean 3.2s ease-in-out infinite; }
 .planny.is-point.v2 .eye { animation: eye-dart 3.4s ease-in-out infinite; }
 
-/* work -- the agent has it. The flight already owns the svg, so every work
-   variant plays on his parts only. */
-/* v1: reading. The star sweeps back and forth instead of turning. */
+/* work -- the agent has it. The flight owns the svg, so variants use parts only. */
+/* v1: reading, the star sweeps instead of turning. */
 .planny.is-work.v1 .eye { animation: eye-scan 1.6s ease-in-out infinite; }
-/* v2: full tilt. The star turns faster and throbs while he runs. */
+/* v2: full tilt, star turns faster and throbs. */
 .planny.is-work.v2 .eye { animation: planny-spin 1.4s linear infinite, star-throb 0.7s ease-in-out infinite; }
 .planny.is-work.v2 .arm.pump-l,
 .planny.is-work.v2 .arm.pump-r,
@@ -281,13 +267,13 @@
 .planny.is-happy.v2 .spark g + g path { animation-delay: 1.5s; }
 
 /* done -- session over. */
-/* v1: a small satisfied nod, on a long leash so it reads as occasional. */
+/* v1: a small nod, spaced out so it reads as occasional. */
 .planny.is-done.v1 { animation: planny-nod 4.4s ease-in-out infinite; transform-origin: 50% 92%; }
 .planny.is-done.v1 .spark { opacity: 1; }
 .planny.is-done.v1 .spark path { animation: spark-pop 4.4s ease-in-out infinite; }
 
 /* adrift -- the page is fine, the other end is not. */
-/* v1: a slow lost sway, star drifting up to look for him. */
+/* v1: a slow lost sway, star drifting up. */
 .planny.is-adrift.v1 { animation: planny-sway 5.4s ease-in-out infinite; transform-origin: 50% 100%; }
 .planny.is-adrift.v1 .eye { animation: eye-up 5.4s ease-in-out infinite; }
 
@@ -299,13 +285,12 @@
 
 /* ------------------------------------------------------------ wake-up
 
-   A freshly opened dashboard: Planny powers on center stage, then glides
-   into the rail (boot.js). Each beat is a keyframe on a delay under
-   `.booting`, one class for the whole run; the glide's target depends on
-   where the rail sits, so boot.js hands it over as --wake-glide. The layer
-   takes clicks so none lands on a card underneath while he wakes. */
-.wake { position: fixed; inset: 0; z-index: 45; pointer-events: auto; }
-/* Solid page color behind the sleeping bot, following light/dark via --bg. */
+   A fresh dashboard: Planny powers on center stage, then glides into the rail
+   (boot.js). Each beat is a delayed keyframe under `.booting`; boot.js passes
+   the glide target as --wake-glide. The layer takes clicks so none reaches a
+   card underneath. */
+.wake { position: fixed; inset: 0; z-index: var(--z-wake); pointer-events: auto; }
+/* Solid page color behind the bot (--bg follows light/dark). */
 .wake::before { content: ""; position: absolute; inset: 0; background: var(--bg); }
 .wake[hidden] { display: none; }
 .wake-bot {
@@ -322,8 +307,8 @@
 .wake-bot .shell { fill: var(--panel-2); }
 .wake-bot .foot { fill: var(--ink-3); }
 .wake-bot .eye { fill: var(--ink); transform-box: fill-box; transform-origin: center; }
-/* The star and its scan sit in .look, so the glance moves them together
-   without fighting the star's own open-and-light transform. */
+/* Star and scan sit in .look so the glance moves both without fighting the
+   star's own open-and-light transform. */
 .wake-bot .look { transform-box: view-box; }
 .wake-bot .scan { fill: none; stroke: var(--accent); stroke-width: 0.5; opacity: 0; }
 .wake-bot .body { transform-box: view-box; transform-origin: 11px 28.8px; }
@@ -331,13 +316,13 @@
 .wake-bot .limb { transform-box: view-box; }
 .wake-bot .limb.l { transform-origin: 3px 18px; }
 .wake-bot .limb.r { transform-origin: 19px 18px; }
-/* His Z's sit outside .body, so neither the breathing nor the hop moves them. */
+/* The Z's sit outside .body, so breathing and the hop do not move them. */
 .wake-bot .zzz { transform-box: view-box; transform-origin: 18px 1px; }
 .wake-bot .zzz path {
   fill: none; stroke: var(--ink-3); stroke-width: 0.8; stroke-linecap: round; stroke-linejoin: round;
   opacity: 0; transform-box: fill-box;
 }
-/* Dormant, before the first click: the one line telling them to wake him. */
+/* Dormant, before the first click: tells them to wake him. */
 .wake.dormant { cursor: pointer; }
 .wake-hint {
   position: absolute; left: 0; right: 0; top: 50%; margin: 147px 0 0;
@@ -346,18 +331,17 @@
 }
 .wake.dormant .wake-hint { opacity: 1; }
 
-/* Skip: bottom right, out of the animation's way but big enough to find. */
+/* Skip: bottom right, out of the way but easy to find. */
 .wake-skip {
   position: absolute; right: 24px; bottom: 24px;
-  min-width: 120px; padding: 10px 26px; border: 1.5px solid var(--ink-2); border-radius: 6px;
+  min-width: 120px; padding: 10px 26px; border: 1.5px solid var(--ink-2); border-radius: var(--radius-sm);
   background: var(--panel-2); color: var(--ink-2);
   font: inherit; font-size: 1rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
   cursor: pointer; opacity: 0.9;
 }
 .wake-skip:hover, .wake-skip:focus-visible { opacity: 1; color: var(--ink); border-color: var(--ink); }
 
-/* 0.0 s, powered down: the resting state every beat starts from. Arms hang
-   slack against his sides, the star is shut and the smile not yet drawn. */
+/* 0.0 s, powered down: the start of every beat. Arms slack, star shut, no smile. */
 .wake-bot { filter: grayscale(1); opacity: 0.55; }
 .wake-bot .limb.l { transform: rotate(-14deg); }
 .wake-bot .limb.r { transform: rotate(14deg); }
@@ -365,10 +349,9 @@
 .wake-bot .smile { stroke-dasharray: 7; stroke-dashoffset: 7; }
 
 @media (prefers-reduced-motion: no-preference) {
-  /* Asleep until the click, on loop: Z's drift up, he breathes, his slack
-     arms sway out of step, and his feet pulse like a standby light. Each
-     stops the moment .booting swaps in and hands the part to its beat below.
-     The Z's keep rising through the pop, so they never jump back. */
+  /* Asleep until the click, looping: Z's drift up, he breathes, arms sway out
+     of step, feet pulse like a standby light. Each stops when .booting swaps
+     in its beat below; the Z's keep rising through the pop so they never jump. */
   .wake:is(.dormant, .stirring, .booting) .wake-bot .zzz path { animation: zzz-rise 3.2s ease-in infinite; }
   .wake:is(.dormant, .stirring, .booting) .wake-bot .zzz path:nth-of-type(2) { animation-delay: 1.05s; }
   .wake:is(.dormant, .stirring, .booting) .wake-bot .zzz path:nth-of-type(3) { animation-delay: 2.1s; }
@@ -376,16 +359,14 @@
   .wake:is(.dormant, .stirring) .wake-bot .limb.l { animation: wake-doze-l 3.6s ease-in-out infinite; }
   .wake:is(.dormant, .stirring) .wake-bot .limb.r { animation: wake-doze-r 4.1s ease-in-out infinite; }
   .wake:is(.dormant, .stirring) .wake-bot .foot { animation: wake-standby 2.8s ease-in-out infinite; }
-  /* Nudged, for one snore (app.js stir): still asleep, rocked gently side to
-     side about his feet, a pair of rocks then a pause, as if being shaken. */
+  /* Nudged for one snore (app.js stir): still asleep, rocked about his feet. */
   .wake.stirring .wake-bot .body { animation: wake-nudge 1.3s ease-in-out infinite; }
-  /* Startled awake: the Z's blow outward and are gone. */
+  /* Startled awake: the Z's blow outward. */
   .wake.booting .wake-bot .zzz { animation: wake-zzz-pop 0.3s ease-out both; }
 
-  /* 0.4 s power-on and feet blink · 1.35 s feet plant · 1.5 s / 1.9 s arms
-     lift off his sides · 2.5 s star opens with the scan, lit · 2.85 s he
-     looks left, then right, then ahead · 3.2 s smile · 3.6 s hop, arms up in
-     a cheer, star back to ink. */
+  /* 0.4 s power-on, feet blink · 1.35 s feet plant · 1.5/1.9 s arms lift ·
+     2.5 s star opens, lit · 2.85 s looks left, right, ahead · 3.2 s smile ·
+     3.6 s hop, arms up, star back to ink. */
   .wake.booting .wake-bot { animation: wake-power 0.3s ease 0.4s both; }
   .wake.booting .wake-bot .foot { animation: wake-feet 0.5s steps(1) 0.4s both, wake-plant 0.2s ease 1.35s both; }
   .wake.booting .wake-bot .limb.l { animation: wake-lift-l 0.45s cubic-bezier(.3,1.6,.5,1) 1.5s both, wake-cheer-l 0.5s ease-out 3.6s both; }
@@ -396,13 +377,12 @@
   .wake.booting .wake-bot .smile { animation: wake-smile 0.4s ease-out 3.2s both; }
   .wake.booting .wake-bot .body { animation: wake-hop 0.5s ease-out 3.6s both; }
 
-  /* 4.3 s, into the rail. The power-on is long finished by now and holds its
-     last frame, so the transition owns the transform alone. */
+  /* 4.3 s, into the rail. The power-on holds its last frame, so the transition
+     owns the transform alone. */
   .wake.gliding .wake-bot { transform: var(--wake-glide); transition: transform 0.6s cubic-bezier(.6,0,.2,1); }
   .wake.gliding::before { opacity: 0; transition: opacity 0.6s ease; }
 
-  /* The menu comes in as he leaves: pre-hidden while he wakes, then each
-     group rises in, a beat after the one above it. */
+  /* The menu is hidden while he wakes, then each group rises in turn. */
   .dash.waking .dash-group { opacity: 0; transform: translateY(8px); }
   .dash.waking.is-in .dash-group { animation: dash-rise 0.5s ease both; }
   .dash.waking.is-in .dash-group:nth-child(2 of .dash-group) { animation-delay: 0.06s; }
@@ -412,14 +392,14 @@
   .dash.waking.is-in .dash-group:nth-child(6 of .dash-group) { animation-delay: 0.3s; }
 }
 
-/* One Planny on screen: the rail's waits out of sight (keeping its place,
-   so the glide can measure it) until the big one lands on it. */
+/* One Planny on screen: the rail's hides, keeping its place so the glide can
+   measure it, until the big one lands. */
 .pilot.is-waking { visibility: hidden; }
 /* The note types in (app.js revealNote): what it has not reached waits. */
 .dash-note .is-untyped { visibility: hidden; }
 
 @keyframes wake-power { from { filter: grayscale(1); opacity: 0.55; } to { filter: none; opacity: 1; } }
-/* Off for the delay, then on-off-on-off-on, like a standby light waking. */
+/* Off for the delay, then on-off-on-off-on like a standby light. */
 @keyframes wake-feet {
   0% { fill: var(--ink-3); }
   0.1% { fill: var(--accent); }
@@ -431,8 +411,7 @@
 @keyframes wake-plant { from { fill: var(--accent); } to { fill: var(--ink-2); } }
 @keyframes wake-lift-l { from { transform: rotate(-14deg); } to { transform: rotate(0); } }
 @keyframes wake-lift-r { from { transform: rotate(14deg); } to { transform: rotate(0); } }
-/* Up and back down: the arms end on the rest pose the rail draws, so the
-   glide hands over to an identical drawing. */
+/* Arms end on the rail's rest pose so the glide hands over seamlessly. */
 @keyframes wake-cheer-l {
   0%, 100% { transform: rotate(0); }
   45%, 60% { transform: rotate(116deg); }
@@ -452,8 +431,7 @@
   20%, 80% { opacity: 1; }
   100% { opacity: 0; transform: translateX(3px); }
 }
-/* A glance each way, then eyes front before the hop: he ends where the rail
-   draws him, so the glide still lands on an identical drawing. */
+/* A glance each way, then eyes front: he ends as the rail draws him. */
 @keyframes wake-look {
   0%, 100% { transform: translateX(0); }
   17.5%, 42.5% { transform: translateX(-2.2px); }
@@ -530,9 +508,9 @@
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   padding: 6px 13px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   /* A doc titled with a sentence keeps the tab row to one line. */
   max-width: 22ch;
@@ -548,7 +526,7 @@
   font-weight: 600;
 }
 .view-tab .tab-count {
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   opacity: 0.75;
   margin-left: 5px;
 }

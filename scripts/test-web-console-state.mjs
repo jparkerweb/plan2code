@@ -26,6 +26,7 @@ test("state: page starts as app.js always started it", () => {
     noteSend: null,
     noteSent: null,
     retract: {},
+    seeded: {},
     chat: { draft: "", history: [], about: null, pending: [], lastSeenReplyId: null, images: [], conversation: null },
   });
 });

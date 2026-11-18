@@ -12,6 +12,8 @@ import { SKILL_CATALOG } from "../answers.js";
 import { postJson } from "../net.js";
 import { tellApp, wireLoopMessages } from "../app-bridge.js";
 
+let justPicked = ""; // the strength node picked a moment ago, which alone plays its grow
+
 const LEVELS = [
   ["critical", "Critical"],
   ["warning", "Warning"],
@@ -532,9 +534,11 @@ function strengthField(s, redo) {
         if (!input.checked) return;
         setPick(f, s.spec, p, c.value);
         s.problems = [];
+        justPicked = input.id; // only this redraw plays the grow
         redraw();
+        justPicked = "";
       });
-      const node = el("span", "loop-strength-node");
+      const node = el("span", "loop-strength-node" + (input.id === justPicked ? " is-picked" : ""));
       node.appendChild(strengthBars(c.level));
       cell.append(input, node);
       row.appendChild(cell);
@@ -631,7 +635,7 @@ function drawBody(pane, s) {
   );
   const kindLabel = el("label", "loop-number");
   kindLabel.appendChild(el("span", null, "Send to"));
-  const kindSelect = el("select", "loop-text");
+  const kindSelect = el("select", "is-compact loop-text");
   kindSelect.id = "loop-notify-kind";
   for (const kind of NOTIFY_KINDS) {
     const option = el("option", null, kind.label);
@@ -641,7 +645,7 @@ function drawBody(pane, s) {
   kindSelect.value = f.notifyKind;
   kindLabel.appendChild(kindSelect);
   const kindHint = el("p", "loop-hint");
-  const notifyInput = el("input", "loop-text");
+  const notifyInput = el("input", "is-compact loop-text");
   notifyInput.type = "text";
   notifyInput.inputMode = "url";
   notifyInput.id = "loop-notify-url";
@@ -652,7 +656,7 @@ function drawBody(pane, s) {
   const paramLabel = el("label", "loop-number");
   const paramText = el("span");
   paramLabel.appendChild(paramText);
-  const paramInput = el("input", "loop-text loop-param");
+  const paramInput = el("input", "is-compact loop-text loop-param");
   paramInput.type = "text";
   paramInput.id = "loop-notify-param";
   paramInput.value = f.notifyParam;
@@ -716,7 +720,7 @@ function drawBody(pane, s) {
   form.appendChild(notify);
 
   const check = field("Quick check", "A command the app runs after each phase, such as npm run build. The page never runs it.");
-  const checkInput = el("input", "loop-text");
+  const checkInput = el("input", "is-compact loop-text");
   checkInput.type = "text";
   checkInput.id = "loop-quickcheck";
   checkInput.value = f.quickCheck;
@@ -736,7 +740,7 @@ function drawBody(pane, s) {
   retry.appendChild(toggle("loop-retry", "Retry it once", f.retryOnce, (v) => ((f.retryOnce = v), redo())));
   const silence = el("label", "loop-number");
   silence.appendChild(el("span", null, "Count the agent as stuck after this many minutes with no activity"));
-  const silenceInput = el("input", "loop-text loop-narrow");
+  const silenceInput = el("input", "is-compact loop-text loop-narrow");
   silenceInput.type = "number";
   silenceInput.id = "loop-silence";
   silenceInput.min = "1";

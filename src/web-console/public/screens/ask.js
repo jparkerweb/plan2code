@@ -1,9 +1,10 @@
 // Plan2Code Web Console - the Ask chat, the Subagents tab, and attaching files to notes.
 
+import { NOT_CONNECTED } from "../labels.js";
 import { page, saveNow, redraw, freshChat, hooks, scrollMemory, setDraft } from "../state.js";
 import { chatAnswering, chatOffline, chatView, sendState as chatSendState, newestReplyId, CHAT_MAX_CHARS, nextAbout, CHAT_MAX_ATTACHMENTS, contextOptions } from "../chat.js";
 import { finish, activity, agentAdrift, isDashboard, selSpec, byId, isOpen, loopAskLocked, loopDriving } from "../selectors.js";
-import { el, md, isMac, lightDismiss, shortTime } from "../render.js";
+import { el, icon, md, isMac, lightDismiss, shortTime } from "../render.js";
 import { startersFor } from "../starters.js";
 import { looks } from "../looks.js";
 import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incomingFiles, deleteUrl, sentAttachments, noteImages, attachRow, openPicview, refocusThumb } from "../uploads.js";
@@ -89,7 +90,7 @@ export function renderAsk(main, held = null) {
   const head = el("div", "ask-head");
   head.appendChild(el("h2", null, "Quick question"));
   head.appendChild(el("span", "ask-counter", v.counterText));
-  const reset = el("button", "btn small ghost", "New conversation");
+  const reset = el("button", "btn sm ghost", "New conversation");
   reset.type = "button";
   reset.disabled = ss.state === "offline" || chatResetting;
   reset.addEventListener("click", newConversation);
@@ -183,7 +184,7 @@ function askStarters(ss) {
   const box = el("div", "ask-starters");
   box.appendChild(el("p", "ask-starters-lead", "Not sure what to ask? Try one of these:"));
   for (const starter of startersFor(page.S.workflow, looks.role, { hasContext: Boolean(page.local.chat.about) })) {
-    const b = el("button", "ask-starter", starter.text);
+    const b = el("button", "btn sm ask-starter", starter.text);
     b.type = "button";
     b.disabled = !ss.canType;
     b.addEventListener("click", () => {
@@ -206,7 +207,7 @@ function askRow(r, ss, notes) {
     const working = r.decision === "approve" && !r.done;
     const line = el("p", working ? "ask-decision working" : "ask-decision");
     if (working) line.appendChild(el("span", "spinner tiny"));
-    line.appendChild(document.createTextNode(r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit, please wait..."));
+    line.appendChild(document.createTextNode(r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit. Applying it…"));
     row.appendChild(line);
     if (r.text) row.appendChild(el("p", "ask-text", r.text));
     return row;
@@ -259,8 +260,8 @@ function askRow(r, ss, notes) {
     row.appendChild(tray);
   }
   if (r.pending && r.failed) {
-    const fail = el("p", "ask-waiting ask-failed", "Not sent — retry");
-    const retry = el("button", "btn tiny", "Retry");
+    const fail = el("p", "ask-waiting ask-failed", "Not sent: retry");
+    const retry = el("button", "btn xs soft", "Retry");
     retry.type = "button";
     retry.disabled = ss.state === "offline" || chatSending;
     retry.addEventListener("click", () => retryChat(r.tempId));
@@ -285,7 +286,7 @@ function askRow(r, ss, notes) {
 }
 
 function askProposal(r, ss, note) {
-  const box = el("div", "ask-proposal");
+  const box = el("div", "callout is-stage ask-proposal");
   box.appendChild(el("p", "note-kicker", "Proposed change"));
   box.appendChild(md(r.proposal.summary, "md"));
   const files = el("ul", "ask-proposal-files");
@@ -303,13 +304,13 @@ function askProposal(r, ss, note) {
   }
   const busy = deciding.has(r.id) || ss.state === "offline";
   const row = el("div", "ask-proposal-actions");
-  const approve = el("button", "btn small primary", "Approve");
+  const approve = el("button", "btn sm primary", "Approve");
   approve.type = "button";
   approve.disabled = busy;
   approve.addEventListener("click", () => decideChat(r.id, "approve", ""));
   row.appendChild(approve);
   if (!declineOpen.has(r.id)) {
-    const decline = el("button", "btn small ghost", "Decline");
+    const decline = el("button", "btn sm ghost", "Decline");
     decline.type = "button";
     decline.disabled = busy;
     decline.addEventListener("click", () => {
@@ -333,7 +334,7 @@ function askProposal(r, ss, note) {
       decideChat(r.id, "decline", input.value);
     });
     row.appendChild(input);
-    const go = el("button", "btn small", "Send decline");
+    const go = el("button", "btn sm", "Send decline");
     go.type = "button";
     go.disabled = busy;
     go.addEventListener("click", () => decideChat(r.id, "decline", declineOpen.get(r.id) || ""));
@@ -352,7 +353,8 @@ function askComposer(ss) {
   if (about) {
     const chip = el("div", "ask-about-chip");
     chip.appendChild(el("span", null, "About: " + about.label));
-    const x = el("button", "attach-remove", "×");
+    const x = el("button", "attach-remove");
+    x.appendChild(icon("close"));
     x.type = "button";
     x.setAttribute("aria-label", "Send without this");
     x.addEventListener("click", () => {
@@ -376,7 +378,7 @@ function askComposer(ss) {
   comp.appendChild(ta.el);
 
   const row = el("div", "ask-actions");
-  const add = el("button", "btn small ghost", "+ Attach file");
+  const add = el("button", "btn sm ghost", "+ Attach file");
   add.type = "button";
   add.setAttribute("aria-label", "Add files to this question");
   add.disabled = !ss.canType || page.local.chat.images.length >= CHAT_MAX_ATTACHMENTS;
@@ -399,7 +401,7 @@ function askComposer(ss) {
   const counter = el("span", "ask-count");
   if (!ss.canType) {
     const cls = ss.state === "offline" ? "is-offline" : ss.state === "limit" ? "is-limit" : "is-waiting";
-    row.appendChild(el("p", "ask-disabled-note " + cls, ss.text));
+    row.appendChild(el("p", "ask-disabled-note " + cls + (ss.state === "offline" ? " callout is-warn" : ""), ss.text));
   } else {
     row.appendChild(counter);
     const hint = el("span", "ask-send-hint");
@@ -413,7 +415,7 @@ function askComposer(ss) {
   // left of Send; in a browser, the line telling the person to.
   if (ss.state === "offline" && !finish()) row.appendChild(reconnectOffer("ask-reconnect"));
 
-  const go = el("button", "btn small primary", "Send");
+  const go = el("button", "btn sm primary", "Send");
   go.type = "button";
   row.appendChild(go);
   comp.appendChild(row);
@@ -476,7 +478,7 @@ function addContext(ss) {
   const wrap = el("span", "ask-context");
   const spec = isDashboard() ? selSpec() : page.S && page.S.specDir ? { dir: page.S.specDir } : null;
   const options = contextOptions(page.local.chat, spec);
-  const btn = el("button", "btn small ghost", "+ Add context");
+  const btn = el("button", "btn sm ghost", "+ Add context");
   btn.type = "button";
   btn.setAttribute("aria-haspopup", "menu");
   btn.setAttribute("aria-expanded", "false");
@@ -551,7 +553,7 @@ function addContext(ss) {
 }
 
 const CHAT_ERRORS = {
-  stale: "A new conversation started. Your message is still here — press Send again.",
+  stale: "A new conversation started. Your message is still here: press Send again.",
   "too-long": `That message is over ${CHAT_MAX_CHARS.toLocaleString()} characters. Shorten it and send again.`,
   image: "One of the images could not be attached. Remove it and try again.",
   file: "One of the files could not be attached. Remove it and try again.",
@@ -713,8 +715,9 @@ export function renderAside() {
   // belong to a question stay on its own page.
   const item = page.view === "end" ? null : byId(page.selected);
   if (!item) {
-    // The menu has no questions, so no notes either: the pane stays empty.
-    if (!isDashboard()) aside.appendChild(el("p", "aside-empty", askOffered() ? ASK_HINT : "Pick a question to see its notes."));
+    // No question, so no notes either: the pane stays empty (and its column
+    // collapses, shell.css) unless the stopped loop has its one hint to give.
+    if (!isDashboard() && askOffered()) aside.appendChild(el("p", "empty", ASK_HINT));
     return;
   }
   // Off the question's own page (a doc tab, Ask) "this" points at nothing on
@@ -727,7 +730,7 @@ export function renderAside() {
     aside.appendChild(
       el(
         "p",
-        "aside-empty",
+        "empty",
         askOffered()
           ? ASK_HINT
           : isOpen(item) && !finish()
@@ -764,7 +767,7 @@ export function renderAside() {
   // say so, because the reply may have changed what the question asks.
   const last = thread[thread.length - 1];
   if (item.noted === true && isOpen(item) && !finish() && last && threadWho(last) === "agent") {
-    const tag = el("p", "pill noted-tag", "Plan2Code replied, check this still fits");
+    const tag = el("p", "pill is-stage noted-tag", "Plan2Code replied, check this still fits");
     tag.setAttribute("role", "note");
     aside.appendChild(tag);
   }
@@ -840,7 +843,7 @@ const SUGGEST_KINDS = ["choice", "multi", "confirm", "lessons"];
 // stays in the panel: on the chip when it is live again, else the note box.
 function suggestChip(item) {
   const st = suggestState(item);
-  const chip = el("button", "btn tiny suggest-chip", "Ask for suggestions");
+  const chip = el("button", "btn xs soft suggest-chip", "Ask for suggestions");
   chip.type = "button";
   chip.id = "suggest-" + item.id;
   chip.setAttribute("aria-label", "Ask Plan2Code for suggestions on this question");
@@ -882,7 +885,7 @@ function sentWaitingTag() {
 }
 
 function suggestTag() {
-  return el("span", "pill suggest-tag", "Asked for suggestions");
+  return el("span", "pill is-accent suggest-tag", "Asked for suggestions");
 }
 
 // The helpers the agent reported, as it last posted them. Everything here is
@@ -894,7 +897,7 @@ export function renderSubagents(main) {
   const { alone, rows } = helperRows(page.S.helpers);
   if (alone) {
     card.appendChild(
-      el("p", "sa-alone", "Working alone: your agent has no way to start helpers here, so it is doing this skill's work itself.")
+      el("p", "sa-alone", "Working alone: your agent has no way to start subagents here, so it is doing this skill's work itself.")
     );
     main.appendChild(card);
     return;
@@ -947,9 +950,12 @@ export function renderSubagentsButton() {
   btn.hidden = !offer;
   if (!offer) return;
   const label = switchLabel(page.subagentsFrame);
-  btn.setAttribute("aria-pressed", String(Boolean(page.subagentsFrame.on)));
+  // The state lives in the label and a data attribute (the lit look), never in
+  // aria-pressed: the button opens a dialog, it does not toggle.
+  btn.dataset.on = String(Boolean(page.subagentsFrame.on));
   btn.title = label;
   btn.setAttribute("aria-label", label);
+  $("subagents-label").textContent = label;
   // The Subagents switch is the person's setting for the next agent; the loop's phases are already started.
   btn.disabled = page.gone || loopDriving();
 }
@@ -967,6 +973,7 @@ export function openSubagents() {
   const strength = STRENGTHS.includes(page.subagentsFrame.strength) ? page.subagentsFrame.strength : DEFAULT_STRENGTH;
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.checked = radio.value === strength;
   syncStrengthHelp();
+  loadedSubagents = subagentsFields();
   $("subagents-checkin").textContent = CHECKIN_LINE;
   const research = $("subagents-research");
   research.textContent = PATHFINDER_RESEARCH_LINE;
@@ -977,6 +984,90 @@ export function openSubagents() {
   $("subagents-modal").showModal();
   const checked = document.querySelector('input[name="subagents-on"]:checked');
   if (checked) checked.focus();
+}
+
+// The dialog's four fields as they stand now: the Instruction (the default's
+// text and an empty box both count as the default), the number, the switch and
+// the strength. Compared with what openSubagents loaded to see an edit.
+let loadedSubagents = null;
+function subagentsFields() {
+  const on = document.querySelector('input[name="subagents-on"]:checked');
+  const strength = document.querySelector('input[name="subagents-strength"]:checked');
+  return {
+    on: Boolean(on && on.value === "on"),
+    max: String($("subagents-max").value),
+    strength: strength ? strength.value : DEFAULT_STRENGTH,
+    instruction: instr().value.trim(),
+  };
+}
+export function subagentsDirty() {
+  if (!loadedSubagents) return false;
+  const now = subagentsFields();
+  return Object.keys(now).some((k) => now[k] !== loadedSubagents[k]);
+}
+
+// The unsaved prompt, inside the dialog (never confirm()), in Preferences'
+// order: Keep editing, Discard, Save, with focus on Keep editing. Resolves true
+// when the dialog may close.
+let askingSubagents = null;
+function wireSubagentsPrompt() {
+  const box = el("div", "prefs-unsaved");
+  box.id = "subagents-unsaved";
+  box.hidden = true;
+  box.setAttribute("role", "alertdialog");
+  box.setAttribute("aria-labelledby", "subagents-unsaved-title");
+  const inner = el("div", "prefs-unsaved-box");
+  const title = el("h3", null, "Discard your changes?");
+  title.id = "subagents-unsaved-title";
+  const keep = el("button", "btn sm ghost", "Keep editing");
+  keep.type = "button";
+  keep.id = "subagents-unsaved-keep";
+  const discard = el("button", "btn sm ghost", "Discard");
+  discard.type = "button";
+  discard.id = "subagents-unsaved-discard";
+  const save = el("button", "btn sm primary", "Save");
+  save.type = "button";
+  save.id = "subagents-unsaved-save";
+  const end = (go) => {
+    box.hidden = true;
+    for (const n of behindSubagentsPrompt()) n.inert = false;
+    const { resolve } = askingSubagents;
+    askingSubagents = null;
+    resolve(go);
+  };
+  keep.addEventListener("click", () => {
+    end(false);
+    const first = document.querySelector('input[name="subagents-on"]:checked');
+    if (first) first.focus();
+  });
+  discard.addEventListener("click", () => end(true));
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    const saved = await saveSubagents();
+    save.disabled = false;
+    if (askingSubagents) end(saved === true);
+  });
+  const actions = el("div", "prefs-unsaved-actions");
+  actions.append(keep, discard, save);
+  inner.append(title, actions);
+  box.append(inner);
+  $("subagents-modal").append(box);
+}
+const behindSubagentsPrompt = () => [$("subagents-title"), ...$("subagents-modal").querySelectorAll(":scope > :not(#subagents-unsaved)")];
+export function confirmSubagentsDiscard() {
+  if (!subagentsDirty()) return Promise.resolve(true);
+  if (askingSubagents) return askingSubagents.promise;
+  let resolve;
+  const promise = new Promise((r) => (resolve = r));
+  askingSubagents = { resolve, promise };
+  for (const n of behindSubagentsPrompt()) n.inert = true;
+  $("subagents-unsaved").hidden = false;
+  $("subagents-unsaved-save").disabled = false;
+  $("subagents-unsaved-keep").focus();
+  return promise;
+}
+async function closeSubagents() {
+  if (await confirmSubagentsDiscard()) $("subagents-modal").close();
 }
 
 // Instruction, "at most" and strength only mean anything with helpers on, so
@@ -998,12 +1089,12 @@ function syncStrengthHelp() {
 const SUBAGENTS_ERRORS = {
   max: "Pick a number from 1 to 20.",
   "too-long": "The instruction is over 2,000 characters.",
-  strength: "That strength isn't one of the four choices.",
-  "not-offered": "This skill doesn't use helpers.",
-  bad: "That didn't save. Try again.",
+  strength: "That strength is not one of the four choices.",
+  "not-offered": "This skill does not use subagents.",
+  bad: "That did not save. Try again.",
 };
 
-const SUBAGENTS_LOST = "Lost contact with Plan2Code. Try again once it's back.";
+const SUBAGENTS_LOST = `${NOT_CONNECTED} Try again once it is back.`;
 
 export async function saveSubagents() {
   const save = $("subagents-save");
@@ -1025,10 +1116,14 @@ export async function saveSubagents() {
   const res = await postJson("/subagents", body);
   save.disabled = false;
   // The next state frame redraws the button.
-  if (res.status === 200) return $("subagents-modal").close();
+  if (res.status === 200) {
+    $("subagents-modal").close();
+    return true;
+  }
   if (res.status === 400) status.textContent = SUBAGENTS_ERRORS[res.body && res.body.error] || SUBAGENTS_ERRORS.bad;
   else if (res.status === 403 || res.status === 0) status.textContent = SUBAGENTS_LOST;
   else status.textContent = SUBAGENTS_ERRORS.bad;
+  return false;
 }
 
 // Whether the agent coming or going has changed what the Ask pane painted,
@@ -1039,13 +1134,28 @@ export const askOfflineFlipped = () => (askState().send.state === "offline") !==
 export function wireAsk() {
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) radio.addEventListener("change", syncSubagentsFields);
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.addEventListener("change", syncStrengthHelp);
-  lightDismiss($("subagents-modal"));
+  wireSubagentsPrompt();
+  lightDismiss($("subagents-modal"), confirmSubagentsDiscard);
+  $("subagents-modal").addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (askingSubagents) {
+      e.preventDefault();
+      $("subagents-unsaved-keep").click();
+    } else if (subagentsDirty()) {
+      e.preventDefault();
+      closeSubagents();
+    }
+  });
+  $("subagents-modal").addEventListener("cancel", (e) => {
+    if (!askingSubagents && !subagentsDirty()) return;
+    e.preventDefault();
+  });
   $("btn-subagents").addEventListener("click", openSubagents);
   $("subagents-default").addEventListener("click", () => {
     instr().value = defaultInstruction(page.S.workflow);
   });
   $("subagents-save").addEventListener("click", saveSubagents);
-  $("subagents-cancel").addEventListener("click", () => $("subagents-modal").close());
+  $("subagents-cancel").addEventListener("click", closeSubagents);
   $("subagents-modal").addEventListener("close", () => $("btn-subagents").focus());
 
   // Dropping files onto the notes panel attaches them to the selected

@@ -65,14 +65,21 @@ for (const [state, pill] of [
   ["not-set-up", "Not set up"],
   ["off", "Off"],
 ]) {
-  test(`${state}: the row sits under the picker with its pill and Switch on`, async (t) => {
+  test(`${state}: the row sits where its state puts it, with its pill and Switch on`, async (t) => {
     const { main } = await dashboard(t, PROJECT(state === "not-set-up" ? null : state));
     const row = main.locator("section.learn-row");
     await row.waitFor();
     const where = await placeOf(main);
     assert.equal(where.rows, 1);
-    assert.equal(where.row, where.toggle + 1, "directly after the hide-unavailable toggle");
-    assert.ok(where.row < where.firstGroup, "above the card groups");
+    if (state === "not-set-up") {
+      // A newcomer's first dashboard offers one call to action, so Not set up waits at the bottom.
+      assert.ok(where.row > where.lastGroup, "after the card groups");
+      assert.equal(where.row, where.tip - 1, "directly before the approval tip");
+      assert.equal(await row.getByRole("button", { name: "Switch on" }).evaluate((b) => b.classList.contains("primary")), false, "a plain button");
+    } else {
+      assert.equal(where.row, where.toggle + 1, "directly after the hide-unavailable toggle");
+      assert.ok(where.row < where.firstGroup, "above the card groups");
+    }
     assert.equal((await row.locator(".learn-pill").textContent()).trim(), pill);
     assert.equal(await row.getByRole("button", { name: "Switch on" }).isEnabled(), true);
     if (state === "not-set-up") {

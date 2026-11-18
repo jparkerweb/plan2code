@@ -2,41 +2,35 @@
 
 /* ------------------------------------------------------- looks button */
 
+/* The top bar's tools: one group at the right edge. */
+.topbar-tools { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .icon-btn {
   appearance: none;
   flex: none;
-  margin-left: 14px;
   width: 36px;
   height: 36px;
   padding: 0;
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   cursor: pointer;
 }
 .icon-btn:hover { background: var(--panel-2); border-color: var(--rule); }
+/* One icon set: 24-unit drawings, a 1.8 stroke, round caps and joins, one ink
+   color at rest and the highlight on hover. The top bar buttons (here) and
+   the second row's buttons (below) share it. */
 .icon-btn svg { width: 22px; height: 22px; }
-.icon-btn .ab-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
-.icon-btn .ab-mark { fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-linecap: round; }
-.icon-btn .ab-dot { fill: var(--ink-2); }
-.icon-btn:hover .ab-ring { stroke: var(--accent); }
-.icon-btn:hover .ab-mark, .icon-btn:hover .ab-dot { stroke: var(--accent); fill: none; }
-.icon-btn:hover .ab-dot { fill: var(--accent); }
+.icon-btn svg * { fill: none; stroke: var(--ink-2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn svg .ab-dot, .icon-btn svg .dc-pip { fill: var(--ink-2); stroke: none; }
+.icon-btn:hover svg * { stroke: var(--accent); }
+.icon-btn:hover svg .ab-dot, .icon-btn:hover svg .dc-pip { fill: var(--accent); stroke: none; }
 
 a.icon-btn { box-sizing: border-box; text-decoration: none; }
 /* A link in a dialog (the update modal's release, Help's version) keeps the
    accent once visited: the browser's purple is unreadable on the dark theme. */
 .modal a:not(.btn), .modal a:not(.btn):visited { color: var(--accent); }
-.icon-btn .mg-body { fill: none; stroke: var(--ink-3); stroke-width: 1.4; stroke-linejoin: round; }
-.icon-btn .mg-line { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-.icon-btn:hover .mg-body, .icon-btn:hover .mg-line { stroke: var(--accent); }
-
-.icon-btn .gr-teeth { fill: none; stroke: var(--ink-3); stroke-width: 2.2; }
-.icon-btn .gr-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
-.icon-btn .gr-hub { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
-.icon-btn:hover .gr-teeth, .icon-btn:hover .gr-ring, .icon-btn:hover .gr-hub { stroke: var(--accent); }
 
 /* ------------------------------------------------------------ swatches */
 

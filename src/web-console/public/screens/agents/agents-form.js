@@ -38,7 +38,7 @@ function agentInput(ctx, agent, key, label, placeholder, trim) {
 // The command's Test: where it would run from. Never saves.
 function agentTest(ctx, agent) {
   const wrap = el("div", "prefs-agents-test");
-  const test = el("button", "btn small", "Test");
+  const test = el("button", "btn sm", "Test");
   test.type = "button";
   const result = el("span", "help agent-test-result");
   result.setAttribute("role", "status");
@@ -78,7 +78,7 @@ function modelRow(ctx, m, panel, onRemove) {
   row.appendChild(name);
   row.appendChild(panel ? panel.pills(m.id, m.label || m.id) : el("span"));
   if (onRemove) {
-    const remove = el("button", "btn small ghost", "Remove");
+    const remove = el("button", "btn sm ghost", "Remove");
     remove.type = "button";
     remove.setAttribute("aria-label", "Remove " + (m.label || m.id));
     remove.addEventListener("click", onRemove);
@@ -101,7 +101,7 @@ function addModelRow(ctx, list, { nameRequired, taken }) {
   label.placeholder = nameRequired ? "Name shown in the menu" : "Name shown in the menu (optional)";
   label.setAttribute("aria-label", "Name shown in the menu");
   label.dataset.field = "models";
-  const add = el("button", "btn small", "Add a model");
+  const add = el("button", "btn sm", "Add a model");
   add.type = "button";
   const submit = () => {
     const value = id.value.trim();
@@ -191,10 +191,10 @@ function modelsTab(ctx, key, draft) {
 function builtInLaunch(ctx, key) {
   const cli = cliOf(key);
   const entry = ctx.saved.builtins.find((b) => b.id === cli);
-  const note = el("div", "note");
+  const note = el("div", "callout is-info note");
   note.append(el("b", null, "Managed by Plan2Code. "), `The command and arguments for ${BUILT_IN[cli]} ship with the app and update with it. Only its models are yours to change.`);
   const list = el("dl", "kv");
-  const state = el("span", "prefs-badge");
+  const state = el("span", "pill is-neutral prefs-badge");
   const known = ctx.found.get(key);
   drawBadge(state, known ? known.state : "unknown");
   const command = el("dd");
@@ -231,26 +231,26 @@ function addedLaunch(ctx, draft) {
 // confirm on the form itself (never the browser's confirm()).
 function formFoot(ctx, key) {
   const foot = el("div", "agent-foot prefs-agents-foot");
-  const save = el("button", "btn small primary prefs-agents-save", "Save");
+  const save = el("button", "btn sm primary prefs-agents-save", "Save");
   save.type = "button";
   save.addEventListener("click", () => ctx.save(key));
-  const discard = el("button", "btn small ghost prefs-agents-discard", "Discard");
+  const discard = el("button", "btn sm ghost prefs-agents-discard", "Discard");
   discard.type = "button";
   discard.addEventListener("click", () => ctx.discard());
-  const badge = el("span", "prefs-unsaved-badge", "Unsaved");
+  const badge = el("span", "pill is-warn prefs-unsaved-badge", "Unsaved");
   foot.append(save, discard, badge);
   if (ctx.formReplace) {
-    const anyway = el("button", "btn small danger prefs-agents-replace", "Save anyway");
+    const anyway = el("button", "btn sm danger prefs-agents-replace", "Save anyway");
     anyway.type = "button";
     anyway.addEventListener("click", () => ctx.save(key, { replace: true }));
     foot.append(anyway);
   }
   if (key.startsWith("agent:") && key !== "agent:new") {
     if (ctx.confirming) {
-      const yes = el("button", "btn small danger", "Yes, delete");
+      const yes = el("button", "btn sm danger", "Yes, delete");
       yes.type = "button";
       yes.addEventListener("click", () => ctx.deleteAgent(key));
-      const keep = el("button", "btn small ghost", "Keep");
+      const keep = el("button", "btn sm ghost", "Keep");
       keep.type = "button";
       keep.addEventListener("click", () => {
         ctx.confirming = false;
@@ -258,7 +258,7 @@ function formFoot(ctx, key) {
       });
       foot.append(el("span", "help", "Delete this agent?"), yes, keep);
     } else {
-      const del = el("button", "btn small ghost danger prefs-agents-delete", "Delete agent");
+      const del = el("button", "btn sm ghost danger prefs-agents-delete", "Delete agent");
       del.type = "button";
       del.addEventListener("click", () => {
         ctx.confirming = true;
@@ -323,11 +323,11 @@ export function drawForm(ctx) {
   if (isCli) title.append(el("span", null, BUILT_IN[cliOf(key)]), el("code", null, cliOf(key)));
   else {
     title.append(el("span", null, key === "agent:new" ? "New agent" : savedEntry(ctx.saved, key).name));
-    if (key === "agent:new" && ctx.draftFrom) title.append(el("span", "tag", `From the ${ctx.draftFrom} template`));
+    if (key === "agent:new" && ctx.draftFrom) title.append(el("span", "pill is-neutral tag", `From the ${ctx.draftFrom} template`));
   }
   head.appendChild(title);
   if (ctx.$("drawer")) {
-    const close = el("button", "btn small ghost drawer-close", "Close");
+    const close = el("button", "btn sm ghost drawer-close", "Close");
     close.type = "button";
     close.setAttribute("aria-label", "Close");
     close.addEventListener("click", () => ctx.closeDrawer());

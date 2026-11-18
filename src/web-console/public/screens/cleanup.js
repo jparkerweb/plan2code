@@ -1,5 +1,7 @@
 // Plan2Code Web Console - User Preferences, the Cleanup section on the System tab.
 
+import { NOT_CONNECTED, agoWords, whenTitle } from "../labels.js";
+import { SKILLS } from "../skills.js";
 import { formatBytes } from "../answers.js";
 import { el } from "../render.js";
 import { postJson } from "../net.js";
@@ -11,9 +13,17 @@ const $ = (id) => document.getElementById(id);
 // server re-checks every one before removing it.
 let cleanupFound = null;
 
+// The ids ticked for deletion. A session or a stray file starts ticked; a
+// Notebook (private writing) or a completed spec starts unticked, so deleting
+// those is always a choice.
+let ticked = new Set();
+const startsTicked = (item) => item.where !== "notepad" && item.where !== "completed";
+
 // Bumped by every scan, delete and reset: a response from an older one is
 // dropped, so a scan still in flight when Preferences closes cannot refill it.
 let cleanupGen = 0;
+// True while a delete is on its way: a ticked box must not re-enable Delete.
+let cleanupBusy = false;
 
 const CLEANUP_SHOWN = 8;
 
@@ -25,8 +35,17 @@ function setCleanupStatus(text, isError) {
 
 const CLEANUP_WHERE = { root: "~/.plan2code/", console: "~/.plan2code/console/", completed: "specs--completed/" };
 
+// "Pathfinder · shop · 6 weeks ago": the skill, the session's title and when it
+// was last touched. An older session with no title keeps its folder name.
+function sessionLabel(item) {
+  const skill = SKILLS.find((s) => s.workflow === item.workflow);
+  const age = item.at && !Number.isNaN(Date.parse(item.at)) ? agoWords(Math.max(0, Date.now() - Date.parse(item.at))) : "";
+  const parts = item.title ? [skill ? skill.name : "", item.title, age] : ["Session " + item.name, age];
+  return parts.filter(Boolean).join(" · ");
+}
+
 function cleanupLabel(item) {
-  if (item.where === "session") return "Session " + item.name;
+  if (item.where === "session") return sessionLabel(item);
   // One notebook is one item, named by the folder it belongs to; its key only
   // when its meta.json is gone.
   if (item.where === "notepad") return "Notebook for " + (item.folder || item.name);
@@ -52,9 +71,25 @@ function cleanupSummary(items, bytes) {
 const keptBack = (item) => item.where === "completed" && item.tracked === false;
 const deletable = () => ((cleanupFound && cleanupFound.items) || []).filter((i) => !keptBack(i));
 
+// What Delete will do, said on the button: the ticked items and their size.
+function tickedItems() {
+  return deletable().filter((i) => ticked.has(i.id));
+}
+
+function paintDeleteButton() {
+  const chosen = tickedItems();
+  const button = $("cleanup-delete");
+  const bytes = chosen.reduce((n, i) => n + (i.bytes || 0), 0);
+  button.textContent = chosen.length
+    ? `Delete ${chosen.length} ${chosen.length === 1 ? "item" : "items"} · ${formatBytes(bytes)}`
+    : "Nothing ticked";
+  button.disabled = cleanupBusy || !chosen.length;
+}
+
 function resetCleanup() {
   cleanupGen++;
   cleanupFound = null;
+  ticked = new Set();
   $("cleanup-list").replaceChildren();
   $("cleanup-delete").hidden = true;
   $("cleanup-delete").disabled = false;
@@ -70,8 +105,18 @@ function renderCleanup() {
   const kept = all.filter(keptBack);
   $("cleanup-delete").hidden = !items.length;
   const rows = (some) => some.map((item) => {
-    const row = el("div", "cleanup-row");
-    row.append(el("span", null, cleanupLabel(item)), el("span", "cleanup-size", formatBytes(item.bytes)));
+    const row = el("label", "cleanup-row");
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = ticked.has(item.id);
+    box.addEventListener("change", () => {
+      if (box.checked) ticked.add(item.id);
+      else ticked.delete(item.id);
+      paintDeleteButton();
+    });
+    const label = el("span", null, cleanupLabel(item));
+    if (item.at) label.title = whenTitle(item.at);
+    row.append(box, label, el("span", "cleanup-size", formatBytes(item.bytes)));
     return row;
   });
   if (items.length) {
@@ -83,6 +128,7 @@ function renderCleanup() {
       list.appendChild(more);
     }
   }
+  paintDeleteButton();
   for (const item of kept) {
     const row = el("div", "cleanup-row cleanup-kept");
     row.append(el("span", null, cleanupLabel(item)), el("span", "cleanup-size", "kept: git does not track it as it stands"));
@@ -102,9 +148,10 @@ async function scanCleanup() {
   if (status !== 200 || !body.ok) {
     cleanupFound = null;
     renderCleanup();
-    return setCleanupStatus(status ? body.error || "Could not look." : "Plan2Code isn't reachable.", true);
+    return setCleanupStatus(status ? body.error || "Could not look." : NOT_CONNECTED, true);
   }
   cleanupFound = { items: body.items || [], bytes: body.bytes || 0 };
+  ticked = new Set(cleanupFound.items.filter((i) => startsTicked(i)).map((i) => i.id));
   renderCleanup();
   // Left in the status line, not cleared: it is the live region, so this is
   // what a screen reader hears when the scan finishes.
@@ -115,18 +162,21 @@ async function scanCleanup() {
 }
 
 async function deleteCleanup() {
-  const ids = deletable().map((i) => i.id);
+  const ids = tickedItems().map((i) => i.id);
   if (!ids.length) return;
   const gen = ++cleanupGen;
   $("cleanup-delete").disabled = true;
   $("cleanup-scan").disabled = true;
   setCleanupStatus("Deleting…", false);
-  const { status, body } = await postJson("/cleanup", { delete: ids });
+  cleanupBusy = true;
+  const { status, body } = await postJson("/cleanup", { delete: ids }).finally(() => {
+    cleanupBusy = false;
+  });
   if (gen !== cleanupGen) return;
-  $("cleanup-delete").disabled = false;
   $("cleanup-scan").disabled = false;
+  paintDeleteButton();
   if (status !== 200 || !body.ok) {
-    return setCleanupStatus(status ? body.error || "Could not delete." : "Plan2Code isn't reachable.", true);
+    return setCleanupStatus(status ? body.error || "Could not delete." : NOT_CONNECTED, true);
   }
   const removed = (body.removed || []).length;
   const failed = (body.failed || []).length;
@@ -137,6 +187,7 @@ async function deleteCleanup() {
   const asked = ids.length;
   const kept = Math.max(0, asked - removed - failed - refused);
   cleanupFound = null;
+  ticked = new Set();
   renderCleanup();
   const done = removed ? "Deleted " + removed + (removed === 1 ? " item" : " items") + " · " + formatBytes(body.bytes) + " freed." : "Nothing was deleted.";
   const keptLine = kept ? ` ${kept} ${kept === 1 ? "was" : "were"} kept because ${kept === 1 ? "it" : "they"} changed since the scan.` : "";

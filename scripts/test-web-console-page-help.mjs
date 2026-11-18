@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, textOf, drawn , fillBox} from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, drawn, fillBox, itemCard, boxValue } from "./page-test-helpers.mjs";
 import { HOME, cli, until } from "./web-console-test-helpers.mjs";
 import { HELP_TABS } from "../src/web-console/public/help.js";
 import { CATALOG_GROUPS, SKILL_CATALOG } from "../src/web-console/public/answers.js";
@@ -274,7 +274,7 @@ test("the update banner opens a modal with the exact update commands, and its di
   const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: { agent: { status: "waiting" } }, project: tempProject() });
   await toTheDashboard(s);
   const main = s.page.locator("#main");
-  await main.getByRole("button", { name: /UPDATE AVAILABLE · v99\.0\.0/ }).click();
+  await main.getByRole("button", { name: /Update available · v99\.0\.0/ }).click();
 
   const modal = s.page.locator("#update-modal");
   await modal.waitFor();
@@ -283,21 +283,27 @@ test("the update banner opens a modal with the exact update commands, and its di
   assert.equal(await releases.getAttribute("href"), RELEASES_URL);
   assert.equal(await releases.getAttribute("rel"), "noopener noreferrer");
   assert.equal(await textOf(s.page.locator("#update-command code")), "plan2code update");
+  // Step 1 is one sentence and the command; the rest waits in a closed disclosure.
+  const more = s.page.locator("#update-more");
+  assert.equal(await more.evaluate((node) => node.open), false, "the extra help starts closed");
+  assert.equal(await textOf(more.locator("summary")), "Command not found, or nothing happened?");
+  await more.locator("summary").click();
   assert.equal(
     await textOf(s.page.locator("#update-fallback code")),
-    "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git"
+    "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release"
   );
+  assert.match(await textOf(more), /git ls-remote https:\/\/github\.com\/jparkerweb\/plan2code\.git/);
   await s.page.locator("#update-done").click();
   await modal.waitFor({ state: "hidden" });
 
   // The ×: gone now, remembered under this session's key, and still gone after a reload.
   await main.getByRole("button", { name: "Dismiss until next time" }).click();
-  await main.getByRole("button", { name: /UPDATE AVAILABLE/ }).waitFor({ state: "hidden" });
+  await main.getByRole("button", { name: /Update available/ }).waitFor({ state: "hidden" });
   assert.equal(await s.page.evaluate((k) => sessionStorage.getItem(k), "p2c-update-dismissed:" + s.sid), "99.0.0");
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);
   await toTheDashboard(s);
-  assert.equal(await main.getByRole("button", { name: /UPDATE AVAILABLE/ }).count(), 0, "the banner came back after a reload");
+  assert.equal(await main.getByRole("button", { name: /Update available/ }).count(), 0, "the banner came back after a reload");
 });
 
 // Under the app Help's update line names both notices, says the command runs
@@ -389,7 +395,7 @@ test("under the app, Help's dashboard and Continue here explainers point at the 
 });
 
 // The Welcome dialog's own onboarding tip gave the same classic-only advice.
-test("under the app, the Welcome dialog's refresh tip names New Session, not a new conversation", async (t) => {
+test("under the app, the Welcome dialog's terminal tip names the terminal panel and teaches Send", async (t) => {
   savedLooks(t, null);
   const s = await openSession(await suite.browser(), {
     t,
@@ -401,9 +407,9 @@ test("under the app, the Welcome dialog's refresh tip names New Session, not a n
   await toTheDashboard(s);
   const welcome = s.page.locator("#welcome-modal");
   await welcome.waitFor();
-  const text = s.page.locator("#welcome-refresh-text");
-  await text.getByText("press New Session at the top of the window", { exact: false }).waitFor();
-  assert.equal(await text.getByText("new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+  const text = s.page.locator("#welcome-terminal-text");
+  await text.getByText("asking permission in the terminal panel", { exact: false }).waitFor();
+  assert.match(await textOf(welcome), /Nothing leaves this page until you press Send to Plan2Code/, "the Welcome teaches Send");
 });
 
 // The Troubleshooting tab's own "getting a new link" recovery flow is
@@ -536,7 +542,9 @@ for (const inApp of [true, false]) {
     });
     const texts = await visibleHelpText(s);
     const hits = [];
-    for (const [tab, text] of Object.entries(texts)) {
+    for (const [tab, rawText] of Object.entries(texts)) {
+      // "Reset this tab" is a button's name, not a mode's wording.
+      const text = rawText.replace(/Reset this tab/g, "Reset");
       for (const re of inApp ? BROWSER_ONLY : APP_ONLY) {
         const hit = text.match(re);
         if (hit) hits.push(`${tab}: ...${text.slice(Math.max(0, hit.index - 50), hit.index + 50).replace(/\s+/g, " ")}...`);
@@ -548,3 +556,86 @@ for (const inApp of [true, false]) {
     assert.match(all, inApp ? /terminal panel/ : /your terminal/);
   });
 }
+
+test("? opens Help from the page, but not from a text box or behind a dialog", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const box = itemCard(s.page, "q1").locator(".md-host, input[type=text], textarea").first();
+  await box.waitFor();
+  // From a text box the ? is a typed character, and Help stays shut.
+  await fillBox(box, "why");
+  await s.page.evaluate(() => document.querySelector("#main .md-host").field.focus());
+  await s.page.keyboard.type("?");
+  assert.equal(await helpModal(s).isVisible(), false, "typing ? in a box does not open Help");
+  assert.match(await boxValue(box), /why\?/, "the ? was typed");
+  // Behind a dialog it does nothing either.
+  await s.page.click("#btn-looks");
+  await s.page.locator("#looks-modal[open]").waitFor();
+  await s.page.keyboard.press("?");
+  assert.equal(await helpModal(s).isVisible(), false, "no Help behind another dialog");
+  await s.page.keyboard.press("Escape");
+  await s.page.locator("#looks-modal[open]").waitFor({ state: "detached" });
+  // From the page itself it opens Help on the same topic the ? button would.
+  await s.page.locator("#title").click();
+  await s.page.keyboard.press("?");
+  await helpModal(s).waitFor();
+  const viaKey = await selectedTab(s).getAttribute("id");
+  await s.page.keyboard.press("Escape");
+  await helpModal(s).waitFor({ state: "hidden" });
+  await s.page.click("#btn-about");
+  await helpModal(s).waitFor();
+  assert.equal(viaKey, await selectedTab(s).getAttribute("id"), "the key opens the topic the button opens");
+});
+
+test("Help's topics sit under four group headings that the arrow keys skip, and the filter hides what does not match", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openHelp(s);
+  const heads = s.page.locator("#help-tabs .help-tab-group");
+  assert.deepEqual(await heads.allTextContents(), ["Start here", "Working in a session", "Tools", "Reference"]);
+  assert.equal(await s.page.locator("#help-tabs .help-tab-group[tabindex]").count(), 0, "a heading is no tab stop");
+  assert.equal(await s.page.locator("#help-tabs [role=tab]").count(), HELP_TABS.length, "only topics are tabs");
+  // The arrow keys walk topics, never the headings: from "stuck" the next is "around".
+  await tabButton(s, "stuck").click();
+  await s.page.keyboard.press("ArrowDown");
+  assert.equal(await focusedId(s), "help-tab-around");
+
+  // The filter: by label, and by words inside a panel; a heading with nothing left goes too.
+  const filter = s.page.locator("#help-filter");
+  await filter.fill("git board");
+  const visible = async () => s.page.locator("#help-tabs [role=tab]:not([hidden])").evaluateAll((n) => n.map((b) => b.id.replace("help-tab-", "")));
+  assert.ok((await visible()).includes("git"), "the git board topic stays");
+  assert.ok(!(await visible()).includes("planny"), "an unrelated topic goes");
+  // Arrow keys now walk only what is shown.
+  const first = (await visible())[0];
+  await tabButton(s, first).click();
+  await s.page.keyboard.press("ArrowDown");
+  assert.ok((await visible()).includes((await focusedId(s)).replace("help-tab-", "")), "focus stays on a shown topic");
+  await filter.fill("zzzz-nothing");
+  assert.equal(await s.page.locator("#help-filter-empty").isVisible(), true, "says nothing matches");
+  assert.equal(await s.page.locator("#help-tabs .help-tab-group:not([hidden])").count(), 0, "a heading with no topic left goes too");
+  await filter.fill("");
+  assert.equal((await visible()).length, HELP_TABS.length, "cleared, every topic is back");
+  assert.equal(await s.page.locator("#help-tabs .help-tab-group:not([hidden])").count(), 4);
+});
+
+test("with a filter typed the topic list stays reachable by keyboard, and a closed Help forgets the filter", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openHelp(s);
+  const filter = s.page.locator("#help-filter");
+  // The selected topic (the first) is filtered away: some shown topic must still be a tab stop.
+  await filter.fill("git board");
+  assert.equal(await s.page.locator("#help-tabs [role=tab][tabindex='0']:not([hidden])").count(), 1, "one shown tab stop");
+  await filter.press("ArrowDown");
+  const focused = await focusedId(s);
+  assert.match(focused, /^help-tab-/, "the down arrow steps into the topics");
+  assert.equal(await s.page.locator("#" + focused).isHidden(), false, "a shown one");
+  // Close with the filter still typed: the next open starts clean, on a shown topic.
+  await s.page.keyboard.press("Escape");
+  await helpModal(s).waitFor({ state: "hidden" });
+  await openHelp(s);
+  assert.equal(await filter.inputValue(), "", "the filter is cleared");
+  assert.equal(await s.page.locator("#help-tabs [role=tab]:not([hidden])").count(), HELP_TABS.length, "every topic is back");
+  assert.equal(await focusedId(s), "help-tab-" + HELP_TABS[0].id, "focus lands on the topic Help opened on");
+});

@@ -1,5 +1,6 @@
 // Plan2Code Web Console - how a session ends: the finished screen, its offers, Stop and the way home; defines only.
 
+import { NOT_CONNECTED } from "../labels.js";
 import { el, md, copyButton, copyText, selectContents, textWithCode, SVG_NS } from "../render.js";
 import {
   finishPaused,
@@ -246,9 +247,9 @@ export function renderLoopEnd(end) {
   const reason = !finished && typeof end.reason === "string" && end.reason ? end.reason : "";
   card.appendChild(el("h2", "loop-end-heading", finished ? "Every phase is built" : reason || end.line));
   // On a stop the full line is the colored reason, and the advice sits under it.
-  if ((finished || reason) && end.line) card.appendChild(el("p", finished ? "loop-line" : "loop-line loop-why", end.line));
+  if ((finished || reason) && end.line) card.appendChild(el("p", finished ? "loop-line" : "callout is-warn loop-line loop-why", end.line));
   if (!finished && typeof end.advice === "string" && end.advice) {
-    const next = el("p", "loop-advice");
+    const next = el("p", "callout is-info loop-advice");
     next.appendChild(el("strong", null, "What to do next: "));
     next.appendChild(document.createTextNode(end.advice));
     card.appendChild(next);
@@ -260,7 +261,7 @@ export function renderLoopEnd(end) {
 
   const evidence = end.evidence && docs().find((d) => d.id === end.evidence);
   if (evidence) {
-    const read = el("button", "btn small", finished ? "Read the full report" : "Read why, and the report so far");
+    const read = el("button", "btn sm", finished ? "Read the full report" : "Read why, and the report so far");
     read.type = "button";
     read.addEventListener("click", () => {
       page.view = "doc:" + evidence.id;
@@ -399,7 +400,7 @@ function renderReport(text) {
   body.tabIndex = 0;
   body.setAttribute("role", "region");
   body.setAttribute("aria-label", "Bug report");
-  const copy = el("button", "btn small", "Copy report");
+  const copy = el("button", "btn sm", "Copy report");
   copy.type = "button";
   // Word for word what the file holds, so it pastes into a ticket as Markdown.
   copy.addEventListener("click", () =>
@@ -417,7 +418,7 @@ function renderReport(text) {
 export function renderHandoff(fin) {
   if (page.S && page.S.loopEnd) return renderLoopEnd(page.S.loopEnd);
   const card = el("article", "card handoff");
-  card.appendChild(el("p", "card-kicker", finishPaused(fin) ? "Session paused" : "Session ended"));
+  card.appendChild(el("p", "card-kicker", finishPaused(fin) ? "Session stopped" : "Session finished"));
   card.appendChild(el("h2", null, fin.headline));
   if (fin.body) card.appendChild(md(fin.body, "md prompt"));
 
@@ -451,6 +452,9 @@ export function renderHandoff(fin) {
   // session with nothing left to run, which gets a quiet pointer at the
   // dashboard instead of a Next step block.
   const shape = handoffShape(fin);
+  // The quiet extras of a finish (a second way to start something else, and
+  // "Before you close this") fold into one closed section at the foot.
+  const folded = [];
   if (shape === "all-done") {
     const done = el("div", "handoff-done");
     done.appendChild(md(`${ALL_DONE_LEAD} ${page.inApp ? ALL_DONE_REST_IN_APP : ALL_DONE_REST}`, "md handoff-done-text"));
@@ -461,7 +465,7 @@ export function renderHandoff(fin) {
     const row = el("div", "handoff-command");
     const code = el("code", "handoff-code", text);
     row.appendChild(code);
-    row.appendChild(copyButton(text, "btn small ghost handoff-copy", code));
+    row.appendChild(copyButton(text, "btn sm ghost handoff-copy", code));
     done.appendChild(row);
     // Once the server is gone, the row above already is the offer's fallback.
     if (dashboardLive(fin) && !page.gone) done.appendChild(renderDashboardOffer(true));
@@ -491,13 +495,13 @@ export function renderHandoff(fin) {
     const row = el("div", "handoff-command");
     const code = el("code", "handoff-code", text);
     row.appendChild(code);
-    row.appendChild(copyButton(text, "btn small handoff-copy", code));
+    row.appendChild(copyButton(text, "btn sm handoff-copy", code));
     step.appendChild(row);
     // Under the app a clean start is the bar's New Session: one press, with
     // the command already on the clipboard to paste into the new terminal.
     if (page.inApp && command.startsWith("/") && !page.gone && !pressStranded()) {
       const fresh = el("div", "handoff-newsession");
-      const press = el("button", "btn small", "Start a New Session");
+      const press = el("button", "btn sm", "Start a New Session");
       press.type = "button";
       press.addEventListener("click", () => startNewSession(text));
       fresh.appendChild(press);
@@ -528,7 +532,7 @@ export function renderHandoff(fin) {
       // `/plan2code`"), right below this card, so repeating it here would
       // be the third mention of the one action on this screen.
       if (!page.inApp && !(offerDash && page.gone)) {
-        card.appendChild(
+        folded.push(
           textWithCode(
             "p",
             "handoff-fresh",
@@ -539,8 +543,8 @@ export function renderHandoff(fin) {
         const freshRow = el("div", "handoff-command handoff-fresh-row");
         const freshCode = el("code", "handoff-code", freshText);
         freshRow.appendChild(freshCode);
-        freshRow.appendChild(copyButton(freshText, "btn small ghost handoff-copy", freshCode));
-        card.appendChild(freshRow);
+        freshRow.appendChild(copyButton(freshText, "btn sm ghost handoff-copy", freshCode));
+        folded.push(freshRow);
       }
     }
   }
@@ -548,7 +552,8 @@ export function renderHandoff(fin) {
   // Not while a hand-off they just asked for is starting on this page: "Safe
   // to close" and "start a new one" would contradict the line above it. The
   // press re-renders the page, and so does the agent taking it up.
-  if (!closeGuideHeld()) card.appendChild(renderCloseGuide(shape, fin));
+  if (!closeGuideHeld()) folded.push(renderCloseGuide(shape, fin));
+  if (folded.length) card.appendChild(renderFoldedExtras(folded));
 
   card.appendChild(
     el(
@@ -571,13 +576,14 @@ export function renderHandoff(fin) {
     if (keep.saved) {
       tools.appendChild(docSavedNote(keep));
     } else {
-      const save = el("button", "btn small", `Download ${keep.title || "the document"}`);
+      const save = el("button", "btn sm", `Download ${keep.title || "the document"}`);
       save.type = "button";
       save.addEventListener("click", () => downloadDoc(keep));
       tools.appendChild(save);
     }
     card.appendChild(tools);
   }
+  onePrimary(card);
 
   // Answers staged and never sent are lost the moment this page closes, and
   // this page's one promise is that nothing gets lost. Say so plainly rather
@@ -587,7 +593,7 @@ export function renderHandoff(fin) {
     card.appendChild(
       el(
         "p",
-        "handoff-unsent",
+        "callout is-stage handoff-unsent",
         `${stuck} answer${stuck === 1 ? "" : "s"} here ${stuck === 1 ? "was" : "were"} never sent, ` +
           `and Plan2Code has finished. If ${stuck === 1 ? "it" : "they"} still matter, say so in the ` +
           `next session: nothing on this page will reach it now.`
@@ -595,6 +601,37 @@ export function renderHandoff(fin) {
     );
   }
   return card;
+}
+
+// Whether "Closing or starting fresh" is open, kept across redraws: a section
+// that closes under a reader who just opened it is worse than one left open.
+let foldedOpen = null;
+
+// The fresh-session advice is what a red meter asks for, so it opens by itself
+// there (until the person closes it).
+function renderFoldedExtras(nodes) {
+  const box = el("details", "handoff-more");
+  const red = Boolean(page.meterFrame && page.meterFrame.level === "red");
+  box.open = foldedOpen === null ? red : foldedOpen;
+  box.appendChild(el("summary", "handoff-more-title", "Closing or starting fresh"));
+  box.append(...nodes);
+  box.addEventListener("toggle", () => {
+    foldedOpen = box.open;
+  });
+  return box;
+}
+
+// Exactly one primary button per finish, by a fixed rule: the review when it is
+// on offer, else the commit, else Continue here, else Back to the dashboard, else
+// the stranded screen's New Session, else the next command's Copy button (a
+// pause, a gone server: the one thing to do is take the command). The rest are
+// plain buttons.
+const PRIMARY_RULE = [".review-go", ".commit-go", ".continue-go", ".dashboard-go", ".stranded-go", ".handoff-copy"];
+
+function onePrimary(card) {
+  const keep = PRIMARY_RULE.map((sel) => card.querySelector(sel)).find(Boolean) || null;
+  for (const b of card.querySelectorAll("button.primary")) if (b !== keep) b.classList.remove("primary");
+  if (keep) keep.classList.add("primary");
 }
 
 // The escape hatch of a finished screen whose press nothing collects (the
@@ -614,7 +651,7 @@ function renderStrandedEscape() {
       )
     );
     const row = el("div", "btn-row");
-    const go = el("button", "btn primary", "Start a New Session");
+    const go = el("button", "btn primary stranded-go", "Start a New Session");
     go.type = "button";
     go.addEventListener("click", () => startNewSession(text));
     row.appendChild(go);
@@ -631,7 +668,7 @@ function renderStrandedEscape() {
   const row = el("div", "handoff-command");
   const code = el("code", "handoff-code", text);
   row.appendChild(code);
-  row.appendChild(copyButton(text, "btn small handoff-copy", code));
+  row.appendChild(copyButton(text, "btn sm handoff-copy", code));
   box.appendChild(row);
   return box;
 }
@@ -669,7 +706,7 @@ function renderReviewOffer(offer) {
     const row = el("div", "handoff-command");
     const code = el("code", "handoff-code", text);
     row.appendChild(code);
-    row.appendChild(copyButton(text, "btn small handoff-copy", code));
+    row.appendChild(copyButton(text, "btn sm handoff-copy", code));
     box.appendChild(row);
     return box;
   }
@@ -714,7 +751,7 @@ function renderCommitOffer() {
   );
   const { asked, disabled } = afterFinishButton(page.local.afterBuild, "commit", page.pendingResult);
   const row = el("div", "btn-row");
-  const go = el("button", "btn primary", asked ? "Opening Git…" : "Commit it now");
+  const go = el("button", "btn primary commit-go", asked ? "Opening Git…" : "Commit it now");
   go.type = "button";
   go.disabled = disabled;
   go.addEventListener("click", () => sendAfterBuild("commit"));
@@ -738,7 +775,7 @@ function continueLive() {
 function renderContinueOffer(next) {
   const box = el("div", "continue-offer");
   const { asked, disabled } = afterFinishButton(page.local.afterBuild, "launch", page.pendingResult);
-  const go = el("button", "btn primary continue-go", asked ? "Starting the next step…" : "Continue here");
+  const go = el("button", "btn primary continue-go", asked ? "Starting the next skill…" : "Continue here");
   go.type = "button";
   go.disabled = disabled;
   go.addEventListener("click", () => sendAfterBuild("launch", next));
@@ -803,14 +840,14 @@ function renderDashboardOffer(primary) {
     const row = el("div", "handoff-command");
     const code = el("code", "handoff-code", text);
     row.appendChild(code);
-    row.appendChild(copyButton(text, "btn small handoff-copy", code));
+    row.appendChild(copyButton(text, "btn sm handoff-copy", code));
     box.appendChild(row);
     return box;
   }
   const { asked, disabled } = afterFinishButton(page.local.afterBuild, "dashboard", page.pendingResult);
   const go = el(
     "button",
-    primary ? "btn primary" : "btn",
+    primary ? "btn primary dashboard-go" : "btn dashboard-go",
     asked ? "Opening the dashboard…" : "Back to the dashboard"
   );
   go.type = "button";
@@ -854,11 +891,11 @@ async function sendAfterBuild(kind, launch = null) {
       dashboard: "Opening the dashboard. It appears here in a moment.",
       commit: "Opening Git. It appears here in a moment.",
       changelog: "Opening Changelog. It appears here in a moment.",
-      launch: "Starting the next step. It appears here in a moment.",
+      launch: "Starting the next skill. It appears here in a moment.",
     }[kind];
     if (started) {
-      hooks.banner(started, "good");
-      setTimeout(() => hooks.banner(null), 5000);
+      const startedBanner = hooks.banner(started, "good");
+      setTimeout(() => hooks.clearBanner(startedBanner), 5000);
     }
   } catch {
     hooks.banner("That did not go through. Nothing was lost; try again.", "warn");
@@ -891,6 +928,7 @@ export function renderStopButton() {
     b.textContent = "Stopping…";
     b.disabled = false;
     b.title = "Show how the stop is going";
+    setLocked(b, "");
     return;
   }
   b.textContent = "Stop session";
@@ -898,12 +936,78 @@ export function renderStopButton() {
   const gate = turnGate({ gone: page.gone, pendingResult: page.pendingResult, waiting: agentHasTheBall() });
   // A way home in flight holds Stop back too, unless the agent went quiet
   // after collecting it: Stop's resume screen is then the only way out.
-  b.disabled = Boolean(gate) || (Boolean(page.local.homeward) && !agentAdrift()) || loopDriving();
+  // Locked with aria-disabled, never disabled: a press still lands and says why.
+  const locked = Boolean(gate) || (Boolean(page.local.homeward) && !agentAdrift()) || loopDriving();
   b.title = loopDriving() ? LOOP_LOCK_TITLE : {
-    gone: "Not connected right now.",
+    gone: NOT_CONNECTED,
     pending: "Your last answers are still being picked up. You can stop once they have been.",
     waiting: "Plan2Code is working on your answers. You can stop once it replies.",
   }[gate] || (stopWarning() ? "End this session. Work since the last save is not kept." : "Save your place and end this session. You get a command to pick it up later.");
+  setLocked(b, locked ? lockWhy("Stop", gate, b.title) : "");
+}
+
+// What a locked Stop or Back says when pressed. While Plan2Code is mid-task the
+// lock lifts at its next check-in, and the way to interrupt it is the terminal.
+function lockWhy(what, gate, fallback) {
+  if (loopDriving()) return LOOP_LOCK_TITLE;
+  if (gate === "waiting") {
+    const where = page.inApp ? "the terminal panel" : "the terminal";
+    return `Plan2Code is mid-task, so ${what} unlocks at its next check-in. To interrupt it now, press Esc in ${where}.`;
+  }
+  return fallback;
+}
+
+function setLocked(b, why) {
+  if (why) {
+    b.setAttribute("aria-disabled", "true");
+    b.dataset.why = why;
+  } else {
+    b.removeAttribute("aria-disabled");
+    delete b.dataset.why;
+  }
+  b.classList.toggle("is-locked", Boolean(why));
+}
+
+// The small note a press on a locked button opens, under that button. It goes
+// on the next press anywhere, on Escape, or after a few seconds.
+let lockPop = null;
+let lockPopTimer = null;
+
+function closeLockPop() {
+  clearTimeout(lockPopTimer);
+  if (lockPop) lockPop.remove();
+  lockPop = null;
+}
+
+function showLockPop(b) {
+  closeLockPop();
+  const pop = el("div", "lock-pop", b.dataset.why || "");
+  pop.setAttribute("role", "status");
+  document.body.appendChild(pop);
+  const at = b.getBoundingClientRect();
+  pop.style.top = `${Math.round(at.bottom + 6)}px`;
+  // Anchored by its left edge (Stop and Back sit at the left of the bar), kept
+  // inside the window; right-anchoring squeezed the note into a narrow strip.
+  pop.style.left = `${Math.max(8, Math.min(Math.round(at.left), window.innerWidth - pop.offsetWidth - 8))}px`;
+  lockPop = pop;
+  lockPopTimer = setTimeout(closeLockPop, 8000);
+  const away = (e) => {
+    if (e.type === "keydown" && e.key !== "Escape") return;
+    if (e.type === "click" && b.contains(e.target)) return;
+    closeLockPop();
+    document.removeEventListener("click", away, true);
+    document.removeEventListener("keydown", away, true);
+  };
+  document.addEventListener("click", away, true);
+  document.addEventListener("keydown", away, true);
+}
+
+// A locked button answers a press with its reason instead of acting.
+function whenOpen(b, act) {
+  return () => {
+    if (b.getAttribute("aria-disabled") === "true") showLockPop(b);
+    else act();
+  };
 }
 
 // Plan2Code has the ball: it is working, or owes a reply to a send, and has
@@ -929,8 +1033,12 @@ export function renderHomeButton() {
     warned: Boolean(page.S) && Boolean(stopWarning()),
   });
   b.hidden = st.hidden;
-  b.disabled = st.disabled || loopDriving();
   b.title = loopDriving() ? LOOP_LOCK_TITLE : st.title;
+  const gate = turnGate({ gone: page.gone, pendingResult: page.pendingResult, waiting: Boolean(page.S) && agentHasTheBall() });
+  // Already on its way home: say so, never "mid-task, press Esc", which would
+  // invite interrupting the hand-off the person just asked for.
+  const homeward = page.local.homeward && !agentAdrift() && !loopDriving();
+  setLocked(b, st.disabled || loopDriving() ? (homeward ? st.title : lockWhy("Back to the dashboard", gate, b.title)) : "");
 }
 
 function openHomeConfirm() {
@@ -1117,7 +1225,7 @@ export function renderStopping() {
     const row = el("div", "handoff-command");
     const code = el("code", "handoff-code", text);
     row.appendChild(code);
-    row.appendChild(copyButton(text, "btn small handoff-copy", code));
+    row.appendChild(copyButton(text, "btn sm handoff-copy", code));
     extra.appendChild(row);
   } else {
     extra.appendChild(
@@ -1191,10 +1299,10 @@ export function renderFooterDashboard() {
 // The top bar's way home and Stop, wired once at start-up.
 export function wireEnding() {
   $("btn-dashboard").addEventListener("click", () => sendAfterBuild("dashboard"));
-  $("btn-home").addEventListener("click", openHomeConfirm);
+  $("btn-home").addEventListener("click", whenOpen($("btn-home"), openHomeConfirm));
   $("home-cancel").addEventListener("click", () => $("home-modal").close());
   $("home-go").addEventListener("click", goHome);
-  $("btn-stop").addEventListener("click", openStopConfirm);
+  $("btn-stop").addEventListener("click", whenOpen($("btn-stop"), openStopConfirm));
   $("stop-cancel").addEventListener("click", () => $("stop-modal").close());
   $("stop-handoff").addEventListener("click", () => stopSession(true));
   $("stop-go").addEventListener("click", () => stopSession(false));

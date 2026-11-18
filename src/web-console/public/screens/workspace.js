@@ -31,19 +31,19 @@ export function tellFolderIssues() {
     extras.push(document.createTextNode(" "));
     extras.push(el("code", "banner-hint", fresh.hint));
   }
-  const open = el("button", "btn tiny banner-action", "Open workspace");
+  const open = el("button", "btn xs soft banner-action", "Open workspace");
   open.type = "button";
   open.addEventListener("click", () => {
     hooks.banner(null);
     openWorkspace();
   });
   extras.push(open);
-  hooks.banner(`The agent can't read @${fresh.name}: ${fresh.reason}`, "warn", extras);
+  const issue = hooks.banner(`The agent cannot read @${fresh.name}: ${fresh.reason}`, "warn", extras);
   clearTimeout(issueBannerTimer);
   // Then the next folder waiting to be told, if several came at once.
   issueBannerTimer = setTimeout(() => {
     if (page.gone) return;
-    hooks.banner(null);
+    hooks.clearBanner(issue);
     tellFolderIssues();
   }, 15000);
 }
@@ -73,7 +73,7 @@ function workspaceScopeText() {
 
 const NAME_RULE = "Names use lowercase letters, numbers and hyphens.";
 
-const BROWSE_UNAVAILABLE = "Browse isn't available here — type or paste the path.";
+const BROWSE_UNAVAILABLE = "Browse is not available here: type or paste the path.";
 
 // The folder whose Remove is waiting on its inline confirm, by id.
 let wsConfirm = null;
@@ -127,14 +127,14 @@ function workspaceRow(f) {
   li.dataset.fid = f.id;
 
   const head = el("div", "ws-head");
-  head.appendChild(el("span", "ws-chip"));
-  if (f.original) head.appendChild(el("span", "ws-original", "started here — can't be removed"));
+  head.appendChild(el("span", "pill is-accent ws-chip"));
+  if (f.original) head.appendChild(el("span", "ws-original", "started here, cannot be removed"));
   li.appendChild(head);
 
   const pathRow = el("div", "ws-path-row");
   const code = el("code", "ws-path");
   pathRow.appendChild(code);
-  const copy = el("button", "btn small", "Copy path");
+  const copy = el("button", "btn sm", "Copy path");
   copy.type = "button";
   copy.addEventListener("click", async () => {
     const folder = workspaceFolders().find((x) => x.id === f.id);
@@ -151,7 +151,7 @@ function workspaceRow(f) {
   });
   pathRow.appendChild(copy);
   if (!f.original) {
-    const remove = el("button", "btn small danger ws-remove", "Remove");
+    const remove = el("button", "btn sm danger ws-remove", "Remove");
     remove.type = "button";
     remove.addEventListener("click", () => {
       wsConfirm = f.id;
@@ -175,7 +175,7 @@ function workspaceField(f, field, labelText) {
   const id = `ws-${field}-${f.id}`;
   const label = el("label", null, labelText);
   label.htmlFor = id;
-  const input = el("input");
+  const input = el("input", "is-compact");
   input.type = "text";
   input.id = id;
   input.dataset.field = field;
@@ -209,7 +209,7 @@ function workspaceField(f, field, labelText) {
       setAddMsg("");
       return showError("");
     }
-    if (body.reason === "name-taken") showError(`@${value} is taken — try @${body.suggest}.`);
+    if (body.reason === "name-taken") showError(`@${value} is taken, try @${body.suggest}.`);
     else if (body.reason === "bad-name") showError(NAME_RULE);
     else showError("That did not save. Try again.");
     if (leaving) input.value = saved();
@@ -241,11 +241,11 @@ function paintWorkspaceRow(li, f) {
   marks.replaceChildren();
   if (missing) marks.appendChild(el("p", "ws-mark is-missing", "This folder no longer exists"));
   if (issue) {
-    marks.appendChild(el("p", "ws-mark is-issue", "The agent can't read this yet: " + issue.reason));
+    marks.appendChild(el("p", "ws-mark is-issue", "The agent cannot read this yet: " + issue.reason));
     if (issue.hint) {
       const row = el("div", "ws-hint-row");
       const code = el("code", "ws-hint", issue.hint);
-      row.append(code, copyButton(issue.hint, "btn tiny", code));
+      row.append(code, copyButton(issue.hint, "btn xs soft", code));
       marks.appendChild(row);
     }
   }
@@ -260,14 +260,14 @@ function paintWorkspaceRow(li, f) {
     const box = el("div", "ws-confirm");
     box.setAttribute("role", "alert");
     box.appendChild(el("span", null, `Remove @${f.name}? The agent is told.`));
-    const keep = el("button", "btn small ghost", "Keep it");
+    const keep = el("button", "btn sm ghost", "Keep it");
     keep.type = "button";
     keep.addEventListener("click", () => {
       wsConfirm = null;
       renderWorkspace();
       li.querySelector(".ws-remove")?.focus();
     });
-    const go = el("button", "btn small danger", "Remove");
+    const go = el("button", "btn sm danger", "Remove");
     go.type = "button";
     go.addEventListener("click", async () => {
       go.disabled = true;
@@ -305,15 +305,15 @@ async function addWorkspaceFolder(path, name) {
   }
   switch (body.reason) {
     case "not-a-folder":
-      return setAddMsg("That isn't a folder on this machine.", "error");
+      return setAddMsg("That is not a folder on this machine.", "error");
     case "duplicate":
       return setAddMsg(`Already in the workspace as @${body.name}.`, "error");
     case "name-taken": {
       const taken = name || String(body.suggest || "").replace(/-\d+$/, "");
-      const use = el("button", "btn tiny", `Use @${body.suggest}`);
+      const use = el("button", "btn xs soft", `Use @${body.suggest}`);
       use.type = "button";
       use.addEventListener("click", () => addWorkspaceFolder(trimmed, body.suggest));
-      return setAddMsg(`@${taken} is taken — try @${body.suggest}.`, "error", use);
+      return setAddMsg(`@${taken} is taken, try @${body.suggest}.`, "error", use);
     }
     case "bad-name":
       return setAddMsg(NAME_RULE, "error");

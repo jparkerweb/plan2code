@@ -2,25 +2,23 @@
 
 /* ------------------------------------------------------------- banner */
 
-/* A pill floated over the footer, centered on the bar. It used to be the top
-   grid row, and every time it appeared it pushed the whole page down a track;
-   overlaying it means the message lands without the layout moving under the
-   reader's cursor. It covers the footer's middle while it is up, which is
-   safe: the messages it carries are the reason nothing there needs pressing. */
+/* A pill over the footer, centered on the bar. Overlaid, not a grid row, so
+   it never shifts the layout. It covers the footer's middle, which is safe:
+   nothing there needs pressing while it shows. */
 .banner {
   position: fixed;
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
-  z-index: 46;
+  z-index: var(--z-toast);
   max-width: min(680px, calc(100vw - 32px));
   padding: 9px 22px;
   border: 1px solid var(--rule-2);
-  border-radius: 99px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-2);
   text-align: center;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-md);
   background: var(--warn-soft);
   color: var(--warn);
   animation: banner-in 0.22s ease;
@@ -59,36 +57,31 @@
 .row-left { display: flex; align-items: center; gap: 8px; }
 .brief-btn { border-color: var(--rule-2); color: var(--ink-2); }
 
-/* Back to the dashboard: a filled triangle in the highlight color, so it
-   recolors with the swatch like everything else that is the person's to use. */
+/* Back to the dashboard: a triangle in the highlight color. */
 .home-btn { border-color: var(--rule-2); display: inline-flex; align-items: center; justify-content: center; }
 /* As tall as Stop session beside it, with an icon's narrower sides. */
 .btn.home-btn { padding: 0 6px; align-self: stretch; margin-right: -8px; }
 .home-btn[hidden] { display: none; }
 .home-btn svg { width: 16px; height: 16px; display: block; }
-.home-btn path { fill: var(--accent); }
-.home-btn:hover:not(:disabled) { border-color: var(--accent-line); background: var(--accent-soft); }
-.home-btn:disabled path { fill: var(--ink-3); }
+.home-btn path { fill: var(--accent); stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; }
+.home-btn:hover:not(:disabled):not(.is-locked) { border-color: var(--accent-line); background: var(--accent-soft); }
+.home-btn:disabled path, .home-btn.is-locked path { fill: var(--ink-3); stroke: var(--ink-3); }
 
-/* Ending the session. Quiet, because it is the one control on the page that
-   is never the next step, and red only on hover, because it is not dangerous:
-   it saves, then stops. */
+/* Ending the session: quiet (never the next step), red only on hover (it
+   saves, then stops, so it is not dangerous). */
 .stop-btn { border-color: var(--rule-2); color: var(--ink-2); }
-.stop-btn:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); }
+.stop-btn:hover:not(:disabled):not(.is-locked) { color: var(--warn); border-color: var(--warn); }
 .brief-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-line); }
 
-/* Subagents: an orchestrator and its helpers. Unlit is a hollow outline in
-   the quiet ink; lit fills the nodes with the highlight color. */
+/* Subagents: hollow outline unlit, filled with the highlight color when lit. */
 .subagents-btn { border-color: var(--rule-2); color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; }
 .btn.subagents-btn { padding: 0 6px; align-self: stretch; }
 .subagents-btn[hidden] { display: none; }
 .subagents-btn svg { width: 16px; height: 16px; display: block; }
-.subagents-btn .sa-link { fill: none; stroke: var(--ink-2); stroke-width: 1.2; stroke-linecap: round; }
-.subagents-btn .sa-hub { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
-.subagents-btn .sa-node { fill: none; stroke: var(--ink-2); stroke-width: 1.2; }
-.subagents-btn[aria-pressed="true"] .sa-hub,
-.subagents-btn[aria-pressed="true"] .sa-node { fill: var(--accent); stroke: var(--accent); }
-.subagents-btn[aria-pressed="true"] .sa-link { stroke: var(--accent); }
+.subagents-btn .sa-link, .subagents-btn .sa-hub, .subagents-btn .sa-node { fill: none; stroke: var(--ink-2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.subagents-btn[data-on="true"] .sa-hub,
+.subagents-btn[data-on="true"] .sa-node { fill: var(--accent); stroke: var(--accent); }
+.subagents-btn[data-on="true"] .sa-link { stroke: var(--accent); }
 .subagents-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-line); }
 .subagents-btn:hover:not(:disabled) .sa-link,
 .subagents-btn:hover:not(:disabled) .sa-hub,
@@ -99,19 +92,18 @@
 
 .ident { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 
-/* The session meter: a ring that fills with the points and a few words, in
-   the level's color. Green, amber and red are the page's own done / staged /
-   careful colors, so both themes are covered by the variables. */
+/* The session meter: a ring that fills with the points, in the level's color
+   (the page's done / staged / careful variables, so both themes work). */
 .meter-slot { position: relative; flex: none; align-self: center; }
 .meter-pill {
   --m: var(--ok);
   display: inline-flex; align-items: center; gap: 7px;
   padding: 2px 10px 2px 3px;
   border: 1px solid color-mix(in srgb, var(--m) 40%, transparent);
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
   color: var(--m);
-  font: inherit; font-size: 12px; font-weight: 600;
+  font: inherit; font-size: var(--fs-xs); font-weight: 600;
   white-space: nowrap; cursor: pointer;
 }
 .meter-pill[hidden] { display: none; }
@@ -121,59 +113,48 @@
 .meter-ring { width: 20px; height: 20px; transform: rotate(-90deg); flex: none; }
 .meter-ring circle { fill: none; stroke-width: 3; }
 .meter-track { stroke: var(--rule); }
-.meter-fill { stroke: var(--m); transition: stroke-dashoffset 0.2s ease; }
+.meter-fill { stroke: var(--m); transition: stroke-dashoffset var(--dur-2); }
 @media (prefers-reduced-motion: reduce) {
   .meter-fill { transition: none; }
 }
 .meter-pop {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-pop);
   width: max-content; max-width: min(320px, calc(100vw - 32px));
   padding: 10px 12px;
   background: var(--panel); color: var(--ink);
-  border: 1px solid var(--rule-2); border-radius: 8px;
-  box-shadow: var(--shadow);
+  border: 1px solid var(--rule-2); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
 }
 .meter-pop[hidden] { display: none; }
-.meter-tip { margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
+.meter-tip { margin: 0 0 6px; font-size: var(--fs-sm); color: var(--ink-2); }
+.meter-once { margin: 0 0 8px; padding: 6px 8px; border-left: 3px solid var(--stage); font-size: var(--fs-sm); color: var(--ink); }
 .meter-list {
   list-style: none; margin: 0 0 8px; padding: 6px 0 0;
   border-top: 1px solid var(--rule);
   max-height: 40vh; overflow-y: auto;
-  font-size: 12px; color: var(--ink-2);
+  font-size: var(--fs-xs); color: var(--ink-2);
 }
 .meter-list[hidden] { display: none; }
 .meter-list li { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; }
 .meter-fresh { margin: 0 0 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
 .meter-fresh[hidden] { display: none; }
-.meter-fresh-text { margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }
+.meter-fresh-text { margin: 0 0 6px; font-size: var(--fs-xs); color: var(--ink-2); }
 /* Under the app the whole note is one button: a press is the bar's New Session. */
 .meter-fresh-btn { display: block; width: 100%; margin: 2px 0 6px; }
-.meter-fresh-row .handoff-code { flex-basis: 180px; font-size: 12px; padding: 6px 10px; }
+.meter-fresh-row .handoff-code { flex-basis: 180px; font-size: var(--fs-xs); padding: 6px 10px; }
 .meter-item-points { flex: none; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* The spec in hand: small and muted so it never competes with the title. */
 .spec-tag {
   flex: 0 1 auto; min-width: 0; max-width: 220px; align-self: center;
-  font-size: 11.5px; color: var(--ink-3);
+  font-size: var(--fs-xs); color: var(--ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .spec-tag[hidden] { display: none; }
 
-.badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  padding: 3px 8px;
-  border-radius: 99px;
-  white-space: nowrap;
-}
 
 h1 {
-  font: 600 19px/1.2 var(--serif);
+  font: 600 var(--fs-h3)/1.2 var(--serif);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -182,43 +163,37 @@ h1 {
 
 .progress-block { flex: 1 1 260px; min-width: 200px; max-width: 460px; margin-left: auto; }
 
-/* When the progress block is hidden (the dashboard, the git board) nothing
-   grows to fill the row, so the icon buttons would sit beside the title. The
-   first takes the slack instead; with the block shown its flex already eats
-   the space, so this costs nothing. */
-#btn-looks { margin-left: auto; }
-
 .progress-label {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink-2);
   margin-bottom: 5px;
 }
-#progress-text { font-weight: 600; color: var(--ink); }
+#progress-text { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .confidence { color: var(--ink-3); text-align: right; }
 
 .progress-track {
   height: 7px;
   background: var(--rule);
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
-  width: 0%;
+  width: 100%;
   background: var(--ok);
-  border-radius: 99px;
-  transition: width 0.5s ease;
+  /* The track clips the rounded left end; scaleX leaves the right end square. */
+  transform: scaleX(var(--p, 0));
+  transform-origin: left;
+  transition: transform 0.5s ease;
 }
 
 .tick { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-/* Planny's own corner. He was 23px in a title bar, which is a logo, not a
-   guide: too small to read a mood off and too small to look at. Here he has
-   room, he sits above the question list where the eye starts, and his line
-   wraps instead of squeezing the view tabs. */
+/* Planny's corner, above the question list: big enough to read a mood off,
+   and his line wraps instead of squeezing the view tabs. */
 .dock {
   flex: none;
   display: flex;
@@ -244,6 +219,15 @@ h1 {
   overflow: hidden;
 }
 
+/* A side column with nothing to show is not drawn: an empty aside gives its
+   track back (the dashboard, the git board, the finish and document views),
+   and the git board never has notes. The main column is centered, so the
+   freed width becomes margin or, past card-rows.js's math, another card column. */
+.layout:has(> .aside:empty),
+.layout:has(.git-board) { grid-template-columns: 250px minmax(0, 1fr); }
+.layout > .aside:empty,
+.layout:has(.git-board) > .aside { display: none; }
+
 .rail {
   display: flex;
   flex-direction: column;
@@ -255,11 +239,9 @@ h1 {
 .sidebar { flex: 1; }
 .aside { border-left: 1px solid var(--rule); background: var(--panel-2); }
 
-/* The question column does not scroll: the CARD does.
-   A long question used to push Previous / Next below the fold, so the way on
-   disappeared exactly when the question was big enough to need it. The card is
-   the only thing here that shrinks, so it takes the squeeze and scrolls its own
-   contents while its frame, and the pager under it, stay put. */
+/* The question column does not scroll: the CARD does, so a long question
+   never pushes Previous / Next below the fold. The card alone shrinks and
+   scrolls its contents; its frame and the pager stay put. */
 .main {
   padding: 24px 28px;
   overflow: hidden;
@@ -269,29 +251,25 @@ h1 {
 }
 .main > * { width: 100%; max-width: min(var(--card-width), 100%); margin-left: auto; margin-right: auto; }
 /* The card is the column's only framed child: a page holds ONE, with notes
-   and lulls folded into it as sections. It takes the squeeze and scrolls its
-   own contents while its frame, and the pager under it, stay put. */
+   and lulls folded in as sections. */
 .main > .card {
   flex: 0 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding-right: 32px;
+  padding-right: 20px;
 }
-/* The dashboard's menu and the launching pane play by the card's rule too:
-   they are not .card, but they are the column's whole contents, so they take
-   the squeeze and scroll themselves while the column frame stays put. Without
-   this the catalog is clipped at the fold with no way to reach it. */
+/* The dashboard menu and launching pane follow the card's rule: they are the
+   column's whole contents, and without it the catalog is clipped at the fold. */
 .main > .dash, .main > .launching, .main > .dash-confirm, .main > .waiting-pane {
   flex: 0 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding-right: 32px;
+  padding-right: 20px;
 }
 
-/* The agent setup page is the column's whole contents too, and its agent list
-   runs past the fold, so it scrolls itself like the menu above. */
+/* The agent setup page is the column's whole contents too; it scrolls itself. */
 .main > .setup-screen {
   flex: 0 1 auto;
   min-height: 0;
@@ -299,32 +277,27 @@ h1 {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
-/* Its parts keep their height: the agent list clips its own overflow, so left
-   to shrink it would be cut at the fold instead of scrolling. */
+/* Its parts keep their height: the agent list clips its overflow, so a shrink
+   would cut it at the fold. */
 .main > .setup-screen > * { flex-shrink: 0; }
 
-/* The column itself never scrolls; the card does. The git board is the one
-   exception, below: its card sits in the board's card slot, so the column
-   takes the scroll there and card and board flow through it at natural height. */
+/* The column never scrolls; the card does. Exception, below: on the git board
+   the column scrolls and card and board flow at natural height. */
 .main > .card:not(.is-primary) { flex-shrink: 100; min-height: 104px; }
 .main > .card.is-primary { flex-shrink: 1; min-height: 0; }
 /* A card with a growing answer box takes the column's full height above the
-   pager, and still scrolls its own contents. app.js sizes the box to fill it. */
+   pager (app.js sizes the box). */
 .main > .card.is-primary.has-grow { flex: 1 1 auto; }
-/* More below the fold (app.js markMore): the bottom edge fades, so a card
-   cut by the window never reads as finished. */
+/* More below the fold (app.js markMore): the bottom edge fades. */
 .main > .card.has-more {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
 }
 .pager { flex: none; }
 
-/* A document is read top to bottom and has no pinned furniture, so it goes back
-   to being an ordinary scrolling column. */
-/* The tail the column no longer carries: a document IS the scroll, so it wants
-   room after its last line. The question column does not, because the pager is
-   pinned to the bottom of it and anything under the pager is dead space the
-   card could have been scrolling through. */
+/* A document is an ordinary scrolling column with no pinned furniture, so it
+   wants room after its last line; the question column does not (space under
+   the pager is dead space). */
 .main.is-doc { display: block; overflow-y: auto; padding-bottom: 40px; }
 
 /* ------------------------------------------------------------ sidebar */
@@ -332,11 +305,6 @@ h1 {
 .rail-group { margin-bottom: 22px; }
 
 .rail-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-3);
   margin: 0 0 8px;
   display: flex;
   justify-content: space-between;
@@ -354,7 +322,7 @@ h1 {
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   padding: 7px 9px;
   border-radius: 0;
   cursor: pointer;
@@ -362,9 +330,8 @@ h1 {
 }
 .rail-item:hover:not(:disabled) { background: var(--panel-2); color: var(--ink); }
 .rail-item:disabled { cursor: default; }
-/* The dashboard lists every skill in the rail; the ones the selected spec
-   rules out should read as out of reach at a glance, not as one more link. */
-.rail-item.is-unavailable { opacity: 0.35; cursor: not-allowed; }
+/* Skills the selected spec rules out read as out of reach, not as links. */
+.rail-item.is-unavailable { opacity: 0.5; cursor: not-allowed; }
 .rail-item.is-unavailable .rail-mark { color: var(--ink-3); }
 .rail-item[aria-current="true"] {
   background: var(--accent-soft);
@@ -373,13 +340,12 @@ h1 {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.rail-mark { flex: none; width: 15px; text-align: center; font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.rail-mark { flex: none; width: 15px; text-align: center; font-size: var(--fs-xs); color: var(--ink-3); margin-top: 1px; }
 .rail-mark.done { color: var(--ok); }
 .rail-mark.staged { color: var(--stage); font-weight: 700; }
 
-/* Echoes the center pane's "Suggested" pill, which can scroll out of view;
-   the dot keeps the call-out visible while just scanning the rail. The
-   title grows to push the dot flush with the row's right edge. */
+/* Echoes the center pane's "Suggested" pill, which can scroll out of view.
+   The title grows to push the dot to the row's right edge. */
 .rail-item > span:not(.rail-mark):not(.rail-suggested-dot) { flex: 1 1 auto; }
 .rail-suggested-dot {
   flex: none;
@@ -392,42 +358,29 @@ h1 {
 .rail-item.is-suggested:not([aria-current="true"]) { color: var(--ink); }
 .rail-mark.open { color: var(--accent); }
 
-/* The session's own page, above the topic groups. It names the state it is
-   -- PAUSED, SESSION ENDED -- in the same small caps the group titles use,
-   because it is a peer of theirs, not another question in the list. */
-.rail-end-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
+/* The session's own page, above the topic groups: a peer of them. */
 
-.rail-empty { color: var(--ink-3); font-size: 13px; font-style: italic; }
 
 /* -------------------------------------------------------------- aside */
 
 .aside h2 {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
-  color: var(--ink-3); margin: 0 0 12px;
+  margin: 0 0 12px;
 }
 
 .msg {
-  border-radius: 8px; padding: 10px 13px; margin-bottom: 9px; font-size: 13.5px;
+  border-radius: var(--radius-md); padding: 10px 13px; margin-bottom: 9px; font-size: var(--fs-md);
   background: var(--panel); border: 1px solid var(--rule);
 }
 .msg.you { background: var(--stage-soft); border-color: transparent; }
 .msg.staged { border-style: dashed; border-color: var(--stage); background: transparent; }
 .msg-who {
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--ink-3); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px;
+  margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px;
 }
 
 .msg-who .sent-wait { display: inline-flex; align-items: center; gap: 6px; }
 
-.aside-empty { color: var(--ink-3); font-size: 13px; font-style: italic; }
 
-/* The note box takes whatever height the panel has left, never under 160px.
-   Scoped here so the page-wide box minimum still holds everywhere else. */
+/* The note box takes the panel's leftover height, min 160px (scoped here). */
 .aside { display: flex; flex-direction: column; }
 .aside > .field { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 0; }
 .aside .md-host { flex: 1 1 auto; min-height: 160px; resize: vertical; }
@@ -440,26 +393,20 @@ h1 {
 
 .attach-row { display: flex; align-items: center; margin: -4px 0 6px -13px; }
 .attach-row.is-under { margin: 6px 0 4px -13px; }
-/* .btn on the chip's rule: pieces.css loads later, and .btn.tiny's bottom
-   margin would otherwise lift the chip off the row's center line. */
 .attach-row .btn.suggest-chip { margin: 0 0 0 auto; }
 .attach-row .suggest-nudge { margin-left: auto; }
 .attach-row .suggest-nudge + .suggest-chip { margin-left: 9px; }
-.msg .suggest-tag {
-  display: inline-block; margin-bottom: 4px;
-  background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line);
-}
+.msg .suggest-tag { margin-bottom: 4px; }
 .attach-tray { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .attach-thumb {
   position: relative;
   width: 72px; height: 72px; margin: 0;
-  border: 1px solid var(--rule); border-radius: 8px;
+  border: 1px solid var(--rule); border-radius: var(--radius-md);
   overflow: hidden; background: var(--panel);
   flex: none;
 }
 .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* The picture in a thumbnail is a button that opens the picview, with the
-   tray's round X in its corner and the upload state laid over it. */
+/* The thumbnail picture is a button that opens the picview. */
 .attach-open {
   display: block;
   width: 100%;
@@ -469,14 +416,14 @@ h1 {
   background: none;
   cursor: zoom-in;
 }
-.attach-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.attach-open:focus-visible { outline: 2px solid var(--focus); outline-offset: calc(var(--focus-offset) * -1); }
 .attach-thumb.is-uploading .attach-open,
 .attach-thumb.is-failed .attach-open { cursor: default; }
 .attach-remove {
   position: absolute; top: 3px; right: 3px; z-index: 2;
   width: 20px; height: 20px; padding: 0;
   display: grid; place-items: center;
-  font: 700 14px/1 var(--sans);
+  font: 700 var(--fs-md)/1 var(--sans);
   color: var(--ink); background: var(--panel);
   border: 1px solid var(--rule-2); border-radius: 50%;
   cursor: pointer; opacity: 0.9;
@@ -489,9 +436,9 @@ h1 {
 }
 .attach-overlay.failed {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
-  color: var(--ink-2); font-size: 10.5px; font-weight: 600; text-align: center;
+  color: var(--ink-2); font-size: var(--fs-2xs); font-weight: 600; text-align: center;
 }
-.attach-overlay.failed .btn.tiny { margin: 0; padding: 1px 6px; font-size: 10.5px; }
+.attach-overlay.failed .btn.xs { padding: 1px 6px; font-size: var(--fs-2xs); }
 .attach-chip {
   width: 180px;
   display: flex; align-items: center; gap: 8px;
@@ -503,26 +450,24 @@ h1 {
 }
 .attach-chip-text { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .attach-chip-badge {
-  padding: 0 5px; border-radius: 4px;
-  font: 700 10px/1.5 var(--sans); letter-spacing: 0.04em; font-variant: small-caps;
+  padding: 0 5px; border-radius: var(--radius-xs);
+  font: 700 var(--fs-2xs)/1.5 var(--sans); letter-spacing: 0.04em; font-variant: small-caps;
   color: var(--ink); background: var(--accent-soft);
 }
 .attach-chip-name {
   max-width: 100%;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  font-size: 12.5px; font-weight: 600; color: var(--ink);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--ink);
 }
-.attach-chip-size { color: var(--ink-2); font-size: 11.5px; }
-.attach-link { color: inherit; text-decoration: none; border-radius: 8px; }
+.attach-chip-size { color: var(--ink-2); font-size: var(--fs-xs); }
+.attach-link { color: inherit; text-decoration: none; border-radius: var(--radius-md); }
 .attach-link:hover .attach-thumb, .attach-link:focus-visible .attach-thumb { border-color: var(--accent); }
-.attach-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* The same hover border a linked thumbnail gets, for a thumbnail whose own
-   button opens the picview. */
+.attach-link:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
+/* Same hover border as a linked thumbnail. */
 .attach-thumb:has(.attach-open:hover) { border-color: var(--accent); }
 
-/* The full-screen picture preview: the whole viewport, the picture contained
-   in it, on a near-black backdrop in both themes (a picture is judged against
-   dark, whatever the page's theme), so its colors are fixed, not tokens. */
+/* Full-screen picture preview on a near-black backdrop in both themes (a
+   picture is judged against dark), so its colors are fixed, not tokens. */
 .modal.picview {
   inset: 0;
   width: 100vw;
@@ -562,7 +507,7 @@ h1 {
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
-  font: 600 28px/1 var(--sans);
+  font: 600 var(--fs-h1)/1 var(--sans);
   cursor: pointer;
 }
 .picview-step.is-prev { grid-column: 1; }
@@ -579,37 +524,34 @@ h1 {
   gap: 16px;
   padding: 12px 16px 20px;
 }
-.picview-count { margin: 0; font-size: 13.5px; color: rgba(255, 255, 255, 0.8); }
+.picview-count { margin: 0; font-size: var(--fs-md); color: rgba(255, 255, 255, 0.8); }
 .btn.picview-close { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.35); color: #fff; }
 .btn.picview-close:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
 
 .msg.pending { border-style: dashed; border-color: var(--stage); background: transparent; }
 .ask-row .attach-chip { padding-right: 10px; }
 
-.footer-held { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; }
+.footer-held { margin-top: 3px; color: var(--ink-2); font-size: var(--fs-sm); }
 
 /* ------------------------------------------------------------- footer */
 
 /* Three columns: summary, where, actions. Equal side tracks keep the middle
-   centered on the bar, and because they are tracks rather than an overlay, a
-   long summary wraps and a wide actions block nudges the center over instead
-   of either running underneath it. The middle track gives way first: it can
-   shrink to an ellipsis, the summary and Send never do. */
+   centered; a long summary wraps and wide actions nudge the center instead of
+   overlapping. The middle gives way first (ellipsis), summary and Send never. */
 .footer {
   display: grid; grid-template-columns: 1fr minmax(0, auto) 1fr; align-items: center; gap: 18px;
   padding: 13px 20px;
   background: var(--panel);
   border-top: 1px solid var(--rule);
 }
-.footer-summary { min-width: 200px; font-size: 13.5px; color: var(--ink-2); }
+.footer-summary { min-width: 200px; font-size: var(--fs-md); color: var(--ink-2); }
 .footer-summary strong { color: var(--ink); }
-/* Where this session is running: the workspace label, centered on the bar. A
-   click opens the Workspace dialog. The notification pill sits over the same
-   spot and covers it while it shows. */
+/* The workspace label, centered on the bar; a click opens the Workspace
+   dialog. The notification pill covers it while it shows. */
 .footer-where {
   max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 2px 6px; border: 0; background: none;
-  font: inherit; font-size: 12px; color: var(--ink-3);
+  font: inherit; font-size: var(--fs-xs); color: var(--ink-3);
   cursor: pointer;
 }
 .footer-where:hover { text-decoration: underline; }
@@ -620,9 +562,8 @@ h1 {
   display: inline-block; width: 7px; height: 7px; margin-left: 6px;
   border-radius: 50%; background: var(--warn); vertical-align: 1px;
 }
-.footer-where:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-/* One line, so the grid sizes this track to the whole row and takes the room
-   from the middle instead of folding Send in two. */
+.footer-where:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-xs); }
+/* One line, so the track takes room from the middle instead of folding Send. */
 .footer-actions { display: flex; gap: 10px; align-items: center; grid-column: 3; justify-self: end; white-space: nowrap; }
 /* The dashboard: no summary, no Send, just the workspace label. */
 .footer.is-dash .footer-summary,
@@ -631,24 +572,22 @@ h1 {
 .footer.is-dash-done .footer-actions { display: none; }
 .footer.is-loop-idle .footer-summary,
 .footer.is-loop-idle .footer-actions { visibility: hidden; }
-.hint { font-size: 12.5px; color: var(--ink-3); display: flex; align-items: center; gap: 7px; }
-/* A label, not a sentence: the full reason rides in the hint's tooltip, and
-   the dock already carries the ticking clock this would otherwise repeat. */
+.hint { font-size: var(--fs-sm); color: var(--ink-3); display: flex; align-items: center; gap: 7px; }
+/* A label; the full reason rides in the tooltip. */
 .hint-text { max-width: 26ch; overflow: hidden; text-overflow: ellipsis; }
 
 kbd {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   background: var(--panel-2);
   border: 1px solid var(--rule-2);
   border-bottom-width: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 2px 5px;
 }
 
 /* ------------------------------------------------------------ waiting */
 
-/* Laid out like the starting screen, so when a session goes from one to the
-   other Planny stays put and only the words under him change. */
+/* Laid out like the starting screen, so Planny stays put between them. */
 .waiting-pane {
   max-width: 560px;
   margin: 4vh auto 0 !important;
@@ -658,10 +597,9 @@ kbd {
   gap: 12px;
   justify-items: center;
 }
-.waiting-pane h2 { font: 600 23px/1.3 var(--serif); color: var(--ink); margin: 0; }
+.waiting-pane h2 { font: 600 var(--fs-h1)/1.3 var(--serif); color: var(--ink); margin: 0; }
 .waiting-pane p { max-width: 70ch; margin: 0; }
-/* The words that open the live task view (the phase-file tab on a build):
-   bold in the highlight color, a button that reads as part of the sentence. */
+/* Words that open the live task view: a button styled as part of the sentence. */
 .waiting-jump {
   font: inherit;
   font-weight: 700;
@@ -672,9 +610,8 @@ kbd {
 }
 button.waiting-jump { cursor: pointer; text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 3px; }
 button.waiting-jump:hover { text-decoration-color: var(--accent); }
-/* Once the work is under way Planny steps back a size, and the ring in
-   front of the stage name carries the "still going" signal instead. */
-.waiting-pane .pose-stage { height: 130px; transition: height 0.35s ease; }
+/* Once work is under way Planny shrinks and the ring carries "still going". */
+.waiting-pane .pose-stage { height: 130px; transition: height var(--dur-3); }
 .waiting-pane h2 .waiting-spin { display: inline-block; width: 16px; height: 16px; vertical-align: 1px; margin-right: 10px; }
 
 .spinner {
@@ -686,9 +623,8 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* The footer's "waiting on the agent" tell. Same ring, sized to sit on a line
-   of text. It inherits the reduced-motion exception below, which is deliberate:
-   a frozen spinner reads as a broken app, which is the opposite of the point. */
+/* The footer's "waiting on the agent" ring, line-sized. It keeps spinning under
+   reduced motion on purpose: a frozen spinner reads as a broken app. */
 .spinner.tiny {
   width: 13px;
   height: 13px;
@@ -697,23 +633,21 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
   flex: none;
 }
 
-/* The same ring again, in front of Planny's line while the agent has the
-   ball. Inline so it sits on the first line of a wrapped sentence. The
-   [hidden] rule is needed because display here outranks the browser's own. */
+/* The ring in front of Planny's line, inline on a wrapped sentence's first
+   line. [hidden] is needed because display here outranks the browser's. */
 .dock-spin { display: inline-block; vertical-align: -2px; margin-right: 6px; }
 .dock-spin[hidden] { display: none; }
 
-.robot { font: 12px/1.25 var(--mono); color: var(--ink-3); white-space: pre; margin: 0 0 16px; }
+.robot { font: var(--fs-xs)/1.25 var(--mono); color: var(--ink-3); white-space: pre; margin: 0 0 16px; }
 
 /* ------------------------------------------------------------ arrival */
 
-/* The beat when new questions land. Covers the whole page, says what just
-   happened, and leaves by itself in under two seconds. Built from the page's
-   own tokens so it follows the theme and the chosen highlight color. */
+/* The beat when new questions land: covers the page and leaves by itself in
+   under two seconds. Uses page tokens, so it follows theme and highlight. */
 .arrival {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-overlay);
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
@@ -725,18 +659,15 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
 
 .arrival-box { text-align: center; padding: 24px; max-width: min(640px, 100vw - 32px); }
 
+.rail-end-label { color: inherit; }
 .arrival-kicker {
   margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 700;
   letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--accent);
   animation: arrival-rise 0.45s 0.05s ease-out both;
 }
 
-/* The words themselves are the effect: they sweep in on a band of the
-   highlight color, the way a page turns, rather than anything spinning. */
+/* The words sweep in on a band of the highlight color, nothing spinning. */
 .arrival-title {
   margin: 0;
   font: 600 clamp(38px, 7vw, 64px)/1.05 var(--serif);
@@ -757,7 +688,7 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
   height: 3px;
   width: 96px;
   margin: 14px auto 0;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   transform-origin: center;
   animation: arrival-draw 0.5s 0.45s ease-out both;
@@ -765,14 +696,14 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
 
 .arrival-what {
   margin: 16px 0 0;
-  font-size: 17px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--ink-2);
   animation: arrival-rise 0.45s 0.35s ease-out both;
 }
 .arrival-more {
   margin: 4px 0 0;
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   color: var(--ink-3);
   animation: arrival-rise 0.45s 0.45s ease-out both;
 }
@@ -791,16 +722,13 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
 
 
 /* A question that arrived while the person was typing, until it is opened. */
-.rail-new {
-  flex: none;
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
+.rail-new { flex: none; align-self: flex-start; margin-top: 2px; }
+
+/* A warning stays until dismissed or replaced: its close button, at the end of the line. */
+.banner .banner-dismiss { margin-left: 10px; padding: 2px; border: 0; background: none; color: inherit; cursor: pointer; vertical-align: middle; }
+.banner .banner-dismiss svg { width: 14px; height: 14px; display: block; }
+.banner .banner-dismiss:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
+
+/* The home and Subagents buttons name themselves beside their icons, as Notebook does; the narrow strip keeps the icons alone. */
+.home-btn .topbar-label, .subagents-btn .topbar-label { margin-left: 6px; font-size: var(--fs-sm); line-height: 1; }
+.btn.home-btn { gap: 0; }

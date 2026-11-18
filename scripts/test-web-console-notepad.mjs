@@ -1430,7 +1430,7 @@ test("page rules: dropTab puts a tab just before another, or at the end", () => 
 test("page rules: the tab codes have sentences of their own", () => {
   for (const code of ["bad-name", "duplicate-name", "too-many-tabs", "no-such-tab"]) assert.ok(rules.ERROR_CODES.includes(code), code);
   assert.equal(rules.errorSentence("duplicate-name"), "There is already a tab with that name.");
-  assert.equal(rules.errorSentence("no-such-tab"), "That tab is no longer in this notepad.");
+  assert.equal(rules.errorSentence("no-such-tab"), "That tab is no longer in this Notebook.");
   assert.match(rules.errorSentence("too-many-tabs"), new RegExp(String(NOTEPAD_MAX_TABS)));
 });
 

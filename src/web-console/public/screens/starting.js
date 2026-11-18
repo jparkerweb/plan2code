@@ -123,7 +123,7 @@ export function renderLaunching(main) {
 
   const stale = staleLaunchFeedback(l.title, agentAdrift(), page.inApp);
   pane.appendChild(el("p", "card-kicker", stale ? stale.kicker : "On it"));
-  pane.appendChild(el("h2", "launch-title", stale ? stale.title : `Waking up ${l.title || "the next mode"}`));
+  pane.appendChild(el("h2", "launch-title", stale ? stale.title : `Waking up ${l.title || "the next skill"}`));
   pane.appendChild(el("p", "launch-quip", stale ? stale.quip : LAUNCH_QUIPS[0]));
   pane.appendChild(
     el(
@@ -225,7 +225,7 @@ function startLaunchTicker() {
       const reconnect = document.querySelector(".launch-reconnect");
       if (reconnect) reconnect.hidden = !stale;
       if (kicker) kicker.textContent = stale ? stale.kicker : "On it";
-      if (title) title.textContent = stale ? stale.title : `Waking up ${cur.title || "the next mode"}`;
+      if (title) title.textContent = stale ? stale.title : `Waking up ${cur.title || "the next skill"}`;
       q.textContent = stale ? stale.quip : LAUNCH_QUIPS[Math.floor(elapsed / 2600) % LAUNCH_QUIPS.length];
       if (hint) {
         hint.textContent = stale

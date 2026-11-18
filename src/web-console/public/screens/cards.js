@@ -42,8 +42,9 @@ import {
   lessonMissing,
   lessonEditStart,
   lessonReworded,
+  startsTicked,
 } from "../answers.js";
-import { el, md } from "../render.js";
+import { el, hiddenText, icon, md, stateMark } from "../render.js";
 import {
   sentAttachments,
   incomingFiles,
@@ -68,14 +69,14 @@ export function markFor(item) {
   // and can no longer be added to, or it was never answered and never can be.
   if (isOpen(item) && finish()) {
     return recordedAnswer(item)
-      ? { glyph: "✓", cls: "done", label: "sent" }
-      : { glyph: "○", cls: "open", label: "left unanswered" };
+      ? { icon: "check", cls: "done", label: "sent" }
+      : { icon: "circle", cls: "open", label: "left unanswered" };
   }
-  if (page.local.staged[item.id]) return { glyph: "●", cls: "staged", label: "ready to send" };
+  if (page.local.staged[item.id]) return { icon: "dot", cls: "staged", label: "ready to send" };
   if (isOpen(item) && ((page.local.sent && page.local.sent[item.id]) || submittedInFlight(item)))
-    return { glyph: "◐", cls: "staged", label: "sent, waiting for Plan2Code" };
-  if (!isOpen(item)) return { glyph: "✓", cls: "done", label: "answered" };
-  return { glyph: "○", cls: "open", label: "waiting for you" };
+    return { icon: "half", cls: "staged", label: "sent, waiting for Plan2Code" };
+  if (!isOpen(item)) return { icon: "check", cls: "done", label: "answered" };
+  return { icon: "circle", cls: "open", label: "waiting for you" };
 }
 
 // The session's own ending, as a page of its own at the top of the rail.
@@ -88,10 +89,10 @@ export function renderEndItem(fin) {
   const b = el("button", "rail-item");
   b.type = "button";
   b.setAttribute("aria-current", String(page.view === "end"));
-  const mark = el("span", "rail-mark " + (paused ? "staged" : "done"), paused ? "❚❚" : "✓");
-  mark.title = paused ? "session paused" : "session ended";
-  b.appendChild(mark);
-  b.appendChild(el("span", "rail-end-label", paused ? "Paused" : "Session ended"));
+  b.appendChild(
+    stateMark("rail-mark " + (paused ? "staged" : "done"), paused ? "half" : "check", paused ? "session stopped" : "session finished")
+  );
+  b.appendChild(el("span", "rail-end-label", paused ? "Stopped" : "Session finished"));
   b.addEventListener("click", () => {
     page.view = "end";
     redraw();
@@ -237,7 +238,7 @@ export function buildPager(item) {
   if (at === -1) {
     // Reading something already settled. The only move that means anything
     // here is back to the work.
-    const b = el("button", "btn small pager-btn next");
+    const b = el("button", "btn sm pager-btn next");
     b.type = "button";
     const box = el("span", "pager-label");
     box.appendChild(el("span", "pager-kicker", "Back to what is waiting"));
@@ -273,7 +274,7 @@ export function buildPager(item) {
     if (!target) return el("span", "pager-slot");
     const b = el(
       "button",
-      "btn small pager-btn " + (back ? "prev" : "next") + (lead ? " lead" : " ghost")
+      "btn sm pager-btn " + (back ? "prev" : "next") + (lead ? " lead" : " ghost")
     );
     b.type = "button";
     const arrow = el("span", "pager-arrow", back ? "←" : "→");
@@ -300,7 +301,7 @@ export function buildPager(item) {
 // A notice is context for the question it sits beside, so it lives inside the
 // one card rather than as a second one under it.
 export function renderNotice(item) {
-  const box = el("div", "card-note card-extra");
+  const box = el("div", "callout is-info card-note card-extra");
   box.appendChild(el("p", "note-kicker", "Note"));
   box.appendChild(el("h3", "note-title", item.title));
   box.appendChild(md(item.body, "md"));
@@ -398,7 +399,7 @@ export function renderCard(item) {
     const skipped = Boolean(staged && staged.skipped);
     // A small accent chip, like a comment box's quick answer ("No changes"),
     // rather than an underlined link that reads as fine print.
-    const skip = el("button", "btn tiny", skipped ? "Do not skip" : "Skip this one");
+    const skip = el("button", "btn xs soft", skipped ? "Do not skip" : "Skip this one");
     skip.type = "button";
     skip.style.marginTop = "16px";
     skip.addEventListener("click", () => {
@@ -438,7 +439,9 @@ function renderSettled(card, item) {
   const nothing = !lines.length && !prose;
   const box = el("div", "answered" + (nothing ? " is-empty" : ""));
   const head = el("p", "answered-head");
-  head.appendChild(el("span", "answered-mark", nothing ? "·" : "✓"));
+  const doneMark = el("span", "answered-mark");
+  doneMark.appendChild(icon(nothing ? "dot" : "check"));
+  head.appendChild(doneMark);
   // A note is not an answer: say which it is.
   head.appendChild(el("span", null, nothing ? "No answer recorded" : fromNote ? "Your last note" : "Your answer"));
   box.appendChild(head);
@@ -455,7 +458,7 @@ function renderSettled(card, item) {
         "p",
         "answered-none",
         isOpen(item)
-          ? "The session ended before this was answered."
+          ? "The session finished before this was answered."
           : "This was answered somewhere other than this page, so there is nothing to show."
       )
     );
@@ -580,12 +583,15 @@ function lockedOptions(card, item, keys) {
   for (const o of item.options) {
     const on = picked.has(o.k);
     const li = el("li", "option is-locked" + (on ? " is-recorded" : ""));
-    li.appendChild(el("span", "option-mark" + (on ? " on" : ""), on ? "✓" : "·"));
+    const optMark = el("span", "option-mark" + (on ? " on" : ""));
+    optMark.appendChild(icon(on ? "check" : "dot"));
+    optMark.appendChild(hiddenText(on ? "chosen" : "not chosen"));
+    li.appendChild(optMark);
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    if (showKey(o.k, o.text)) head.appendChild(el("span", "option-key", o.k));
+    if (showKey(o.k, o.text)) head.appendChild(el("span", "code-tag option-key", o.k));
     head.appendChild(el("span", null, o.text));
-    if (on) head.appendChild(el("span", "pill done", "Your answer"));
+    if (on) head.appendChild(el("span", "pill is-ok is-caps done", "Your answer"));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));
     li.appendChild(body);
@@ -602,7 +608,10 @@ function lockedSteps(card, item, v) {
     const li = el("li", "step is-locked");
     li.appendChild(el("span", "step-num", String(i + 1)));
     const on = done.has(i);
-    li.appendChild(el("span", "option-mark" + (on ? " on" : ""), on ? "✓" : "·"));
+    const stepMark = el("span", "option-mark" + (on ? " on" : ""));
+    stepMark.appendChild(icon(on ? "check" : "dot"));
+    stepMark.appendChild(hiddenText(on ? "done" : "not done"));
+    li.appendChild(stepMark);
     const body = el("div", "step-body");
     body.appendChild(md(typeof step === "string" ? step : step.text, "md"));
     li.appendChild(body);
@@ -629,7 +638,7 @@ function lockedRows(card, item, v) {
 
 function lockedSummary(card, item) {
   if (!item.summary) return;
-  const box = el("div", "card-note");
+  const box = el("div", "callout is-info card-note");
   box.appendChild(md(item.summary, "md"));
   card.appendChild(box);
 }
@@ -760,7 +769,8 @@ function otherField(card, item, staged) {
       stageQuiet(item.id, { ...(cur || { type: "answer", kind: item.kind }), text: ta.value.trim() });
     } else if (cur && cur.text) {
       const { text, ...rest } = cur;
-      if (rest.k || (rest.ks && rest.ks.length)) stageQuiet(item.id, rest);
+      // On a card with starting ticks an empty pick is itself an answer ("none"), so it stays.
+      if (rest.k || (rest.ks && (rest.ks.length || startsTicked(item)))) stageQuiet(item.id, rest);
       else stageQuiet(item.id, null);
     }
     stagedChanged();
@@ -791,13 +801,13 @@ function fillKicker(kicker, item) {
   kicker.replaceChildren(document.createTextNode(topic ? topic.title : "Question"));
 
   let pill = null;
-  if (!isOpen(item)) pill = el("span", "pill done", item.status === "skipped" ? "Skipped" : "Answered");
+  if (!isOpen(item)) pill = el("span", "pill is-ok is-caps done", item.status === "skipped" ? "Skipped" : "Answered");
   // Frozen on a finished session: the send it carries is the record, and a
   // staged leftover can no longer be sent, so it earns no pill.
-  else if (finish()) pill = recordedAnswer(item) ? el("span", "pill done", "Sent") : null;
-  else if (page.local.staged[item.id]) pill = el("span", "pill staged", "Ready to send");
+  else if (finish()) pill = recordedAnswer(item) ? el("span", "pill is-ok is-caps done", "Sent") : null;
+  else if (page.local.staged[item.id]) pill = el("span", "pill is-stage is-caps staged", "Ready to send");
   else if ((page.local.sent && page.local.sent[item.id]) || submittedInFlight(item))
-    pill = el("span", "pill staged", "Sent");
+    pill = el("span", "pill is-stage is-caps staged", "Sent");
   if (!pill) return;
   pill.style.marginLeft = "8px";
   kicker.appendChild(pill);
@@ -875,9 +885,9 @@ function buildChoice(card, item, staged) {
 
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    if (showKey(o.k, o.text)) head.appendChild(el("span", "option-key", o.k));
+    if (showKey(o.k, o.text)) head.appendChild(el("span", "code-tag option-key", o.k));
     head.appendChild(el("span", null, o.text));
-    if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
+    if (o.recommended) head.appendChild(el("span", "pill is-accent is-caps suggested", "Suggested"));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));
 
@@ -915,7 +925,7 @@ function clearIcon() {
 // call it, and they only run for a form that has not been sent.
 function clearRow(card, item) {
   const row = el("div", "btn-row options-clear");
-  const b = el("button", "btn small ghost clear-btn");
+  const b = el("button", "btn sm ghost clear-btn");
   b.type = "button";
   b.appendChild(clearIcon());
   b.appendChild(el("span", null, "Clear answer"));
@@ -958,6 +968,7 @@ function multiCount(item, ks) {
 
 function buildMulti(card, item, staged) {
   const locked = lockedKeys(item);
+  const seeds = startsTicked(item);
   const chosen = new Set(((staged && staged.ks) || []).filter((k) => !locked.has(k)));
   const grouped = (item.options || []).some((o) => o && typeof o.group === "string" && o.group);
   const list = el("ul", "options");
@@ -988,7 +999,9 @@ function buildMulti(card, item, staged) {
     box.id = optionId(item, o, i);
     box.value = o.k;
     box.checked = on;
-    box.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
+    const tag = typeof o.tag === "string" ? o.tag.trim() : "";
+    const named = o.k ? `${o.k}: ${o.text}` : o.text;
+    box.setAttribute("aria-label", tag ? `${named}, ${tag}` : named);
     if (isLocked) {
       box.disabled = true;
       box.setAttribute("aria-disabled", "true");
@@ -1002,7 +1015,7 @@ function buildMulti(card, item, staged) {
       // Unticking the last box keeps what is written in "Anything else".
       stage(
         item.id,
-        withNote(item, next.size ? { type: "answer", kind: "multi", ks: [...next] } : null, {
+        withNote(item, next.size ? { type: "answer", kind: "multi", ks: [...next] } : seeds ? { type: "answer", kind: "multi", ks: [] } : null, {
           type: "answer",
           kind: "multi",
           ks: [],
@@ -1012,9 +1025,11 @@ function buildMulti(card, item, staged) {
 
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    if (showKey(o.k, o.text)) head.appendChild(el("span", "option-key", o.k));
+    if (showKey(o.k, o.text)) head.appendChild(el("span", "code-tag option-key", o.k));
     head.appendChild(el("span", null, o.text));
-    if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
+    if (o.recommended) head.appendChild(el("span", "pill is-accent is-caps suggested", "Suggested"));
+    // The agent's note on the row, drawn as a pill; it never moves with the tick.
+    if (tag) head.appendChild(el("span", "pill is-neutral tag", tag));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));
 
@@ -1028,7 +1043,7 @@ function buildMulti(card, item, staged) {
       const key = moreKey(item, o);
       const open = openMore.has(key);
       const bodyId = `more-${item.id}-${o.k || i}`;
-      const toggle = el("button", "option-more-btn", open ? "Less" : "More");
+      const toggle = el("button", "btn xs soft option-more-btn", open ? "Less" : "More");
       toggle.type = "button";
       // Stable across redraws, so the click handler can find the new button.
       toggle.id = `more-btn-${item.id}-${o.k || i}`;
@@ -1101,13 +1116,13 @@ function renderPresets(card, item, staged) {
   const now = new Set((staged && staged.ks) || []);
   for (const p of presets) {
     const on = p.ks.length === now.size && p.ks.every((k) => now.has(k));
-    const b = el("button", "btn small" + (on ? " primary" : " ghost"), p.label);
+    const b = el("button", "btn sm" + (on ? " primary" : " ghost"), p.label);
     b.type = "button";
     b.setAttribute("aria-pressed", String(on));
     b.addEventListener("click", () =>
       stage(
         item.id,
-        withNote(item, on ? null : { type: "answer", kind: "multi", ks: [...p.ks] }, {
+        withNote(item, on ? (startsTicked(item) ? { type: "answer", kind: "multi", ks: [] } : null) : { type: "answer", kind: "multi", ks: [...p.ks] }, {
           type: "answer",
           kind: "multi",
           ks: [],
@@ -1188,7 +1203,7 @@ function buildText(card, item, staged) {
   input.addEventListener("input", check);
 
   if (suggestion) {
-    fill = el("button", "btn tiny", "Autofill suggestion");
+    fill = el("button", "btn xs soft", "Autofill suggestion");
     fill.type = "button";
     fill.title = "Put the example into the box. It is yours to edit from there.";
     fill.hidden = Boolean(input.value.trim());
@@ -1249,9 +1264,9 @@ function templateRow(item, input, entries, check) {
     fitGrowBox();
   };
   const chips = entries.map((entry) => {
-    const chip = el("button", "tpl-chip", entry.label);
+    const chip = el("button", "btn sm tpl-chip", entry.label);
     chip.type = "button";
-    if (entry.forYou) chip.appendChild(el("span", "tpl-pill", "For your role"));
+    if (entry.forYou) chip.appendChild(el("span", "pill is-accent tpl-pill", "For your role"));
     chip.addEventListener("click", () => pick(entry));
     row.appendChild(chip);
     return chip;
@@ -1286,13 +1301,13 @@ function templateRow(item, input, entries, check) {
       return;
     }
     dropStrip();
-    strip = el("div", "tpl-replace");
+    strip = el("div", "callout is-stage tpl-replace");
     strip.setAttribute("role", "alert");
     strip.appendChild(el("span", null, "Replace what you typed?"));
-    const replace = el("button", "btn tiny primary", "Replace");
+    const replace = el("button", "btn xs soft primary", "Replace");
     replace.type = "button";
     replace.addEventListener("click", () => apply(entry, sw.text));
-    const keep = el("button", "btn tiny ghost", "Keep mine");
+    const keep = el("button", "btn xs soft", "Keep mine");
     keep.type = "button";
     keep.addEventListener("click", () => {
       dropStrip();
@@ -1334,7 +1349,7 @@ function buildConfirm(card, item, staged) {
   if (item.consequences) {
     // "is-consequences": the command here is what Yes runs, so no "paste it
     // into the Ask tab" nudge under it (app.css).
-    const note = el("div", "card-note is-consequences");
+    const note = el("div", "callout is-info card-note is-consequences");
     note.appendChild(md(item.consequences, "md"));
     card.appendChild(note);
   }
@@ -1367,7 +1382,7 @@ function buildRecap(card, item, staged) {
   // The recap is not optional: a click captured the pick, this captures the
   // agreement. Rendered as a document so it reads like a summary, not a form.
   if (item.summary) {
-    const box = el("div", "card-note");
+    const box = el("div", "callout is-info card-note");
     box.appendChild(md(item.summary, "md"));
     card.appendChild(box);
   }
@@ -1399,7 +1414,7 @@ function buildRecap(card, item, staged) {
 function docLink(item) {
   const doc = item.doc && docs().find((d) => d.id === item.doc);
   if (!doc) return null;
-  const open = el("button", "btn small", `Read “${doc.title || "the document"}” in full`);
+  const open = el("button", "btn sm", `Read “${doc.title || "the document"}” in full`);
   open.type = "button";
   open.style.marginTop = "14px";
   open.addEventListener("click", () => {
@@ -1411,7 +1426,7 @@ function docLink(item) {
 
 function buildReview(card, item, staged) {
   if (item.summary) {
-    const box = el("div", "card-note");
+    const box = el("div", "callout is-info card-note");
     box.appendChild(md(item.summary, "md"));
     card.appendChild(box);
   }
@@ -1542,7 +1557,7 @@ function buildMenu(card, item, staged) {
     const body = el("div", "option-body");
     const head = el("div", "option-label");
     head.appendChild(el("span", null, text));
-    if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
+    if (o.recommended) head.appendChild(el("span", "pill is-accent is-caps suggested", "Suggested"));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));
     label.appendChild(radio);
@@ -1554,7 +1569,7 @@ function buildMenu(card, item, staged) {
   clearRow(card, item);
 
   if (item.command) {
-    const note = el("div", "card-note");
+    const note = el("div", "callout is-info card-note");
     note.appendChild(el("p", "help", "To pick this up in a fresh session, run:"));
     note.appendChild(md("```\n" + handoffText({ command: item.command }) + "\n```", "md"));
     card.appendChild(note);
@@ -1614,7 +1629,8 @@ function buildList(card, item, staged) {
       commit(next);
     });
 
-    const handle = el("button", "row-handle", "⠿");
+    const handle = el("button", "row-handle");
+    handle.appendChild(icon("grip"));
     handle.type = "button";
     handle.title = "Drag to reorder";
     handle.setAttribute("aria-label", `Move “${row.title}”`);
@@ -1660,7 +1676,7 @@ function buildList(card, item, staged) {
     li.appendChild(main);
 
     const tools = el("div", "row-tools");
-    const up = el("button", "btn ghost small", "↑");
+    const up = el("button", "btn ghost sm", "↑");
     up.type = "button";
     up.title = "Move up";
     up.disabled = i === 0;
@@ -1671,7 +1687,7 @@ function buildList(card, item, staged) {
       [next[at - 1], next[at]] = [next[at], next[at - 1]];
       commit(next);
     });
-    const down = el("button", "btn ghost small", "↓");
+    const down = el("button", "btn ghost sm", "↓");
     down.type = "button";
     down.title = "Move down";
     down.disabled = i === rows.length - 1;
@@ -1682,7 +1698,8 @@ function buildList(card, item, staged) {
       [next[at + 1], next[at]] = [next[at], next[at + 1]];
       commit(next);
     });
-    const del = el("button", "btn ghost small", "×");
+    const del = el("button", "btn ghost sm");
+    del.appendChild(icon("close"));
     del.type = "button";
     del.title = "Remove";
     del.setAttribute("aria-label", `Remove “${row.title}”`);
@@ -1700,7 +1717,7 @@ function buildList(card, item, staged) {
   card.appendChild(ul);
 
   const row = el("div", "btn-row");
-  const add = el("button", "btn small", "Add one");
+  const add = el("button", "btn sm", "Add one");
   add.type = "button";
   keepFocus(add);
   add.addEventListener("click", () =>
@@ -1820,7 +1837,7 @@ function buildLessons(card, item, staged) {
   const foot = el("div", "lessons-foot");
   foot.appendChild(summary);
   // Sending with nothing chosen is allowed: everything keeps waiting (FR-14).
-  const leave = el("button", "btn tiny" + (draft.leaveAll ? " primary" : ""), "Leave them all waiting");
+  const leave = el("button", "btn xs soft" + (draft.leaveAll ? " primary" : ""), "Leave them all waiting");
   leave.type = "button";
   leave.setAttribute("aria-pressed", String(draft.leaveAll));
   leave.addEventListener("click", () => {
@@ -1871,14 +1888,14 @@ function lessonRow(item, row, draft, commit) {
 
   for (const f of Array.isArray(row.flags) ? row.flags : []) {
     const what = FLAG_WORDS[f && f.pattern] || "something personal";
-    li.appendChild(el("p", "lessons-flag", `Holds what looks like ${what}${f && f.part ? ` (“${f.part}”)` : ""}. Keep only if that is intended.`));
+    li.appendChild(el("p", "callout is-stage lessons-flag", `Holds what looks like ${what}${f && f.part ? ` (“${f.part}”)` : ""}. Keep only if that is intended.`));
   }
 
   const reworded = lessonReworded(row, draft.edits[row.id] || {});
   const keepWord = LESSON_KEEP_WORD[row.type];
   if (row.refused) {
     const part = row.refused.part ? ` (it starts “${row.refused.part}”)` : "";
-    li.appendChild(el("p", "lessons-refused", `Refused: part of it looks like a secret${part}. Reword it to ${keepWord.toLowerCase()} it.`));
+    li.appendChild(el("p", "callout is-warn lessons-refused", `Refused: part of it looks like a secret${part}. Reword it to ${keepWord.toLowerCase()} it.`));
   }
 
   // The choices, in the order given; a refused row shows its keep word
@@ -1890,7 +1907,7 @@ function lessonRow(item, row, draft, commit) {
   group.setAttribute("aria-label", "Choices for: " + (row.text || row.id));
   choices.forEach((word, i) => {
     const on = pick === word;
-    const b = el("button", "btn small" + (on ? " primary" : ""), word);
+    const b = el("button", "btn sm" + (on ? " primary" : ""), word);
     b.type = "button";
     b.id = `lesson-${item.id}-${row.id}-${i}`;
     b.setAttribute("aria-pressed", String(on));
@@ -2050,7 +2067,7 @@ function commentField(card, item, labelText, required, quickAnswers = []) {
   label.htmlFor = id;
   wrap.appendChild(label);
   const quicks = quickAnswers.map(({ label, text }) => {
-    const b = el("button", "btn tiny quick-answer", label);
+    const b = el("button", "btn xs soft quick-answer", label);
     b.type = "button";
     b.title = "Fill in \"" + text + "\"";
     wrap.appendChild(b);

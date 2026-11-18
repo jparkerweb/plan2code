@@ -3,7 +3,7 @@
 import {
   docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish, SPEC_FILES, loadAgentsDoc, openPrototypeDoc, closePrototypeDoc,
 } from "../selectors.js";
-import { el, md } from "../render.js";
+import { el, icon, md } from "../render.js";
 import { downloadDocHtml, docSavedNote, downloadDoc, blockBody } from "../doc-files.js";
 import { hooks, page, redraw } from "../state.js";
 
@@ -93,8 +93,8 @@ export async function sendBrief() {
     if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
     if (!res.ok) throw new Error(String(res.status));
     $("brief-modal").close();
-    hooks.banner("Asked for a brief. It will appear as a tab when it is written.", "good");
-    setTimeout(() => hooks.banner(null), 5000);
+    const asked = hooks.banner("Asked for a brief. It will appear as a tab when it is written.", "good");
+    setTimeout(() => hooks.clearBanner(asked), 5000);
     page.pendingResult = true;
     redraw();
   } catch (err) {
@@ -120,17 +120,25 @@ export function renderBriefButton() {
   if (offer) btn.disabled = page.gone || page.pendingResult || Boolean(finish());
 }
 
+// The page's one empty block (.empty): an icon from the sheet and one line.
+function emptyBlock(text) {
+  const box = el("div", "empty");
+  box.appendChild(icon("document", "empty-icon"));
+  box.appendChild(el("p", null, text));
+  return box;
+}
+
 export function renderDoc(main, id) {
   const doc = docs().find((d) => d.id === id);
   if (!doc) {
-    main.appendChild(el("p", "doc-empty", "That document is not ready yet."));
+    main.appendChild(emptyBlock("That document is not ready yet."));
     return;
   }
   const head = el("div", "doc-head");
   head.appendChild(el("h2", null, doc.title || "Document"));
   head.appendChild(el("span", "doc-version", "v" + (doc.version || 1)));
   if (doc.stale) {
-    head.appendChild(el("span", "pill staged", "Out of date"));
+    head.appendChild(el("span", "pill is-stage", "Out of date"));
   }
 
   const tools = el("div", "doc-tools");
@@ -138,7 +146,7 @@ export function renderDoc(main, id) {
   // A brief is handed to people who were not in the room, so it gets a copy
   // that opens in any browser, formatting and all.
   if (doc.id === "brief") {
-    const html = el("button", "btn small", "Save as HTML");
+    const html = el("button", "btn sm", "Save as HTML");
     html.type = "button";
     html.addEventListener("click", () => downloadDocHtml(doc));
     tools.appendChild(html);
@@ -148,7 +156,7 @@ export function renderDoc(main, id) {
   if (doc.saved) {
     tools.appendChild(docSavedNote(doc));
   } else {
-    const save = el("button", "btn small", "Download");
+    const save = el("button", "btn sm", "Download");
     save.type = "button";
     save.addEventListener("click", () => downloadDoc(doc));
     tools.appendChild(save);
@@ -160,7 +168,7 @@ export function renderDoc(main, id) {
 
   const blocks = doc.blocks || [];
   if (!blocks.length) {
-    main.appendChild(el("p", "doc-empty", "Nothing written yet. It fills in as you answer."));
+    main.appendChild(emptyBlock("Nothing written yet. It fills in as you answer."));
     return;
   }
   // The block nearest the top of the column is the section + Add context
@@ -202,7 +210,7 @@ export function renderDoc(main, id) {
 function backButton() {
   const flow = page.S.workflow;
   const home = flow === "dashboard" ? "Dashboard" : flow === "git" ? "Git" : "Questions";
-  const back = el("button", "btn small back-home", "Back to " + home);
+  const back = el("button", "btn sm back-home", "Back to " + home);
   back.type = "button";
   back.addEventListener("click", () => {
     page.view = finish() ? "end" : "questions";
@@ -213,7 +221,7 @@ function backButton() {
 }
 
 function printButton() {
-  const print = el("button", "btn small", "Print");
+  const print = el("button", "btn sm", "Print");
   print.type = "button";
   // The print stylesheet drops everything that steers the session, so what
   // comes out is the document alone. "Save as PDF" in that dialog is also the
@@ -237,8 +245,19 @@ export function renderOverview(main, kind = "overview") {
   main.appendChild(head);
   main.appendChild(el("p", "help", `${page.overview.key}/${found ? found.file : ""} · read-only, straight from disk`));
   const box = el("div", "block settled");
-  box.appendChild(md(found ? found.text : "", "md"));
+  if (found) box.appendChild(md(found.text, "md"));
+  else box.appendChild(loadingRows());
   main.appendChild(box);
+}
+
+// Muted rows where a file's lines will be, the diff view's loading look
+// (they shimmer under no-preference, diff.css).
+function loadingRows(count = 7) {
+  const rows = el("div", "diff-skeleton doc-skeleton");
+  rows.setAttribute("role", "status");
+  rows.setAttribute("aria-label", "Reading the file");
+  for (let i = 0; i < count; i++) rows.appendChild(el("span", "diff-skel-row"));
+  return rows;
 }
 
 // The files the AGENTS.md tab may show: the same two shapes the server serves.
@@ -267,7 +286,7 @@ export function renderAgentsDoc(main) {
   head.appendChild(el("h2", null, open === "AGENTS.md" ? "AGENTS.md" : open));
   const tools = el("div", "doc-tools");
   if (open !== "AGENTS.md") {
-    const guide = el("button", "btn small", "Back to AGENTS.md");
+    const guide = el("button", "btn sm", "Back to AGENTS.md");
     guide.type = "button";
     guide.addEventListener("click", () => {
       page.agentsDoc.open = "AGENTS.md";
@@ -323,7 +342,7 @@ export function renderPrototypes(main) {
   head.appendChild(el("h2", null, reading ? open : "Prototypes"));
   const tools = el("div", "doc-tools");
   if (reading) {
-    const list = el("button", "btn small", "Back to Prototypes");
+    const list = el("button", "btn sm", "Back to Prototypes");
     list.type = "button";
     list.addEventListener("click", () => {
       closePrototypeDoc();
@@ -347,7 +366,7 @@ export function renderPrototypes(main) {
     const row = el("li", "proto-row");
     const b = el("button", "proto-open", null);
     b.type = "button";
-    b.appendChild(el("span", "proto-kind proto-kind-" + f.kind, f.kind === "md" ? "MD" : "HTML"));
+    b.appendChild(el("span", "code-tag" + (f.kind === "md" ? "" : " is-accent") + " proto-kind proto-kind-" + f.kind, f.kind === "md" ? "MD" : "HTML"));
     b.appendChild(el("span", "proto-name", f.name));
     b.appendChild(el("span", "proto-how", f.kind === "md" ? "Read it here" : "Opens in your browser ↗"));
     b.title = f.kind === "md" ? `Read ${f.name} here` : `Open ${f.name} in your default browser`;

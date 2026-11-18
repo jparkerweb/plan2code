@@ -135,8 +135,7 @@ const gitLocked = () => gitMode() !== "idle";
 async function sendGit(op, fields = {}, wording = {}) {
   if (page.gone || finish()) return;
   if (page.pendingResult) {
-    hooks.banner("Your last click is still being picked up. One moment.", "info");
-    page.pendingBannerUp = true;
+    page.pendingBannerUp = hooks.banner("Your last click is still being picked up. One moment.", "info");
     return;
   }
   try {
@@ -150,8 +149,7 @@ async function sendGit(op, fields = {}, wording = {}) {
     });
     if (res.status === 409) {
       page.pendingResult = true;
-      hooks.banner("Your last click is still being picked up. One moment.", "info");
-      page.pendingBannerUp = true;
+      page.pendingBannerUp = hooks.banner("Your last click is still being picked up. One moment.", "info");
       redraw();
       return;
     }

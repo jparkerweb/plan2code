@@ -40,7 +40,7 @@ export function continueButton(label = "continue", cls = "agent-key agent-key-bt
  * Null when there is nothing to offer.
  */
 export function reconnectOffer(cls = "reconnect-offer") {
-  if (page.inApp) return continueButton("Reconnect to agent", "btn small " + cls);
+  if (page.inApp) return continueButton("Reconnect to agent", "btn sm " + cls);
   const note = el("p", cls + " help");
   note.appendChild(document.createTextNode("To wake the agent, type "));
   note.appendChild(el("strong", "agent-key", "continue"));

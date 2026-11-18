@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue, sendAsk, styleOf } from "./page-test-helpers.mjs";
-import { cli, until } from "./web-console-test-helpers.mjs";
+import { cli, until, HOME } from "./web-console-test-helpers.mjs";
 import { STOP_HANDOFF_REPLY, HOME_REPLY } from "../src/web-console/public/answers.js";
 import { CHAT_OFFLINE_TEXT } from "../src/web-console/public/chat.js";
 // How long the page waits without contact before it calls itself offline:
@@ -23,7 +23,7 @@ const suite = pageSuite(test);
 
 
 // The banner the page raises when it loses its server mid-session.
-const LOST_CONTACT = /Lost contact with Plan2Code\. Nothing you have typed is lost\./;
+const LOST_CONTACT = /Not connected right now. Nothing you have typed is lost./;
 
 // A plan session on the person's turn, the way an agent opens one: one text
 // question and the agent listening.
@@ -233,7 +233,7 @@ test("Continue here shows beside a skill's next step while the meter is not red 
   assert.equal(got.reply, "Start Implement (/plan2code-3-implement) for specs/audit-export, right here in this session.");
   // The hop's resume is the dashboard's: the skill's workflow and the spec.
   assert.match(got.resume, /--workflow implement --spec specs\/audit-export$/);
-  await main.getByRole("button", { name: "Starting the next step…" }).waitFor();
+  await main.getByRole("button", { name: "Starting the next skill…" }).waitFor();
   assert.equal(await main.getByRole("button", { name: "Back to the dashboard" }).isDisabled(), true, "one press locks the other buttons");
 
   // No skill to continue into: a git command, or a pause.
@@ -685,7 +685,7 @@ test("Stop session, confirmed, sends __stop with no handoff", async (t) => {
   assert.deepEqual(stop, { i: "__stop", type: "stop" });
 });
 
-test("Stop with a handoff sends __stop with handoff, and the paused finish and stop that follow end on the paused screen, not an error", async (t) => {
+test("Stop with a handoff sends __stop with handoff, and the paused finish and stop that follow end on the stopped screen, not an error", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await s.page.click("#btn-stop");
   const handoff = s.page.locator("#stop-handoff");
@@ -716,8 +716,8 @@ test("Stop with a handoff sends __stop with handoff, and the paused finish and s
     !LOST_CONTACT.test(await s.page.locator("#banner").innerText()) &&
     !(await s.page.locator("#planny").getAttribute("class")).includes("is-gone");
   assert.ok(await holds(settled, GONE_AFTER_MS + 3000), "the page raised a lost-contact state after a paused finish");
-  assert.match(await main.innerText(), /Session paused/i);
-  assert.match(await textOf(s.page.locator("#agent-text")), /^Paused\./);
+  assert.match(await main.innerText(), /Session stopped/i);
+  assert.match(await textOf(s.page.locator("#agent-text")), /^Stopped./);
   assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code-1-plan --web$/ }).count(), "the resume command is gone");
 });
 
@@ -759,7 +759,7 @@ test("a page that loses its server goes offline, and after a resume it shows the
   await s.page.waitForFunction(() => document.getElementById("planny").classList.contains("is-gone"), null, {
     timeout: GONE_AFTER_MS + 10000,
   });
-  assert.match(await textOf(s.page.locator("#agent-text")), /^Not connected\. Your answers are saved\./);
+  assert.match(await textOf(s.page.locator("#agent-text")), /^Not connected right now. Your answers are saved./);
   assert.match(await s.page.locator("#banner").innerText(), LOST_CONTACT);
   assert.equal(await s.page.locator("#btn-send").isDisabled(), true, "Send is on with no server");
 
@@ -832,7 +832,7 @@ test("the quiet, not running and not connected lines offer What to check, openin
     await s.page.clock.fastForward(GONE_AFTER_MS);
     await new Promise((r) => setTimeout(r, 250));
   }
-  await lineSays(s, /^Not connected\. Your answers are saved\./);
+  await lineSays(s, /^Not connected right now. Your answers are saved./);
   assert.equal(await whatToCheck(s).count(), 1, "the not connected line carries What to check");
 });
 
@@ -904,7 +904,7 @@ test("a Send that finds the server gone says so at once, with the reconnect help
   await s.page.click("#btn-send");
   await s.page.waitForFunction(() => document.getElementById("planny").classList.contains("is-gone"), null, { timeout: 3000 });
   assert.match(await s.page.locator("#banner").innerText(), LOST_CONTACT);
-  assert.match(await textOf(statusLine(s)), /^Not connected\. Your answers are saved\./);
+  assert.match(await textOf(statusLine(s)), /^Not connected right now. Your answers are saved./);
   assert.equal(await whatToCheck(s).count(), 1, "the not connected line carries What to check");
 });
 
@@ -1102,7 +1102,9 @@ test("Stop with a handoff sends its own reply line beside the stop, and a plain 
 
 // A finish that offers a review, a commit and the dashboard, on a build.
 const OFFERS = { headline: "Quick task done", command: "/plan2code-5-git", review: true, commit: true, dashboard: true };
-const closeGuide = (s) => s.page.getByRole("region", { name: "Before you close this" });
+// Folded into the closed "Closing or starting fresh" section, so the role query also reads what is hidden.
+const closeGuide = (s) => s.page.getByRole("region", { name: "Before you close this", includeHidden: true });
+const openFolded = (s) => s.page.evaluate(() => document.querySelectorAll(".handoff-more").forEach((d) => (d.open = true)));
 
 // What a person sees break: "Safe to close" printed under "Review requested", or the review offer coming back after a reload.
 test("Before you close this shows while a review is on offer, goes while it is asked, and the asked offer stays locked after a reload", async (t) => {
@@ -1212,7 +1214,7 @@ test("Before you close this goes while a commit or the dashboard is starting, an
     await gone.page.clock.fastForward(GONE_AFTER_MS);
     await new Promise((r) => setTimeout(r, 250));
   }
-  await closeGuide(gone).waitFor();
+  await closeGuide(gone).waitFor({ state: "attached" });
 });
 
 // What a person sees break: a finished screen with no Before you close this,
@@ -1231,6 +1233,7 @@ test("every finished shape shows Before you close this with its three rows, and 
     await main.getByRole("heading", { name: headline }).waitFor();
     const guide = closeGuide(s);
     assert.equal(await guide.count(), 1, `${headline}: one guide`);
+    await openFolded(s);
     assert.equal(await guide.locator("li").count(), 3, `${headline}: three rows`);
     const text = await textOf(guide);
     for (const label of ["Before you close this", "Safe to close", "Start fresh", "Carry on"]) assert.ok(text.includes(label), `${headline}: says "${label}"`);
@@ -1264,6 +1267,7 @@ test("under the app, Before you close this points at New Session, and never at a
   s.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
   await main.getByRole("heading", { name: "A skill next" }).waitFor();
   const guide = closeGuide(s);
+  await openFolded(s);
   const text = await textOf(guide);
   assert.ok(text.includes("Press New Session at the top of the window to start the agent fresh."), "Start fresh points at New Session");
   assert.ok(text.includes("Paste the command above into the terminal panel, or start from the dashboard with /plan2code."), "Carry on names the terminal panel");
@@ -1323,7 +1327,7 @@ test("the top bar's back triangle asks first, then sends __dashboard with the ty
   await s.page.click("#btn-home");
   const modal = s.page.locator("#home-modal");
   await modal.waitFor();
-  assert.match(await textOf(modal), /Leave this workflow\?/);
+  assert.match(await textOf(modal), /Leave this skill?\?/);
   assert.match(await textOf(modal.locator("#home-blurb")), /The answer you have ready goes with it\./);
   await modal.locator("#home-cancel").click();
   await modal.waitFor({ state: "hidden" });
@@ -1334,7 +1338,7 @@ test("the top bar's back triangle asks first, then sends __dashboard with the ty
   const got = collect(s);
   assert.deepEqual(got.actions.map(({ i, type }) => ({ i, type })), [{ i: "q1", type: "answer" }, { i: "__dashboard", type: "dashboard" }]);
   assert.ok(got.reply.includes("audit-export") && got.reply.endsWith(HOME_REPLY), `the reply carries the answer, then the home line: ${got.reply}`);
-  await s.page.waitForFunction(() => document.getElementById("btn-home").disabled);
+  await s.page.waitForFunction(() => document.getElementById("btn-home").getAttribute("aria-disabled") === "true");
 });
 
 // What a person sees break: Commit it now, or Changelog's commit offer, hops
@@ -1447,4 +1451,147 @@ test("under the app, Planny's finished line says to close the window, not the ta
   await s.page.locator("#main").getByRole("heading", { name: "All done" }).waitFor();
   const line = await lineSays(s, /close this window/);
   assert.doesNotMatch(line, /close this tab/, "no classic-mode wording under the app");
+});
+
+// The meter's one-time tip lives in its popover (it used to sit in the Welcome
+// dialog): the first time the pill leaves green, opened once, then never again.
+test("the meter popover shows a one-time tip the first time the pill turns yellow", async (t) => {
+  const file = path.join(HOME, "looks.json");
+  fs.mkdirSync(HOME, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ looks: { welcomeSeen: true } }));
+  t.after(() => fs.rmSync(file, { force: true }));
+  const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  const once = s.page.locator("#meter-once");
+  assert.equal(await once.isHidden(), true, "nothing at green");
+  // Six points: a fifteen-task phase, the yellow level.
+  s.post({ run: { event: "implement-phase", id: "phase-1", tasks: 18 } });
+  const pill = s.page.locator("#meter-pill[data-level='yellow']");
+  await pill.waitFor();
+  await pill.click();
+  await once.waitFor();
+  assert.match(await once.innerText(), /once the meter passes half/i);
+  assert.ok(await until(() => s.page.evaluate(async () => ((await (await fetch("/looks")).json()).looks || {}).meterTipSeen === true)), "opening it with the tip showing saved the flag");
+  // A redraw while the popover is open must not take the tip away mid-read.
+  s.post({ agent: { activity: "Task 2 of 2" } });
+  await s.page.getByText("Task 2 of 2").first().waitFor();
+  assert.equal(await once.isVisible(), true, "the tip stays up through a redraw while its popover is open");
+  await pill.click();
+  await s.page.locator("#meter-pop").waitFor({ state: "hidden" });
+  assert.equal(await once.isHidden(), true, "closing the popover retires the tip");
+  await s.page.reload();
+  const again = s.page.locator("#meter-pill[data-level='yellow']");
+  await again.waitFor();
+  await again.click();
+  assert.equal(await s.page.locator("#meter-once").isHidden(), true, "the tip does not come back");
+});
+
+// One primary per finish by a fixed rule (review, else commit, else Continue
+// here, else Back to the dashboard), and the quiet extras folded into one
+// closed section.
+test("every finish shape shows exactly one primary button by the fixed rule, and the extras fold away", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "quick-task", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  const main = s.page.locator("#main");
+  const primaries = () => main.locator("button.primary");
+  const shapes = [
+    ["Everything on offer", { command: "/plan2code-5-git", review: true, commit: true, dashboard: true }, "Review it now"],
+    ["Commit and dashboard", { command: "/plan2code-5-git", commit: true, dashboard: true }, "Commit it now"],
+    ["A skill next", { command: "/plan2code-4-finalize", dashboard: true }, "Continue here"],
+    ["Only the dashboard", { dashboard: true }, "Back to the dashboard"],
+    ["Paused here", { command: "/plan2code-3-implement specs/x/overview.md" }, "Copy"],
+    ["Nothing left", {}, "Copy"],
+  ];
+  for (const [headline, rest, primary] of shapes) {
+    s.post({ finish: { headline, ...rest } });
+    await main.getByRole("heading", { name: headline }).waitFor();
+    assert.equal(await primaries().count(), 1, `${headline}: exactly one primary`);
+    assert.match(await primaries().first().innerText(), new RegExp(primary), `${headline}: the primary is ${primary}`);
+  }
+  // The extras are one closed section, "Closing or starting fresh".
+  s.post({ finish: { headline: "Folded", command: "/plan2code-4-finalize" } });
+  await main.getByRole("heading", { name: "Folded" }).waitFor();
+  const more = main.locator("details.handoff-more");
+  assert.equal(await more.count(), 1, "one folded section");
+  assert.equal(await more.evaluate((d) => d.open), false, "closed");
+  assert.match(await textOf(more.locator("summary")), /Closing or starting fresh/);
+  await more.locator("summary").click();
+  await closeGuide(s).waitFor();
+});
+
+// Stop and Back lock with aria-disabled while Plan2Code has the turn: a press
+// opens a small note saying why, and acts on nothing.
+test("Stop session and Back are aria-disabled mid-task, and a press explains instead of stopping", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 3" } } });
+  const stop = s.page.locator("#btn-stop");
+  await stop.waitFor();
+  assert.equal(await stop.getAttribute("aria-disabled"), "true", "locked");
+  assert.equal(await stop.evaluate((n) => n.disabled), false, "but not disabled, so a press still lands");
+  // Playwright reads aria-disabled as disabled, so the press is forced.
+  await stop.click({ force: true });
+  const pop = s.page.locator(".lock-pop");
+  await pop.waitFor();
+  assert.match(await textOf(pop), /Plan2Code is mid-task, so Stop unlocks at its next check-in. To interrupt it now, press Esc in the terminal./);
+  // Wide enough to read and inside the window (right-anchoring once squeezed it to a strip).
+  const box = await pop.boundingBox();
+  const width = await s.page.evaluate(() => window.innerWidth);
+  assert.ok(box.width > 250 && box.x >= 0 && box.x + box.width <= width, `the note is readable and on screen: ${JSON.stringify(box)}`);
+  assert.equal(await s.page.locator("#stop-modal[open]").count(), 0, "no Stop dialog");
+  await s.page.keyboard.press("Escape");
+  await pop.waitFor({ state: "detached" });
+  const home = s.page.locator("#btn-home");
+  assert.equal(await home.getAttribute("aria-disabled"), "true", "Back is locked too");
+  await home.click({ force: true });
+  assert.match(await textOf(s.page.locator(".lock-pop")), /Back to the dashboard unlocks at its next check-in/);
+  assert.equal(await s.page.locator("#home-modal[open]").count(), 0, "no Back dialog");
+  // On the person's turn the lock lifts and Stop opens its dialog.
+  s.post({ items: [{ id: "q1", kind: "text", title: "Name it", body: "A name." }], agent: { status: "waiting" } });
+  await s.page.waitForFunction(() => !document.getElementById("btn-stop").hasAttribute("aria-disabled"));
+  await stop.click();
+  await s.page.locator("#stop-modal[open]").waitFor();
+  await s.page.keyboard.press("Escape");
+  await s.page.locator("#stop-modal[open]").waitFor({ state: "detached" });
+  // Back already on its way home says so, never "mid-task, press Esc".
+  await home.click();
+  await s.page.locator("#home-modal[open]").waitFor();
+  await s.page.click("#home-go");
+  await s.page.waitForFunction(() => document.getElementById("btn-home").getAttribute("aria-disabled") === "true");
+  await home.click({ force: true });
+  const going = s.page.locator(".lock-pop");
+  await going.waitFor();
+  assert.match(await textOf(going), /^Opening the dashboard/);
+});
+
+// A timed success never wipes a newer warning, and a warning can be dismissed.
+test("a timed banner clears only its own message, and a warn banner has a Dismiss button", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").waitFor();
+  const shown = await s.page.evaluate(async () => {
+    const core = await import("/screens/core.js");
+    const box = document.getElementById("banner");
+    const ok = core.banner("Sent. Plan2Code is picking it up now.", "good");
+    const warn = core.banner("That did not go through. Nothing was lost; try again.", "warn");
+    core.clearBanner(ok); // the success's own timer fires late
+    const kept = !box.hidden && box.textContent.includes("did not go through");
+    core.clearBanner(warn);
+    return { kept, goneAfter: box.hidden, tokensDiffer: ok !== warn };
+  });
+  assert.deepEqual(shown, { kept: true, goneAfter: true, tokensDiffer: true });
+  await s.page.evaluate(async () => (await import("/screens/core.js")).banner("A refused send.", "warn"));
+  const banner = s.page.locator("#banner");
+  await banner.waitFor();
+  await banner.getByRole("button", { name: "Dismiss" }).click();
+  await banner.waitFor({ state: "hidden" });
+  // Info and success banners are not dismissible: they go by themselves.
+  await s.page.evaluate(async () => (await import("/screens/core.js")).banner("Sent.", "good"));
+  assert.equal(await banner.getByRole("button", { name: "Dismiss" }).count(), 0, "no Dismiss on a success");
+});
+
+// A finished session has nothing to send, ever: no dead Send button, and the
+// footer says why in words.
+test("a finished session draws no Send button and keeps the footer's words", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "quick-task", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  assert.equal(await s.page.locator("#btn-send").isHidden(), false, "Send is drawn while the session runs");
+  s.post({ finish: { headline: "Quick task done", command: "/plan2code-5-git" } });
+  await s.page.locator("#main").getByRole("heading", { name: "Quick task done" }).waitFor();
+  await s.page.locator("#btn-send").waitFor({ state: "hidden" });
+  assert.match(await textOf(s.page.locator("#footer-summary")), /^All done\./);
 });

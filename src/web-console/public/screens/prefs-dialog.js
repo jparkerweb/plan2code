@@ -2,7 +2,8 @@
 // to open and close it, the Saved mark, Back to default for the tab on screen
 // and the prompt that stops an unsaved agent edit being lost.
 
-import { onSwatchSaved, renderSwatches, resetLooks, saveLooks } from "../looks.js";
+import { looks, onSwatchSaved, renderSwatches, resetLooks, saveLooks } from "../looks.js";
+import { ROLE_NOT_SET } from "../starters.js";
 import { PREFS_TABS, prefsOpenTab, prefsResetScope } from "../prefs.js";
 import { wireTabs } from "../tabs.js";
 import { el, lightDismiss } from "../render.js";
@@ -12,7 +13,7 @@ const $ = (id) => document.getElementById(id);
 
 let prefsTabs = null;
 
-// Back to default only where the tab has looks to reset.
+// Reset this tab only where the tab has looks to reset.
 function showResetFor(id) {
   $("looks-reset").hidden = prefsResetScope(id) === null;
 }
@@ -55,6 +56,36 @@ export async function markSaved(fieldset, result) {
   }
 }
 
+// "Reset. Undo" in the mark's place after Reset this tab: the same corner as
+// Saved, for a few seconds, with a button that puts the tab's values back.
+const RESET_UNDO_MS = 8000;
+
+function markReset(fieldset, undo) {
+  if (!fieldset) return;
+  let mark = fieldset.querySelector(":scope > .prefs-saved");
+  if (!mark) {
+    mark = el("span", "prefs-saved");
+    mark.setAttribute("role", "status");
+    fieldset.appendChild(mark);
+  }
+  clearTimeout(markTimers.get(mark));
+  mark.classList.remove("is-saved", "error");
+  mark.classList.add("is-reset");
+  const button = el("button", "linky prefs-undo", "Undo");
+  button.type = "button";
+  const end = () => {
+    clearTimeout(markTimers.get(mark));
+    mark.classList.remove("is-reset");
+    mark.textContent = "";
+  };
+  button.addEventListener("click", () => {
+    end();
+    undo();
+  });
+  mark.replaceChildren(document.createTextNode("Reset. "), button);
+  markTimers.set(mark, setTimeout(end, RESET_UNDO_MS));
+}
+
 // Every way in: the gear, the dashboard's Set up preferences, or a caller
 // naming the tab it wants. Agents and models load each time it opens.
 export function openPrefs(tab) {
@@ -70,7 +101,7 @@ export function openPrefs(tab) {
 let asking = null;
 
 // Everything in the dialog but the prompt, kept out of reach while it asks.
-const behindPrompt = () => [$("looks-title"), $("looks-modal").querySelector(".prefs-body"), $("looks-modal").querySelector(".modal-actions")];
+const behindPrompt = () => [$("looks-title"), $("prefs-lead"), $("looks-modal").querySelector(".prefs-body"), $("looks-modal").querySelector(".modal-actions")];
 
 function endAsking(go) {
   $("prefs-unsaved").hidden = true;
@@ -85,8 +116,9 @@ function endAsking(go) {
 }
 
 // Before anything leaves an agent form with an unsaved edit (Close, Esc, a
-// backdrop click, another tab, another agent's row): Save, Discard or Keep
-// editing, asked inside the dialog. Resolves true when it may go on.
+// backdrop click, another tab, another agent's row): Keep editing, Discard or
+// Save, asked inside the dialog, in the Lessons prompt's order (learning-row.js)
+// and with focus on the safe choice. Resolves true when it may go on.
 export function confirmUnsaved() {
   if (!hooks.hasUnsaved()) return Promise.resolve(true);
   if (asking) return asking.promise;
@@ -97,7 +129,7 @@ export function confirmUnsaved() {
   for (const node of behindPrompt()) node.inert = true;
   $("prefs-unsaved").hidden = false;
   $("prefs-unsaved-save").disabled = false;
-  $("prefs-unsaved-save").focus();
+  $("prefs-unsaved-keep").focus();
   return promise;
 }
 
@@ -124,13 +156,14 @@ function wireUnsaved() {
   const name = el("strong");
   name.id = "prefs-unsaved-name";
   text.append("You have unsaved changes to ", name, ".");
-  const save = el("button", "btn small primary", "Save");
+  const save = el("button", "btn sm primary", "Save");
   save.type = "button";
   save.id = "prefs-unsaved-save";
-  const discard = el("button", "btn small ghost", "Discard");
+  const discard = el("button", "btn sm ghost", "Discard");
   discard.type = "button";
-  const keep = el("button", "btn small ghost", "Keep editing");
+  const keep = el("button", "btn sm ghost", "Keep editing");
   keep.type = "button";
+  keep.id = "prefs-unsaved-keep";
   save.addEventListener("click", async () => {
     save.disabled = true;
     const ok = await hooks.saveOpen();
@@ -143,7 +176,7 @@ function wireUnsaved() {
   });
   keep.addEventListener("click", () => endAsking(false));
   const actions = el("div", "prefs-unsaved-actions");
-  actions.append(save, discard, keep);
+  actions.append(keep, discard, save);
   inner.append(title, text, actions);
   box.append(inner);
   $("looks-modal").append(box);
@@ -197,10 +230,18 @@ export function wirePrefs() {
     const tab = prefsTabs.current();
     const keys = prefsResetScope(tab);
     if (!keys) return;
+    // What the tab held before, so Undo can put it back. A role never chosen
+    // comes back as Not set: the server's file cannot un-have a key.
+    const before = Object.fromEntries(keys.map((k) => [k, k === "role" ? (looks.role ?? ROLE_NOT_SET) : looks[k]]));
     resetLooks(keys);
-    const saved = saveLooks();
+    saveLooks();
     redraw();
-    markSaved($("prefs-panel-" + tab).querySelector("fieldset"), saved);
+    markReset($("prefs-panel-" + tab).querySelector("fieldset"), () => {
+      for (const [k, v] of Object.entries(before)) looks[k] = v;
+      const saved = saveLooks();
+      redraw();
+      markSaved($("prefs-panel-" + tab).querySelector("fieldset"), saved);
+    });
   });
   onSwatchSaved((saved) => markSaved($("looks-swatches").closest("fieldset"), saved));
 }

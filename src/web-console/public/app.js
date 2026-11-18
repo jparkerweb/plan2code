@@ -19,7 +19,7 @@
 
 import { page, onRedraw, onSave, useHooks, bootData } from "./state.js";
 import {
-  adopt, askSuggestions, banner, connect, fillSky, fitGrowBox, loadState, markSent, maybeWelcome, render, renderFooter,
+  adopt, askSuggestions, banner, clearBanner, connect, fillSky, fitGrowBox, loadState, markSent, maybeWelcome, render, renderFooter,
   renderSidebar, renderWhere, save, startClock, startLooks, stagedPayload, syncWorkspaceScope,
   wakeHoldsChime, wireAsk, wireCards, wireChrome, wireCleanup, wireDashboard, wireDocs, wireEnding,
   wireActivities, wireLoopSetup, wireHelp, launchSkill, sendLearning, beginLearningSave, renderLearningRow, learningBlocked, openHelpOn, openLoopSetup, wireLooks, wireNotepad, wirePrefs, wireWorkspace,
@@ -37,7 +37,7 @@ import { sound } from "./sound.js";
 // and the few calls a screen makes into another are handed to state.js first.
 onSave(save);
 useHooks({
-  launchSkill, sendLearning, beginLearningSave, renderLearningRow, learningBlocked, openHelpOn, openLoopSetup, askSuggestions, banner, fitGrowBox, markSent, maybeWelcome, renderFooter, renderSidebar, renderWhere, stagedPayload, syncWorkspaceScope,
+  launchSkill, sendLearning, beginLearningSave, renderLearningRow, learningBlocked, openHelpOn, openLoopSetup, askSuggestions, banner, clearBanner, fitGrowBox, markSent, maybeWelcome, renderFooter, renderSidebar, renderWhere, stagedPayload, syncWorkspaceScope,
   openPrefs, markSaved, confirmUnsaved, loadAgentsView, wireAgentsView, hasUnsaved, unsavedName, saveOpen, discardOpen, focusOpen,
   renderCard, send, refreshLessonsSend,
 });

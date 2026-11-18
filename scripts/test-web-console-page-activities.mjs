@@ -1850,6 +1850,8 @@ test("a drag on the board reaches a pointer game, a question mid-drag cancels it
   await openActivities(s);
   await s.page.keyboard.press(" ");
   assert.equal(await overlay(s), "", "running");
+  // The dialog's opening motion must be over before the canvas is measured, or the box moves under the press.
+  await s.page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect && a.effect.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
   const box = await s.page.locator("#activities-canvas").boundingBox();
   const at = (dx, dy) => [box.x + dx, box.y + dy];
   await s.page.mouse.move(...at(40, 40));

@@ -40,6 +40,9 @@ export function fresh() {
     drafts: {},
     images: {},
     sent: {},
+    // Multi cards whose starting ticks were already staged (answers.js seedStaged),
+    // keyed by item id: a card the person cleared is never ticked again.
+    seeded: {},
     stopping: null,
     afterBuild: null,
     // The finish `afterBuild` was pressed on (finishKey), so a different one is a new offer.

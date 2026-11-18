@@ -2,10 +2,6 @@
    your-turn banner and the notes. The game draws its own board on the canvas. */
 
 /* The top bar's die, drawn and lit like the megaphone and the gear beside it. */
-.icon-btn .dc-body { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
-.icon-btn .dc-pip { fill: var(--ink-2); stroke: none; }
-.icon-btn:hover .dc-body { stroke: var(--accent); }
-.icon-btn:hover .dc-pip { fill: var(--accent); }
 /* Show Activities off in User Preferences: .icon-btn's grid would beat the
    attribute's own display. */
 #btn-activities[hidden] { display: none; }
@@ -280,7 +276,7 @@
 }
 .activities-order-pill:hover { border-color: var(--accent-line); color: var(--ink); }
 .activities-order-pill[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
-.activities-order-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.activities-order-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .activities-count { margin-left: auto; color: var(--ink-3); font-size: 0.9em; font-weight: 600; font-variant-numeric: tabular-nums; }
 .activities-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 @container (min-width: 640px) {
@@ -303,7 +299,7 @@
 }
 .activities-row:hover,
 .activities-row:focus-visible { border-color: var(--accent-line); background: var(--panel-2); }
-.activities-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.activities-row:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .activities-row .activities-cover { border: 1px solid var(--rule-2); border-radius: 6px; overflow: hidden; }
 .activities-row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .activities-row-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }

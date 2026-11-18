@@ -126,12 +126,12 @@ async function toTheMenu(s) {
   return main;
 }
 
-// Sets the picker's "Hide unavailable workflows" switch. Looks are kept per
+// Sets the picker's "Hide unavailable skills" switch. Looks are kept per
 // console home, so each test sets the one it needs rather than trusting the
 // default.
 async function hideUnavailable(main, on) {
-  const box = main.getByRole("switch", { name: "Hide unavailable workflows" });
-  if ((await box.isChecked()) !== on) await main.getByText("Hide unavailable workflows").click();
+  const box = main.getByRole("switch", { name: "Hide unavailable skills" });
+  if ((await box.isChecked()) !== on) await main.getByText("Hide unavailable skills").click();
   assert.equal(await box.isChecked(), on);
 }
 
@@ -468,7 +468,7 @@ test("a handoff shows as a dashed Handoff chip even with no spec, and picking it
     assert.equal(await main.getByRole("button", { name, exact: true }).count(), 1, `the preview has ${name}`);
   }
   assert.equal(await lightOf(main, "/plan2code-1-plan").count(), 0, "the skill cards give way to the preview");
-  assert.equal(await main.getByRole("switch", { name: "Hide unavailable workflows" }).count(), 0, "and so does their toggle");
+  assert.equal(await main.getByRole("switch", { name: "Hide unavailable skills" }).count(), 0, "and so does their toggle");
 });
 
 // What a person would see break: Pick it up here sends nothing, or sends more
@@ -553,21 +553,21 @@ test("the update banner shows on the dashboard only, and its dismiss hides it", 
   const build = await openSession(browser, { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
   const dash = await openSession(browser, { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
   const main = await toTheMenu(dash);
-  const banner = main.getByRole("button", { name: /UPDATE AVAILABLE · v99\.0\.0/ });
+  const banner = main.getByRole("button", { name: /Update available · v99\.0\.0/ });
   await banner.waitFor();
   // The build's server booted under the same record; a later frame has landed
   // on its page by the time this text shows, and it still has no banner.
   build.post({ agent: { status: "working", activity: "Task 1 of 1, one more look" } });
   await build.page.getByText("Task 1 of 1, one more look").first().waitFor();
-  assert.equal(await build.page.getByText("UPDATE AVAILABLE").count(), 0, "a build's page has no banner");
+  assert.equal(await build.page.getByText("Update available").count(), 0, "a build's page has no banner");
 
   await main.getByRole("button", { name: "Dismiss until next time" }).click();
   await banner.waitFor({ state: "hidden" });
 });
 
-// Under the desktop app (PLAN2CODE_IN_APP=1) the banner shows too: the app
-// cannot replace itself, so a new release is a terminal command there as well,
-// and the modal says to run it outside the app and reopen the app.
+// Under the desktop app (PLAN2CODE_IN_APP=1) the banner shows too: the modal
+// points at the bar's Update and restart first, and keeps the command as the
+// fallback, run outside the app, then the app reopened.
 test("under the app, the update banner shows and its steps are worded for the app", async (t) => {
   aNewerReleaseExists(t);
   const dash = await openSession(await suite.browser(), {
@@ -578,9 +578,10 @@ test("under the app, the update banner shows and its steps are worded for the ap
     env: { PLAN2CODE_IN_APP: "1" },
   });
   const main = await toTheMenu(dash);
-  await main.getByRole("button", { name: /UPDATE AVAILABLE · v99\.0\.0/ }).click();
+  await main.getByRole("button", { name: /Update available · v99\.0\.0/ }).click();
   const modal = dash.page.locator("#update-modal");
   await modal.waitFor();
+  await modal.locator("#update-step-run strong", { hasText: "Update and restart" }).waitFor();
   await modal.getByText("a terminal outside the app", { exact: false }).waitFor();
   await modal.getByText("close the app and open it again", { exact: false }).waitFor();
   assert.equal(await modal.locator("#update-command code").textContent(), "plan2code update");
@@ -865,4 +866,59 @@ test("every group keeps one card width and leaves no card alone on a row, at eac
     });
     assert.ok(settled, `at ${width}, ${want} across, every row holding two cards or more, all one width: ${JSON.stringify(rows)}`);
   }
+});
+
+// First run: until a skill has been launched from this machine, the dashboard
+// offers one call to action. The role line is held and Learning "Not set up"
+// waits at the bottom; after the first launch the quiet line shows.
+function savedLooksFile(t, looks) {
+  const file = path.join(HOME, "looks.json");
+  fs.mkdirSync(HOME, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ looks }));
+  t.after(() => fs.rmSync(file, { force: true }));
+}
+
+test("before the first launch the dashboard holds the role line and draws Learning at the bottom", async (t) => {
+  savedLooksFile(t, { welcomeSeen: true });
+  const project = tempProject(DRAFT_PROJECT);
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const main = await toTheMenu(s);
+  assert.equal(await main.locator(".dash-extras").count(), 0, "no optional extras on the first dashboard");
+  assert.equal(await main.locator(".dash-nudge").filter({ hasText: "role" }).count(), 0, "and no role banner");
+  await main.locator(".learn-row.is-not-set-up").waitFor();
+  assert.equal(await main.locator(".learn-row.is-top").count(), 0, "Learning Not set up is not at the top");
+  assert.equal(await main.locator(".learn-row.is-bottom.is-not-set-up").count(), 1, "it sits at the bottom");
+  assert.doesNotMatch(await main.locator(".learn-row .btn").first().getAttribute("class"), /primary/, "with a plain button");
+});
+
+test("after the first launch one quiet line offers the role and Learning, and a launch sets the flag", async (t) => {
+  savedLooksFile(t, { welcomeSeen: true });
+  const project = tempProject(DRAFT_PROJECT);
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const main = await toTheMenu(s);
+  assert.equal(await main.locator(".dash-extras").count(), 0);
+  const planCard = main.getByRole("button").filter({ has: s.page.locator("code", { hasText: /^\/plan2code-1-plan$/ }) });
+  await planCard.click();
+  await main.getByRole("button", { name: "Start Plan" }).click();
+  assert.ok(
+    await until(() => s.page.evaluate(async () => ((await (await fetch("/looks")).json()).looks || {}).skillLaunched === true)),
+    "the first launch saved the flag"
+  );
+  // Back to default keeps it.
+  const kept = await s.page.evaluate(async () => {
+    const { resetLooks, looks } = await import("/looks.js");
+    resetLooks();
+    return (await import("/looks.js")).looks.skillLaunched;
+  });
+  assert.equal(kept, true, "Back to default never clears the flag");
+});
+
+test("with the flag set the dashboard shows the quiet extras line", async (t) => {
+  savedLooksFile(t, { welcomeSeen: true, skillLaunched: true });
+  const project = tempProject(DRAFT_PROJECT);
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const main = await toTheMenu(s);
+  const line = main.locator(".dash-extras");
+  await line.waitFor();
+  assert.match(await textOf(line), /Two optional extras: set your role, switch on Learning\./);
 });

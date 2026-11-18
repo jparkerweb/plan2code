@@ -65,7 +65,7 @@ A new round, narrower than the last.
 
 For when nothing in the round was right.
 
-1. **Show the brief first**, so it can be changed: the carry-over ticks, the direction and the "how different" level (Radical is worth suggesting when Balanced missed). Keep each as it was unless the person changes it. Images stay as they were read.
+1. **Show the brief first**, so it can be changed: the carry-over ticks, the direction and the "how different" level (Radical is worth suggesting when Balanced missed). Keep each as it was unless the person changes it: the carry card goes back up with new ids, each row `ticked` as the person last sent it and its `tag` and reason as they stood. Images stay as they were read.
 2. `new-round --project . --name <prototype>`: the next round number, same prototype.
 3. **No variant carries over.** Write new variants from new plans (the design reference), avoiding the structures the person just turned down.
 4. **The dials go back to the start**: `starts` as Step 3 would set them from the carry-over, not from the block. Extras may change to fit the new variants.

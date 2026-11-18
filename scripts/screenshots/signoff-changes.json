@@ -1,0 +1,14 @@
+{
+  "docs": [
+    {
+      "id": "changes",
+      "title": "Changes",
+      "blocks": [
+        {
+          "id": "diff",
+          "diff": "changes.diff"
+        }
+      ]
+    }
+  ]
+}

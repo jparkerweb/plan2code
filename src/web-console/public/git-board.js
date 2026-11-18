@@ -13,6 +13,8 @@
 // this file.
 
 import { prUrl, branchUrl } from "./pr-url.js";
+// Re-exported so the view, which imports only this file, says it the one way.
+export { NOT_CONNECTED } from "./labels.js";
 
 export const BRANCH_TYPES = Object.freeze(["feature", "fix", "chore", "docs", "refactor", "test"]);
 export const REMOTE_FOLD = 50;

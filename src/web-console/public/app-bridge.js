@@ -96,6 +96,28 @@ export function agentFound(id) {
   tellApp("agent-found", { id });
 }
 
+// The keys the desktop app's shell answers to (plan2code-app/ui/meter.js SHORTCUTS, held to the same
+// table by scripts/test-app-meter.mjs): Cmd on a Mac, Ctrl elsewhere. A key pressed here, inside the
+// frame, never reaches the shell's own listener, so the page forwards the id and nothing else.
+export const SHORTCUT_KEYS = Object.freeze([
+  { id: "toggle-terminal", key: "`", shift: false },
+  { id: "focus-console", key: "1", shift: false },
+  { id: "focus-terminal", key: "2", shift: false },
+  { id: "new-session", key: "n", shift: true },
+  { id: "change-project", key: "o", shift: false },
+  { id: "preferences", key: ",", shift: false },
+]);
+
+/** The shortcut id a key press stands for, or null. `mac` picks Cmd over Ctrl. */
+export function shortcutIdFor(e, mac) {
+  if (e.altKey) return null;
+  const chord = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  if (!chord) return null;
+  const key = String(e.key || "").toLowerCase();
+  const hit = SHORTCUT_KEYS.find((s) => s.key === key && s.shift === Boolean(e.shiftKey));
+  return hit ? hit.id : null;
+}
+
 /** Post `message` to the frame's parent, as `{ plan2code: kind, ...extra }`; nothing outside a frame. */
 export function tellApp(kind, extra = {}) {
   if (!framed()) return;

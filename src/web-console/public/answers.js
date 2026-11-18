@@ -10,6 +10,7 @@
 // No DOM, no `local`, no fetch. If a function in here needs any of those, it
 // belongs in app.js instead.
 
+import { NOT_CONNECTED } from "./labels.js";
 import { FIXED_REASON, FLOW_SKILLS, SKILLS, labelFor, skillByName, skillFor } from "./skills.js";
 import { SPEC_STATES, stateFor } from "./spec-states.js";
 
@@ -165,6 +166,11 @@ export function answerLines(item, v) {
   if (v.skipped) out.push("Skipped");
   if (v.k) out.push(optionLabel(item, v.k));
   if (Array.isArray(v.ks)) for (const k of v.ks) out.push(optionLabel(item, k));
+  // A card that opened ticked can be sent with nothing ticked: say so, so the
+  // settled card is not blank. Other multis keep their record as it was.
+  if (item && Array.isArray(v.ks) && v.ks.length === 0 && !v.skipped && startsTicked(item)) {
+    out.push("None ticked");
+  }
   if (typeof v.yes === "boolean") out.push(v.yes ? item.yesLabel || "Yes" : item.noLabel || "No");
   if (typeof v.ok === "boolean") {
     out.push(v.ok ? item.yesLabel || "Yes, that is right" : item.noLabel || "Not quite");
@@ -527,7 +533,7 @@ export function turnGate({ gone = false, pendingResult = false, waiting = false 
 export const HOME_REPLY = "Save my place and take me back to the dashboard, right here in this session.";
 
 const HOME_TITLES = {
-  gone: "Not connected right now.",
+  gone: NOT_CONNECTED,
   pending: "Your last answers are still being picked up. You can leave once they have been.",
   waiting: "Plan2Code is working on your answers. You can leave once it replies.",
 };
@@ -1067,7 +1073,7 @@ export function staleLaunchFeedback(title, adrift, inApp = false) {
   if (!adrift) return null;
   return {
     kicker: "Saved",
-    title: `${title || "Your workflow"} is saved and waiting`,
+    title: `${title || "Your skill"} is saved and waiting`,
     quip: "Plan2Code is not running right now.",
     hint: inApp
       ? "Press Reconnect to agent below. Plan2Code will collect this launch and continue here."
@@ -1240,6 +1246,46 @@ export function suggestReplyLines(title, text, attachments) {
     `Suggestions wanted on ${title}: ${indentReply(text || "(no note)")}`,
     ...list.map((a) => `  ${attachmentKind(a) === "file" ? "File" : "Image"}: ${a.path} (${a.name})`),
   ];
+}
+
+/* ---------------------------------------------------- starting ticks */
+
+/**
+ * A multi with a row that starts ticked (`ticked: true`, never a locked one).
+ * On such a card an empty pick is an answer ("none"), not
+ * the absence of one, so the page stages it, the reply says it and the
+ * settled card shows it. Every other card keeps today's behavior.
+ */
+export function startsTicked(item) {
+  return Boolean(item) && item.kind === "multi" && (item.options || []).some((o) => o && o.ticked === true && o.locked !== true);
+}
+
+/**
+ * Stage the ticks a multi card asks to start with. A row with `ticked: true`
+ * (never a locked one) starts ticked the first time the card shows: the pick
+ * is staged exactly as if the person had made it, so Send, drafts, the settled
+ * record and the reply words all work on it as they do on any other pick.
+ * The page does it, not the server, because an `answer` on the item would
+ * settle the card. A card is seeded once: `seeded` remembers it, so a card the
+ * person cleared is never ticked again by a redraw or a reload. Cards already
+ * staged, already sent or no longer open are left alone. Returns new objects,
+ * never changing the inputs: `{ staged, seeded, changed }`.
+ */
+export function seedStaged(items, staged, seeded, sent = {}) {
+  const outStaged = { ...(staged || {}) };
+  const outSeeded = { ...(seeded || {}) };
+  let changed = false;
+  for (const item of items || []) {
+    if (!item || !item.id || item.kind !== "multi" || !Array.isArray(item.options)) continue;
+    if (item.status !== "open" && item.status !== "reopened") continue;
+    if (outStaged[item.id] || outSeeded[item.id] || (sent && sent[item.id])) continue;
+    const ks = item.options.filter((o) => o && o.ticked === true && o.locked !== true).map((o) => o.k);
+    if (!ks.length) continue;
+    outStaged[item.id] = { type: "answer", kind: "multi", ks };
+    outSeeded[item.id] = true;
+    changed = true;
+  }
+  return { staged: outStaged, seeded: outSeeded, changed };
 }
 
 /* --------------------------------------------------------- stale picks */

@@ -26,7 +26,7 @@ export const HELP_TABS = Object.freeze([
   tab("loop", "Implementation Loop", true),
   tab("git", "The git board", false),
   tab("deps", "Update dependencies", false),
-  tab("subagents", "Helpers (subagents)", false),
+  tab("subagents", "Subagents", false),
   tab("ask", "Ask a quick question", false),
   tab("activities", "Activities", false),
   tab("finishing", "Stopping and finishing", false),
@@ -34,6 +34,22 @@ export const HELP_TABS = Object.freeze([
   tab("setup", "Setting up an agent", false),
   tab("privacy", "Privacy and where things are saved", false),
 ]);
+
+// Four group headings over the same order: each group is a run of neighbors in
+// HELP_TABS, so grouping never moves a tab (the stuck topic stays second).
+// The headings are drawn by wireTabs() and are never tab stops.
+export const HELP_GROUPS = Object.freeze([
+  Object.freeze({ title: "Start here", from: "about" }),
+  Object.freeze({ title: "Working in a session", from: "workspace" }),
+  Object.freeze({ title: "Tools", from: "dashboard" }),
+  Object.freeze({ title: "Reference", from: "finishing" }),
+]);
+
+// The heading a tab opens a new group under, or null when it continues one.
+export function helpGroupStart(id) {
+  const group = HELP_GROUPS.find((g) => g.from === id);
+  return group ? group.title : null;
+}
 
 // Not labels.js's BUILD_WORKFLOWS: that one leaves out quick-task, which is a
 // build as far as the person watching it is concerned. Every build in skills.js.

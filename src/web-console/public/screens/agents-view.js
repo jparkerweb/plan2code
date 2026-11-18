@@ -75,7 +75,7 @@ export function mountAgentsView(container, opts = {}) {
     const split = el("div", "split");
     const list = el("div", "split-list");
     list.dataset.av = "table";
-    const add = el("button", "btn small ghost split-add", "Add agent");
+    const add = el("button", "btn sm ghost split-add", "Add agent");
     add.type = "button";
     add.dataset.av = "add";
     list.appendChild(add);
@@ -199,7 +199,7 @@ export function mountAgentsView(container, opts = {}) {
   }
 
   // Leaving a form for another row drops its draft, as closing it always did:
-  // a dirty one asks first (the dialog's Save / Discard / Keep editing).
+  // a dirty one asks first (the dialog's Keep editing / Discard / Save).
   async function leaveForm() {
     if (!ctx.openKey) return true;
     if (isDirty(ctx.saved, ctx.drafts, ctx.openKey, ctx.strengthDrafts) && !(await confirmUnsaved())) return false;

@@ -12,7 +12,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, textOf, drawn, styleOf, stylesOf } from "./page-test-helpers.mjs";
-import { HOME, MODELS_DIR, backdate } from "./web-console-test-helpers.mjs";
+import { HOME, MODELS_DIR, backdate, until } from "./web-console-test-helpers.mjs";
 import { formatBytes } from "../src/web-console/public/answers.js";
 
 const suite = pageSuite(test);
@@ -208,7 +208,8 @@ function seedShippedModels(t) {
   fs.writeFileSync(
     SHIPPED_FILE,
     JSON.stringify({
-      claude: [{ id: "sonnet", label: "Sonnet" }, { id: "opus", label: "Opus" }],
+      // Labels as models.json ships them: the description only, the id printed beside it.
+      claude: [{ id: "sonnet", label: "latest Sonnet" }, { id: "opus", label: "latest Opus" }],
       devin: [{ id: "swe-2-medium", label: "SWE 2 Medium" }, { id: "swe-2-high", label: "SWE 2 High" }, { id: "claude-opus-5-5-medium", label: "Opus 5.5 Medium" }],
       codex: [],
       strengths: {
@@ -243,9 +244,13 @@ test("Agents & models: Claude's panel shows the shipped rows as default, and onl
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openAgentsTab(s);
   // The card already shows what each strength uses.
-  assert.match(await textOf(agentCard(s, "cli:claude").locator(".card-tiers")), /Thrifty\s+Sonnet · low[\s\S]*Best\s+Opus · medium/);
+  // A card line names the model by its id; the description is its tooltip.
+  assert.match(await textOf(agentCard(s, "cli:claude").locator(".card-tiers")), /Thrifty\s+sonnet · low[\s\S]*Best\s+opus · medium/);
+  assert.equal(await agentCard(s, "cli:claude").locator(".card-tier span[title]").first().getAttribute("title"), "latest Sonnet");
   await openAgent(s, "Claude");
-  assert.equal(await textOf(loopRow(s, "thrifty").locator(".strength-model")), "Sonnet");
+  // The picked model reads as the model rows do: its description with the id beside it.
+  assert.match(await textOf(loopRow(s, "thrifty").locator(".strength-model")), /^latest Sonnet\s+sonnet$/);
+  assert.equal(await textOf(loopRow(s, "thrifty").locator(".strength-model code")), "sonnet");
   assert.equal(await loopRow(s, "thrifty").locator('select[data-field="effort"]').inputValue(), "low");
   assert.equal(await wordPill(s, "best", "opus").getAttribute("aria-pressed"), "true");
   assert.equal(await wordPill(s, "best", "sonnet").getAttribute("aria-pressed"), "false");
@@ -268,7 +273,7 @@ test("Agents & models: Claude's panel shows the shipped rows as default, and onl
   assert.deepEqual(savedStrengths(), { claude: { thrifty: { model: "opus", effort: "low" } } }, "only the changed row is written");
 
   await loopRow(s, "thrifty").locator(".strength-reset").click();
-  assert.equal(await textOf(loopRow(s, "thrifty").locator(".strength-model")), "Sonnet", "Reset restores the shipped row");
+  assert.match(await textOf(loopRow(s, "thrifty").locator(".strength-model")), /^latest Sonnet\s+sonnet$/, "Reset restores the shipped row");
   assert.equal(await textOf(loopRow(s, "thrifty").locator(".strength-default")), "default");
   await agentForm(s).locator(".prefs-unsaved-badge").waitFor();
   await formButton(s, "Save").click();
@@ -556,7 +561,12 @@ test("Agents & models: an unsaved edit asks first on Close, a scrim click, Esc, 
     await edit(`alpha-${name}-kept`);
     await leave();
     await unsavedPrompt(s).waitFor();
-    assert.equal(await s.page.evaluate(() => document.activeElement?.id), "prefs-unsaved-save", `${name}: Save has focus`);
+    assert.equal(await s.page.evaluate(() => document.activeElement?.id), "prefs-unsaved-keep", `${name}: Keep editing has focus`);
+    assert.deepEqual(
+      await unsavedPrompt(s).locator("button").allInnerTexts(),
+      ["Keep editing", "Discard", "Save"],
+      `${name}: the Lessons prompt's order`,
+    );
     await unsavedPrompt(s).getByRole("button", { name: "Keep editing" }).click();
     await unsavedPrompt(s).waitFor({ state: "hidden" });
     assert.equal(await modal.evaluate((d) => d.open), true, `${name}: the dialog stays open`);
@@ -693,7 +703,7 @@ test("Cleanup scans the console home and lists an old session folder with its si
   const dir = path.join(HOME, "sessions", sid);
   fs.mkdirSync(dir, { recursive: true });
   const state = path.join(dir, "state.json");
-  fs.writeFileSync(state, "x".repeat(3000));
+  fs.writeFileSync(state, JSON.stringify({ title: "shop", workflow: "pathfinder", pad: "x".repeat(3000) }));
   backdate(state);
   backdate(dir);
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -704,17 +714,41 @@ test("Cleanup scans the console home and lists an old session folder with its si
   assert.equal(await list.locator(".cleanup-row").count(), 0, "Cleanup lists things before a scan");
   assert.equal(await s.page.locator("#cleanup-delete").isHidden(), true, "Delete is offered before a scan");
   await s.page.click("#cleanup-scan");
-  const row = list.locator(".cleanup-row").filter({ hasText: sid });
+  const row = list.locator(".cleanup-row").filter({ hasText: "Pathfinder · shop" });
   await row.waitFor();
-  assert.match(await textOf(row), new RegExp(`^Session ${sid}`));
+  assert.match(await textOf(row), /^Pathfinder · shop · [0-9]+ (weeks|months) ago/, "a session is named by its skill, title and age, not its folder");
+  assert.equal(await row.locator("input[type=checkbox]").isChecked(), true, "a session starts ticked");
   const size = await textOf(row.locator(".cleanup-size"));
   assert.match(size, /^\d/, "the row names a size");
-  assert.ok(size === formatBytes(3000) || /^[\d.,]+\s*(kB|KB|MB|B)\b/.test(size), `the size reads as a size: ${size}`);
+  assert.ok(size === formatBytes(3040) || /^[\d.,]+\s*(kB|KB|MB|B)\b/.test(size), `the size reads as a size: ${size}`);
+  assert.match(await textOf(s.page.locator("#cleanup-delete")), /^Delete 1 item · /, "the button says what it will do");
+  // Unticking everything leaves nothing to send.
+  await row.locator("input[type=checkbox]").uncheck();
+  assert.equal(await s.page.locator("#cleanup-delete").isDisabled(), true, "nothing ticked, nothing to delete");
+  assert.match(await textOf(s.page.locator("#cleanup-delete")), /^Nothing ticked/);
+  await row.locator("input[type=checkbox]").check();
   assert.match(await textOf(list.locator(".cleanup-summary")), /1 old session/);
   assert.match(await textOf(s.page.locator("#cleanup-status")), /^Found \d+ items?\./);
   assert.equal(await s.page.locator("#cleanup-delete").isVisible(), true, "Delete these is offered once something is found");
   // The scan only looks.
   assert.equal(fs.existsSync(dir), true, "a scan deleted the folder");
+
+  // While a delete is on its way, ticking a box never re-enables Delete.
+  let release;
+  const held = new Promise((r) => (release = r));
+  await s.page.route("**/cleanup", async (route) => {
+    if (!/"delete"/.test(route.request().postData() || "")) return route.continue();
+    await held;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, removed: [], failed: [], bytes: 0 }) });
+  });
+  await s.page.click("#cleanup-delete");
+  await s.page.waitForFunction(() => /Deleting/.test(document.getElementById("cleanup-status").textContent));
+  await row.locator("input[type=checkbox]").uncheck();
+  await row.locator("input[type=checkbox]").check();
+  assert.equal(await s.page.locator("#cleanup-delete").isDisabled(), true, "Delete stays off mid-request");
+  release();
+  await s.page.waitForFunction(() => /Nothing was deleted/.test(document.getElementById("cleanup-status").textContent));
+  await s.page.unroute("**/cleanup");
 
   // Closing preferences forgets the scan: a reopened dialog starts clean.
   await s.page.click("#looks-done");
@@ -810,9 +844,9 @@ test("below 720 px the side list is a horizontal strip with no hints", async (t)
   await s.page.waitForFunction(() => document.getElementById("prefs-tabs").getAttribute("aria-orientation") === "vertical");
 });
 
-test("Set up preferences on the dashboard opens on Appearance with agents and models loaded", async (t) => {
+test("Set your role on the dashboard opens on Appearance with agents and models loaded", async (t) => {
   fs.mkdirSync(HOME, { recursive: true });
-  fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true } }));
+  fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true, skillLaunched: true } }));
   t.after(() => fs.rmSync(LOOKS_FILE, { force: true }));
   const file = path.join(MODELS_DIR, "agents.json");
   fs.mkdirSync(MODELS_DIR, { recursive: true });
@@ -826,7 +860,7 @@ test("Set up preferences on the dashboard opens on Appearance with agents and mo
   const skip = s.page.getByRole("button", { name: "Skip the intro" });
   await skip.click();
   await skip.waitFor({ state: "hidden" });
-  await s.page.getByRole("button", { name: "Set up preferences" }).click();
+  await s.page.getByRole("button", { name: "set your role" }).click();
   await s.page.locator("#looks-modal[open]").waitFor();
   assert.equal(await selectedTab(s), "prefs-tab-appearance");
   await s.page.click("#prefs-tab-agents");
@@ -837,7 +871,7 @@ test("Set up preferences on the dashboard opens on Appearance with agents and mo
   assert.doesNotMatch(await s.page.locator("#agents-status").innerText(), /could not be loaded/);
 });
 
-test("Back to default resets only the tab on screen, and is hidden on Agents & models and System", async (t) => {
+test("Reset this tab resets only the tab on screen, and is hidden on Agents & models and System", async (t) => {
   noSavedLooks(t);
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await s.page.click("#btn-looks");
@@ -1101,4 +1135,60 @@ test("the sound picker: Tab reaches Play from the select, and a row stacks insid
   });
   assert.equal(fits.length, PICK_EVENTS.length, "every row is drawn");
   assert.equal(fits.every(Boolean), true, "no control spills out of the dialog at 600px");
+});
+
+test("Cleanup's Delete sends only the ticked ids", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const made = ["20250801-101010-aaaaaa", "20250801-101010-bbbbbb"].map((sid) => {
+    const dir = path.join(HOME, "sessions", sid);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify({ title: sid.endsWith("aaaaaa") ? "first" : "second", workflow: "plan" }));
+    backdate(path.join(dir, "state.json"));
+    backdate(dir);
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    return sid;
+  });
+  const sent = [];
+  await s.page.route("**/cleanup", async (route) => {
+    const body = JSON.parse(route.request().postData() || "{}");
+    if (body.delete) {
+      sent.push(body.delete);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, removed: body.delete, failed: [], refused: [], bytes: 10 }) });
+    }
+    return route.fallback();
+  });
+  await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-system");
+  await s.page.click("#cleanup-scan");
+  const first = s.page.locator("#cleanup-list .cleanup-row").filter({ hasText: "Plan · first" });
+  await first.waitFor();
+  await first.locator("input[type=checkbox]").uncheck();
+  await s.page.click("#cleanup-delete");
+  await until(() => sent.length === 1);
+  assert.deepEqual(sent[0], ["session:" + made[1]], "only the ticked session is sent");
+});
+
+test("Reset this tab shows Reset with an Undo that puts the tab back, and the dialog says what saves itself", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  assert.match(await textOf(s.page.locator("#prefs-lead")), /^Changes save as you make them\. Agents have their own Save\.$/);
+  assert.equal(await textOf(s.page.locator("#looks-reset")), "Reset this tab");
+  assert.match(await textOf(s.page.locator("#looks-skip-intro + span")), /^Skip the wake-up intro$/);
+  await s.page.locator('input[name="looks-theme"][value="dark"]').check();
+  await swatch(s, "violet").click();
+  await s.page.click("#looks-reset");
+  await s.page.waitForFunction(() => !document.documentElement.hasAttribute("data-theme"));
+  const mark = s.page.locator("#prefs-panel-appearance .prefs-saved.is-reset");
+  await mark.waitFor();
+  assert.match(await textOf(mark), /^Reset\. Undo$/);
+  await mark.getByRole("button", { name: "Undo" }).click();
+  await s.page.waitForFunction(() => document.documentElement.getAttribute("data-theme") === "dark");
+  assert.equal(await swatch(s, "violet").getAttribute("aria-pressed"), "true", "the highlight is back too");
+  assert.equal(await mark.count(), 0, "the Undo note is gone once used");
+  await s.page.waitForFunction(async () => {
+    const saved = (await (await fetch("/looks")).json()).looks || {};
+    return saved.theme === "dark" && saved.accent === "violet";
+  });
 });

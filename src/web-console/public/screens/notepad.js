@@ -11,6 +11,7 @@
 // this file runs the timers and requests, and binds every save and every
 // picture to the tab it was made in, so a switch can never move either.
 
+import { NOT_CONNECTED } from "../labels.js";
 import { page } from "../state.js";
 import {
   EDITOR_NOT_LOADED,
@@ -31,7 +32,7 @@ import {
   tabSwitch,
   unsaved,
 } from "../notepad.js";
-import { el, lightDismiss } from "../render.js";
+import { el, icon, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
 import { reencode, openPicview } from "../uploads.js";
 import { createTabs } from "../notepad-tabs.js";
@@ -39,7 +40,6 @@ import { skillFor } from "../skills.js";
 
 const $ = (id) => document.getElementById(id);
 
-const NOT_CONNECTED = "Not connected right now.";
 const STAY = "Not saved yet, so staying on this tab.";
 
 // One editor for the page's life, made on first open, and the tab bar, made
@@ -295,6 +295,8 @@ function show(body, keep = false) {
   problem = "";
   rev += 1;
   loaded = true;
+  $("notepad-retry").hidden = true;
+  $("notepad-retry").disabled = false;
   editor.setReadOnly(!tab);
   takeStored(tab ? tab.images : [], activeId);
   drawTabs();
@@ -658,9 +660,9 @@ function thumbItem(entry, n) {
   if (src) {
     const pic = el("img");
     pic.src = src;
-    pic.alt = `Notebook image ${n}`;
+    pic.alt = `Notebook picture ${n}`;
     open.appendChild(pic);
-  } else open.setAttribute("aria-label", `Notebook image ${n}`);
+  } else open.setAttribute("aria-label", `Notebook picture ${n}`);
   // Never `disabled`, which would push the focus out of the strip while the
   // picture uploads: it only does nothing until there is a picture to show.
   const viewable = Boolean(entry.url) && entry.status !== "uploading";
@@ -670,25 +672,26 @@ function thumbItem(entry, n) {
   });
   item.appendChild(open);
   if (entry.status !== "uploading" && !entry.asking) {
-    const x = el("button", "attach-remove notepad-thumb-delete", "×");
+    const x = el("button", "attach-remove notepad-thumb-delete");
+    x.appendChild(icon("close"));
     x.type = "button";
-    x.setAttribute("aria-label", `Delete image ${n}`);
+    x.setAttribute("aria-label", `Delete picture ${n}`);
     x.addEventListener("click", () => ask(entry));
     item.appendChild(x);
   }
   if (entry.asking) {
     // Keep comes first and takes the focus, so Enter keeps the picture.
     const over = el("div", "attach-overlay notepad-ask");
-    over.appendChild(el("p", null, "Delete this image?"));
+    over.appendChild(el("p", null, "Delete this picture?"));
     const row = el("div", "notepad-ask-row");
-    const keep = el("button", "btn tiny notepad-ask-keep", "Keep");
+    const keep = el("button", "btn xs soft notepad-ask-keep", "Keep");
     keep.type = "button";
     keep.addEventListener("click", () => {
       entry.asking = false;
       drawStrip();
       focusIn(entry.key, ".notepad-thumb-delete");
     });
-    const del = el("button", "btn tiny notepad-ask-delete", "Delete");
+    const del = el("button", "btn xs soft notepad-ask-delete", "Delete");
     del.type = "button";
     del.addEventListener("click", () => remove(entry));
     keep.disabled = del.disabled = Boolean(entry.deleting);
@@ -703,7 +706,7 @@ function thumbItem(entry, n) {
   } else if (entry.status === "failed") {
     const over = el("div", "attach-overlay failed");
     over.appendChild(el("p", null, "Upload failed"));
-    const again = el("button", "btn tiny notepad-retry", "Retry");
+    const again = el("button", "btn xs soft notepad-retry", "Retry");
     again.type = "button";
     again.addEventListener("click", () => upload(entry));
     over.appendChild(again);
@@ -796,7 +799,7 @@ function takeStored(list, tabId) {
 function openPreview(entry) {
   const list = images.filter((img) => img.url);
   openPicview(
-    list.map((img) => ({ url: img.url, alt: `Notebook image ${images.indexOf(img) + 1}` })),
+    list.map((img) => ({ url: img.url, alt: `Notebook picture ${images.indexOf(img) + 1}` })),
     list.indexOf(entry),
     () => focusIn(entry.key, ".attach-open"),
   );
@@ -869,16 +872,28 @@ function wireImages(dlg) {
 // show up. Text typed here and not yet saved (or too long to save) is never
 // replaced; the tab it belongs to stays on screen.
 async function load() {
+  // Kept on screen (and focused, if it was) while it reads, so a second failure
+  // finds it where it was.
+  $("notepad-retry").disabled = true;
   const keep = keepsText(save);
   let res = await readNote(activeId);
   if (!res.ok && res.code === "no-such-tab" && activeId && !keep) res = await readNote(null);
   if (!res.ok) {
-    if (loaded) return;
+    if (loaded) {
+      $("notepad-retry").hidden = true;
+      $("notepad-retry").disabled = false;
+      return;
+    }
     const line = $("notepad-status");
     line.textContent = NOT_LOADED;
     line.classList.add("is-problem");
+    $("notepad-retry").hidden = false;
+    $("notepad-retry").disabled = false;
+    $("notepad-retry").focus();
     return;
   }
+  $("notepad-retry").hidden = true;
+  $("notepad-retry").disabled = false;
   show(res.body, keep);
   paintStatus();
   if (!tabs.length) $("notepad-empty-new").focus();
@@ -930,6 +945,7 @@ export function wireNotepad() {
   wireImages(dlg);
   $("btn-notepad").addEventListener("click", openNotepad);
   $("notepad-close").addEventListener("click", () => dlg.close());
+  $("notepad-retry").addEventListener("click", () => load());
   $("notepad-tab-new").addEventListener("click", () => openNameForm("new"));
   $("notepad-empty-new").addEventListener("click", () => openNameForm("new"));
   $("notepad-delete-keep").addEventListener("click", () => closeDelete(true));

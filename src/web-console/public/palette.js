@@ -85,12 +85,12 @@ export const ACCENTS = {
   },
   lemon: {
     name: "Lemon",
-    light: ["#7e7607",  "#fcfbee",  "#ffffff",  "#c5bf67"],
+    light: ["#787107",  "#fcfbee",  "#ffffff",  "#c5bf67"],
     dark: ["#f0e442",  "#32301b",  "#14130b",  "#767242"],
   },
   olive: {
     name: "Olive",
-    light: ["#72742c",  "#f8f8ed",  "#ffffff",  "#b8ba8c"],
+    light: ["#70722b",  "#f8f8ed",  "#ffffff",  "#b8ba8c"],
     dark: ["#b5b946",  "#31321b",  "#14140b",  "#4f5037"],
   },
   lime: {
@@ -115,7 +115,7 @@ export const ACCENTS = {
   },
   mint: {
     name: "Mint",
-    light: ["#25805a",  "#effaf6",  "#ffffff",  "#97c4b1"],
+    light: ["#247e59",  "#effaf6",  "#ffffff",  "#97c4b1"],
     dark: ["#8be4bf",  "#1b3228",  "#0b1410",  "#427660"],
   },
   teal: {
@@ -125,7 +125,7 @@ export const ACCENTS = {
   },
   aqua: {
     name: "Aqua",
-    light: ["#177e82",  "#eefbfc",  "#ffffff",  "#8dc6c8"],
+    light: ["#167a7e",  "#eefbfc",  "#ffffff",  "#8dc6c8"],
     dark: ["#84e8eb",  "#1b3132",  "#0b1414",  "#427476"],
   },
   cyan: {

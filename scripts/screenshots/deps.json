@@ -1,0 +1,26 @@
+{
+  "workflow": "deps",
+  "title": "Update dependencies",
+  "headline": { "stage": "Report", "cleared": 4, "total": 4, "confidence": "2 updates applied, 1 undone, 1 left alone." },
+  "docs": [
+    {
+      "id": "report",
+      "title": "Report",
+      "blocks": [
+        {
+          "id": "report",
+          "state": "settled",
+          "md": "## What happened\n\n2 updates were applied and pass the tests. 1 update broke a test and was undone. 1 was left alone because it needs a newer Node.\n\n**Folder looked at:** `task-api` (npm, 4 updates).\n\n| Package | Change | Size | Outcome |\n| --- | --- | --- | --- |\n| `fastify` | 4.26.0 to 4.28.1 | small fix | Updated, tests pass |\n| `zod` | 3.22.4 to 3.23.8 | small fix | Updated, tests pass |\n| `pg` | 8.11.3 to 8.13.1 | new features | Undone: `test/db.test.js` failed after the update |\n| `pino` | 8.19.0 to 9.5.0 | big change | Not tried: needs Node 20, you declare 18 |\n\n**Still open:** no known security problems.\n\n**Changes already there before the run:** none.\n\nThe updates are not saved in git yet. The Git skill commits them."
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "headline": "2 updates applied, 1 undone, 1 not tried",
+    "body": "`fastify` and `zod` are updated and `npm test` passes. `pg` broke `test/db.test.js` and was put back. `pino` needs Node 20, so it was left alone.",
+    "command": "/plan2code-git",
+    "doc": "report",
+    "dashboard": true
+  },
+  "agent": { "status": "waiting" }
+}

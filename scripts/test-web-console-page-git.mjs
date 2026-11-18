@@ -220,7 +220,7 @@ test("the commit table keeps the person's ticks across an agent post, and a clic
   assert.equal(await tickBox(page, "notes.md").isChecked(), false, "an agent post put the tick back");
   assert.equal(await tickBox(page, "src/app.js").isChecked(), true);
   // Their click goes out with the one file. Then the agent commits it and a new file turns up.
-  await page.locator(".git-panel-actions").getByRole("button", { name: "Commit 1 file" }).click();
+  await stepButton(page, "Commit 1 file").click();
   assert.deepEqual(s.wait(10).actions[0].files, ["src/app.js"]);
   const g = gitInit(dir, "feature/x");
   g("add", "src/app.js");
@@ -310,4 +310,33 @@ test("over the git board a note box grows with its text, and the no-repo note on
   bare.post({ items: [confirmCard], agent: { status: "waiting" } });
   await itemCard(bare.page, "y1").waitFor();
   assert.match(await textOf(aside), /asks above what to do/);
+});
+
+// The three W25 leftovers, checked against the current build.
+test("the Changes tab offers one Commit N files, Send is gone with nothing to send, and Done with git sits outside the tablist", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "feature/x" }), payload: READY });
+  const { page } = s;
+  await page.getByRole("tablist").waitFor();
+  await stepButton(page, "Commit 2 files").waitFor();
+  // One Commit N files across the whole board, not one in the step and one in the table.
+  assert.equal(await page.getByRole("button", { name: /^Commit \d+ files?$/ }).count(), 1, "one commit button on the Changes tab");
+  assert.equal(await page.locator(".git-panel-actions").getByRole("button", { name: /^Commit \d+ files?$/ }).count(), 0, "the table carries no second one");
+  // Unticking a file moves the one button's count.
+  await tickBox(page, "notes.md").uncheck();
+  await stepButton(page, "Commit 1 file").waitFor();
+
+  // No open card and nothing staged: the footer keeps its words, the Send button is not drawn.
+  assert.equal(await page.locator("#btn-send").isHidden(), true, "no Send button on a board with nothing to send");
+  assert.match((await page.locator("#footer-summary").innerText()).trim(), /Nothing to send yet/, "the status words stay");
+
+  // Done with git is beside the tablist, not one of its tabs, and at the right end of the row.
+  const done = page.getByRole("button", { name: "Done with git" });
+  assert.equal(await page.getByRole("tablist").getByRole("button", { name: "Done with git" }).count(), 0, "not inside the tablist");
+  const [tabs, btn] = await Promise.all([page.getByRole("tablist").boundingBox(), done.boundingBox()]);
+  assert.ok(btn.x >= tabs.x + tabs.width - 1, "to the right of the tabs");
+});
+
+test("a card open on the board brings the Send button back", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "feature/x" }), payload: { ...READY, items: [confirmCard] } });
+  await s.page.locator("#btn-send").waitFor({ state: "visible" });
 });

@@ -21,6 +21,7 @@
 import {
   BRANCH_TYPES,
   GIT_TABS,
+  NOT_CONNECTED,
   PR_HOST_LABELS,
   boardActions,
   boardBranchLink,
@@ -74,7 +75,7 @@ function copy(ctx, text, cls, codeEl) {
 }
 
 // "Open pull request": a link while it can open, an inert look-alike while busy.
-function prLink(ctx, url, cls = "btn small primary") {
+function prLink(ctx, url, cls = "btn sm primary") {
   const label = "Open pull request";
   if (!controlAllowed(ctx.mode, "action")) {
     const span = ctx.h.el("span", `${cls} git-pr-open is-disabled`, label);
@@ -109,7 +110,7 @@ export function drawGitBoard(ctx) {
   const cardSlot = h.el("div", "git-cards");
   if (git.error) {
     node.appendChild(cardSlot);
-    const warn = h.el("div", "git-warn", git.error);
+    const warn = h.el("div", "callout is-warn git-warn", git.error);
     warn.setAttribute("role", "alert");
     node.appendChild(warn);
     return { node, cardSlot };
@@ -167,7 +168,7 @@ function header(ctx) {
     row.appendChild(
       h.el("span", "git-track", head.upstream && head.gone ? "remote copy deleted" : head.upstream ? `↑${head.ahead || 0} ↓${head.behind || 0}` : "not published")
     );
-    if (remotes.length > 1 && cur && cur.upstreamRemote) row.appendChild(h.el("span", "badge", cur.upstreamRemote));
+    if (remotes.length > 1 && cur && cur.upstreamRemote) row.appendChild(h.el("span", "pill is-accent is-caps badge", cur.upstreamRemote));
   }
   box.appendChild(row);
 
@@ -177,7 +178,7 @@ function header(ctx) {
     const cmd = "git remote add origin <url>";
     const code = h.el("code", "md-code", cmd);
     meta.appendChild(code);
-    meta.appendChild(copy(ctx, cmd, "btn small", code));
+    meta.appendChild(copy(ctx, cmd, "btn sm", code));
   } else meta.appendChild(h.el("span", "git-refreshed", refreshedLine(git, ctx.now)));
   if (ctx.mode === "running" && ctx.activity) meta.appendChild(activityLine(ctx, "span", ctx.activity));
   box.appendChild(meta);
@@ -226,8 +227,8 @@ function tabStrip(ctx, active) {
     strip.appendChild(b);
   }
   bar.appendChild(strip);
-  const done = control(ctx, "button", "btn small git-done", "Done with git", { role: "done", onClick: () => ctx.on.send("done") });
-  if (ctx.mode === "offline") done.title = ctx.offlineReason === "pending" ? "Your last click is still being picked up." : "Not connected right now.";
+  const done = control(ctx, "button", "btn sm git-done", "Done with git", { role: "done", onClick: () => ctx.on.send("done") });
+  if (ctx.mode === "offline") done.title = ctx.offlineReason === "pending" ? "Your last click is still being picked up." : NOT_CONNECTED;
   bar.appendChild(done);
   return bar;
 }
@@ -294,6 +295,13 @@ function stepLabel(ctx, s) {
   return `Commit ${plural(tablePicks(ctx).files.length, "file", "files")}`;
 }
 
+// Whether the step strip over the Changes tab already carries a plain commit
+// button (the same one the commit table would draw).
+function stripCommits(ctx) {
+  const p = ctx.step && ctx.step.primary;
+  return Boolean(p && p.op === "commit" && ctx.step.tab === "changes");
+}
+
 // The commit table's ticked files and .gitignore picks, checked against the snapshot.
 function tablePicks(ctx) {
   const ch = ctx.git.changes || {};
@@ -310,7 +318,7 @@ function stepStrip(ctx, id) {
   if (id !== step.tab) {
     if (!p) return null;
     const where = GIT_TABS.find((t) => t.id === step.tab);
-    return control(ctx, "button", "git-hint", `Next step is on ${where ? where.label : step.tab}: ${stepLabel(ctx, p)} →`, {
+    return control(ctx, "button", "btn sm standby git-hint", `Next step is on ${where ? where.label : step.tab}: ${stepLabel(ctx, p)} →`, {
       role: "nav",
       onClick: () => ctx.on.pickTab(step.tab),
     });
@@ -322,7 +330,7 @@ function stepStrip(ctx, id) {
   // much is not yours" rather than one loud suggestion to commit it all.
   if (ctx.notice && ctx.notice.op) {
     const duo = h.el("div", "git-duo");
-    const landed = h.el("div", "git-landed");
+    const landed = h.el("div", "callout is-ok git-landed");
     landed.setAttribute("role", "status");
     landed.appendChild(h.el("div", "git-step-kicker", "Just landed"));
     landed.appendChild(h.el("h3", "git-step-title", ctx.notice.title || ""));
@@ -352,10 +360,10 @@ function stepStrip(ctx, id) {
     const acts = h.el("div", "git-step-actions");
     if (theirs) {
       acts.appendChild(stepButton(ctx, { ...theirs, label: "Commit other changes" }, "btn primary"));
-      for (const s of step.secondary.slice(1)) acts.appendChild(stepButton(ctx, s, "btn small"));
+      for (const s of step.secondary.slice(1)) acts.appendChild(stepButton(ctx, s, "btn sm"));
     } else {
       if (p) acts.appendChild(stepButton(ctx, p, "btn primary"));
-      for (const s of step.secondary) acts.appendChild(stepButton(ctx, s, "btn small"));
+      for (const s of step.secondary) acts.appendChild(stepButton(ctx, s, "btn sm"));
     }
     if (acts.children.length) left.appendChild(acts);
     duo.appendChild(left);
@@ -381,7 +389,7 @@ function stepStrip(ctx, id) {
     const second = step.secondary[0];
     if (second) actions.appendChild(stepButton(ctx, second, "btn ghost"));
   } else {
-    for (const s of step.secondary) actions.appendChild(stepButton(ctx, s, "btn small"));
+    for (const s of step.secondary) actions.appendChild(stepButton(ctx, s, "btn sm"));
   }
   box.appendChild(actions);
   return box;
@@ -392,7 +400,7 @@ function staleLine(ctx, text) {
   const line = ctx.h.el("p", "git-stale");
   const word = "Refresh?";
   line.appendChild(ctx.h.el("span", null, text.endsWith(word) ? text.slice(0, -word.length) : `${text} `));
-  line.appendChild(control(ctx, "button", "btn small ghost git-stale-refresh", word, { onClick: () => ctx.on.send("refresh") }));
+  line.appendChild(control(ctx, "button", "btn sm ghost git-stale-refresh", word, { onClick: () => ctx.on.send("refresh") }));
   return line;
 }
 
@@ -402,7 +410,7 @@ function panelFrame(ctx, title, { closable = true, disabled = false } = {}) {
   const p = ctx.h.el("section", "git-panel");
   const head = ctx.h.el("div", "git-panel-head");
   head.appendChild(ctx.h.el("h3", "git-panel-title", title));
-  if (closable) head.appendChild(control(ctx, "button", "btn small ghost", "Close", { disabled, onClick: () => ctx.on.closePanel() }));
+  if (closable) head.appendChild(control(ctx, "button", "btn sm ghost", "Close", { disabled, onClick: () => ctx.on.closePanel() }));
   p.appendChild(head);
   return p;
 }
@@ -424,7 +432,7 @@ function changesBody(ctx) {
   const ch = git.changes || {};
   const any = list(ch.files).length || list(ch.untrackedDirs).length;
   if (!any) {
-    body.appendChild(h.el("p", "git-empty", `No changes. Nothing to commit on ${(git.head || {}).branch || "this commit"}.`));
+    body.appendChild(h.el("p", "empty", `No changes. Nothing to commit on ${(git.head || {}).branch || "this commit"}.`));
     return body;
   }
   body.appendChild(commitPanel(ctx, frozen));
@@ -492,7 +500,7 @@ function commitPanel(ctx, frozen) {
     tr.appendChild(h.el("td", "git-path", f.path));
     const state = h.el("td", "git-state", f.state || "");
     if (f.risky) {
-      state.appendChild(h.el("span", "badge git-badge is-held", "held back"));
+      state.appendChild(h.el("span", "pill is-stage is-caps badge git-badge is-held", "held back"));
       state.appendChild(ignoreToggle(`git-ignore-f${i}`, f.path));
     }
     tr.appendChild(state);
@@ -520,30 +528,33 @@ function commitPanel(ctx, frozen) {
   if (detached) {
     // No branch to commit on: the commit makes one, .gitignore-only picks included.
     actions.appendChild(
-      control(ctx, "button", "btn small primary", "Create branch", {
+      control(ctx, "button", "btn sm primary", "Create branch", {
         disabled: frozen || (!files.length && !ignore.length),
         onClick: () => on.openPanel("create", { commit: true, files, ignore }),
       })
     );
   } else if (!files.length && ignore.length) {
     // Only .gitignore picks: the commit takes .gitignore alone.
-    actions.appendChild(control(ctx, "button", "btn small primary", `Add ${ignore.length} to .gitignore`, { disabled: frozen, onClick: send }));
+    actions.appendChild(control(ctx, "button", "btn sm primary", `Add ${ignore.length} to .gitignore`, { disabled: frozen, onClick: send }));
   } else if (!first && head.branch && head.branch === git.defaultBranch) {
     actions.appendChild(h.el("p", "git-offer", `You're on ${head.branch}. Make a branch for this?`));
     actions.appendChild(
-      control(ctx, "button", "btn small primary", "Create branch", {
+      control(ctx, "button", "btn sm primary", "Create branch", {
         disabled: frozen || !files.length,
         onClick: () => on.openPanel("create", { commit: true, files, ignore }),
       })
     );
-    actions.appendChild(control(ctx, "button", "btn small", `Commit on ${head.branch}`, { disabled: frozen || !files.length, onClick: send }));
-  } else {
+    actions.appendChild(control(ctx, "button", "btn sm", `Commit on ${head.branch}`, { disabled: frozen || !files.length, onClick: send }));
+  } else if (!stripCommits(ctx)) {
+    // The step above this table already offers this same "Commit N files" (its
+    // count follows the ticks), so a second one here would be a duplicate; the
+    // table keeps its own only when the step is somewhere else.
     actions.appendChild(
-      control(ctx, "button", "btn small primary", `Commit ${plural(files.length, "file", "files")}`, { disabled: frozen || !files.length, onClick: send })
+      control(ctx, "button", "btn sm primary", `Commit ${plural(files.length, "file", "files")}`, { disabled: frozen || !files.length, onClick: send })
     );
   }
-  if (opened) actions.appendChild(control(ctx, "button", "btn small ghost", "Cancel", { disabled: frozen, onClick: () => on.closePanel() }));
-  p.appendChild(actions);
+  if (opened) actions.appendChild(control(ctx, "button", "btn sm ghost", "Cancel", { disabled: frozen, onClick: () => on.closePanel() }));
+  if (actions.children.length) p.appendChild(actions);
   return p;
 }
 
@@ -556,7 +567,7 @@ function branchesBody(ctx) {
   if (frozen) body.appendChild(waitLine(ctx));
 
   const tools = h.el("div", "git-tools");
-  const search = control(ctx, "input", "git-search", null, {
+  const search = control(ctx, "input", "is-compact git-search", null, {
     role: "nav",
     disabled: frozen,
     onInput: () => {
@@ -572,7 +583,7 @@ function branchesBody(ctx) {
   tools.appendChild(search);
   // Not mid-operation, and not before the first commit, when there is nothing to branch from.
   const first = git.hasCommits === false;
-  const nb = control(ctx, "button", "btn small", "New branch", {
+  const nb = control(ctx, "button", "btn sm", "New branch", {
     disabled: frozen || first,
     title: first ? "Make the first commit, then you can branch from it." : frozen ? "Finish or abort what is in progress first." : undefined,
     onClick: () => on.openPanel("create"),
@@ -588,7 +599,7 @@ function branchesBody(ctx) {
   else if (sweep) {
     const offer = h.el("p", "git-sweep-offer");
     offer.appendChild(h.el("span", null, `${plural(sweep, "branch", "branches")} merged or gone on the remote. `));
-    offer.appendChild(control(ctx, "button", "btn small ghost", "Choose which to clean up…", { disabled: frozen, onClick: () => on.openPanel("cleanup") }));
+    offer.appendChild(control(ctx, "button", "btn sm ghost", "Choose which to clean up…", { disabled: frozen, onClick: () => on.openPanel("cleanup") }));
     body.appendChild(offer);
   }
 
@@ -599,7 +610,7 @@ function branchesBody(ctx) {
   const { top, remoteOnly } = orderBranches(rows);
   const locals = filterBranches(top, board.query);
   if (locals.length) body.appendChild(branchTable(ctx, locals, frozen));
-  else body.appendChild(h.el("p", "git-empty", board.query ? "No local branch matches." : "No local branches yet."));
+  else body.appendChild(h.el("p", "empty", board.query ? "No local branch matches." : "No local branches yet."));
 
   if (remoteOnly.length) {
     const fold = foldRemote(remoteOnly, { showAll: board.showAll, query: board.query });
@@ -615,10 +626,10 @@ function branchesBody(ctx) {
     });
     det.appendChild(h.el("summary", null, `Remote only (${board.query ? fold.shown.length : remoteOnly.length})`));
     if (fold.shown.length) det.appendChild(branchTable(ctx, fold.shown, frozen));
-    else det.appendChild(h.el("p", "git-empty", "No remote branch matches."));
+    else det.appendChild(h.el("p", "empty", "No remote branch matches."));
     if (fold.hidden) {
       det.appendChild(
-        control(ctx, "button", "btn small ghost", `Show all ${remoteOnly.length}`, {
+        control(ctx, "button", "btn sm ghost", `Show all ${remoteOnly.length}`, {
           role: "nav",
           disabled: frozen,
           onClick: () => {
@@ -647,12 +658,12 @@ function branchTable(ctx, rows, frozen) {
     const name = h.el("td", "git-cell-name");
     name.appendChild(h.el("span", "git-name", b.remote ? `${b.remote}/${b.name}` : b.name));
     const badges = [
-      [b.current, "current", "is-current"],
-      [b.default, "default", "is-default"],
-      [b.merged, "Merged", "is-merged"],
-      [b.gone, "Remote copy deleted", "is-gone"],
+      [b.current, "current", "is-current is-accent"],
+      [b.default, "default", "is-default is-accent"],
+      [b.merged, "Merged", "is-merged is-ok"],
+      [b.gone, "Remote copy deleted", "is-gone is-stage"],
     ];
-    for (const [shown, label, cls] of badges) if (shown) name.appendChild(h.el("span", `badge git-badge ${cls}`, label));
+    for (const [shown, label, cls] of badges) if (shown) name.appendChild(h.el("span", `pill is-caps badge git-badge ${cls}`, label));
     tr.appendChild(name);
 
     let track = "not published";
@@ -671,9 +682,9 @@ function branchTable(ctx, rows, frozen) {
     const acts = h.el("td", "git-cell-actions");
     const branch = b.remote ? `${b.remote}/${b.name}` : b.name;
     // Mid-operation a row's Switch or Delete would ask for a second git op on top of the first.
-    if (!b.current) acts.appendChild(control(ctx, "button", "btn small", "Switch", { disabled: frozen, onClick: () => on.send("switch", { branch }) }));
+    if (!b.current) acts.appendChild(control(ctx, "button", "btn sm", "Switch", { disabled: frozen, onClick: () => on.send("switch", { branch }) }));
     if (!b.remote && !b.current && !b.default) {
-      acts.appendChild(control(ctx, "button", "btn small danger", "Delete", { disabled: frozen, onClick: () => on.send("delete", { branch: b.name }) }));
+      acts.appendChild(control(ctx, "button", "btn sm danger", "Delete", { disabled: frozen, onClick: () => on.send("delete", { branch: b.name }) }));
     }
     tr.appendChild(acts);
     tbody.appendChild(tr);
@@ -714,7 +725,7 @@ function createPanel(ctx, frozen) {
   fromRow.appendChild(fromLabel);
   if (src.here && c.from !== src.here) {
     fromRow.appendChild(
-      control(ctx, "button", "btn small ghost", `From ${src.here}`, {
+      control(ctx, "button", "btn sm ghost", `From ${src.here}`, {
         disabled: frozen,
         onClick: () => {
           c.from = src.here;
@@ -739,7 +750,7 @@ function createPanel(ctx, frozen) {
   type.value = c.type;
   typeLabel.appendChild(type);
   const descLabel = h.el("label", "git-field is-wide", "Short description ");
-  const desc = control(ctx, "input", null, null, {
+  const desc = control(ctx, "input", "is-compact", null, {
     disabled: frozen,
     onInput: () => {
       c.description = desc.value;
@@ -754,7 +765,7 @@ function createPanel(ctx, frozen) {
   p.appendChild(parts);
 
   const nameLabel = h.el("label", "git-field is-wide", "Branch name ");
-  const name = control(ctx, "input", "git-new-name", null, {
+  const name = control(ctx, "input", "is-compact git-new-name", null, {
     disabled: frozen,
     onInput: () => {
       c.name = name.value;
@@ -771,7 +782,7 @@ function createPanel(ctx, frozen) {
   // The name mirrors the two fields until it is edited directly.
   const currentName = () => (c.name == null ? composeBranchName(c) : c.name);
   const actions = h.el("div", "git-panel-actions");
-  const go = control(ctx, "button", "btn small primary", "Create", {
+  const go = control(ctx, "button", "btn sm primary", "Create", {
     disabled: true,
     onClick: () => {
       const fields = { name: currentName(), from: c.from };
@@ -781,7 +792,7 @@ function createPanel(ctx, frozen) {
     },
   });
   actions.appendChild(go);
-  actions.appendChild(control(ctx, "button", "btn small ghost", "Cancel", { disabled: frozen, onClick: () => on.closePanel() }));
+  actions.appendChild(control(ctx, "button", "btn sm ghost", "Cancel", { disabled: frozen, onClick: () => on.closePanel() }));
   p.appendChild(actions);
 
   // Typing updates the name box, the status line and Create in place, never a redraw.
@@ -807,7 +818,7 @@ function nameLine(ctx, line, st, frozen) {
   line.className = "git-name-status is-" + st.kind;
   const say = (text) => line.appendChild(h.el("span", null, text));
   const switchTo = (branch) =>
-    line.appendChild(control(ctx, "button", "btn small", "Switch to it", { disabled: frozen, onClick: () => on.send("switch", { branch }) }));
+    line.appendChild(control(ctx, "button", "btn sm", "Switch to it", { disabled: frozen, onClick: () => on.send("switch", { branch }) }));
   if (st.kind === "empty") say("Fill in the fields above, or type a name.");
   else if (st.kind === "invalid") say(st.reason);
   else if (st.kind === "free") say("That name is free.");
@@ -855,12 +866,12 @@ function cleanupPanel(ctx, frozen) {
   const branches = [...sweep].filter((n) => known.has(n));
   const actions = h.el("div", "git-panel-actions");
   actions.appendChild(
-    control(ctx, "button", "btn small danger", `Delete ${plural(branches.length, "branch", "branches")}`, {
+    control(ctx, "button", "btn sm danger", `Delete ${plural(branches.length, "branch", "branches")}`, {
       disabled: frozen || !branches.length,
       onClick: () => on.send("cleanup", { branches }),
     })
   );
-  actions.appendChild(control(ctx, "button", "btn small ghost", "Cancel", { disabled: frozen, onClick: () => on.closePanel() }));
+  actions.appendChild(control(ctx, "button", "btn sm ghost", "Cancel", { disabled: frozen, onClick: () => on.closePanel() }));
   p.appendChild(actions);
   return p;
 }
@@ -884,7 +895,7 @@ function syncBody(ctx) {
     const a = acts[key];
     if (!a.shown) continue;
     row.appendChild(
-      control(ctx, "button", "btn small" + (key === primaryOp ? " primary" : ""), a.label, {
+      control(ctx, "button", "btn sm" + (key === primaryOp ? " primary" : ""), a.label, {
         disabled: ctx.mode === "idle" && !a.enabled,
         title: a.title,
         onClick: () => runStep(ctx, { op: key }),
@@ -902,7 +913,7 @@ function syncBody(ctx) {
 // Mid-operation: one block that is the step, its files and its two buttons.
 function opBlock(ctx) {
   const { git, h, on, step } = ctx;
-  const box = h.el("div", "git-op git-step is-warn");
+  const box = h.el("div", "callout is-stage git-op git-step");
   box.setAttribute("role", "alert");
   box.appendChild(h.el("div", "git-step-kicker", "Next step"));
   box.appendChild(h.el("h3", "git-op-title", `${OP_WORDS[git.inProgress] || "An operation"} is in progress`));
@@ -961,13 +972,13 @@ function prBlock(ctx) {
     if (!link.host) return null;
     box.appendChild(h.el("span", "git-pr-ask", `Which host is ${link.host}?`));
     for (const [kind, label] of Object.entries(PR_HOST_LABELS)) {
-      box.appendChild(control(ctx, "button", "btn small", label, { onClick: () => on.pickPrHost(link.host, kind) }));
+      box.appendChild(control(ctx, "button", "btn sm", label, { onClick: () => on.pickPrHost(link.host, kind) }));
     }
     return box;
   }
   if (!link.url || !/^https:\/\//i.test(link.url)) return null;
   box.appendChild(prLink(ctx, link.url));
-  box.appendChild(copy(ctx, link.url, "btn small"));
+  box.appendChild(copy(ctx, link.url, "btn sm"));
   if (bases.length) {
     const label = h.el("label", "git-pr-base", "into ");
     const sel = control(ctx, "select", null, null, {

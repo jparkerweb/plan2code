@@ -165,7 +165,7 @@ test("the setup page renders found, outside and missing rows with their way forw
   assert.equal(await table(s).locator("button.split-row").count(), 5, "the four builtin rows and the template");
   // Nothing picked yet: the pane shows the empty text, and the row badges are
   // already drawn with each entry's state.
-  assert.equal(await pane(s).locator(".split-empty").count(), 1, "the pane's empty text before a pick");
+  assert.equal(await pane(s).locator(".empty").count(), 1, "the pane's empty text before a pick");
   assert.equal(await rowByKey(s, "found-one").locator(".prefs-badge.ok").count(), 1);
   assert.equal(await textOf(rowByKey(s, "found-one").locator(".prefs-badge")), "Found");
   assert.equal(await textOf(rowByKey(s, "outer").locator(".prefs-badge")), "Found outside PATH");

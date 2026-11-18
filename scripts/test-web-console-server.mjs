@@ -81,7 +81,7 @@ test("the page carries its first state, title and badge, so the first paint need
   assert.equal((html.match(/<script\b/g) || []).length, 2, "the boot block and app.js, nothing else");
   // Written into the markup, escaped, with `$&` and `$'` left as typed.
   assert.ok(html.includes(`<h1 id="title">Lunch &lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt; $&amp; $&#39; app</h1>`));
-  assert.ok(html.includes('<span class="badge" id="badge">Building</span>'));
+  assert.ok(html.includes('<span class="pill is-accent is-caps badge" id="badge">Building</span>'));
   assert.ok(html.includes("Starting Implement"), "the static starting screen names the skill");
   assert.ok(html.includes('rel="modulepreload" href="/app.js"'));
   cli(["stop", "--session", res.json.sid, "--force"]);
@@ -403,6 +403,8 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
   }
 });
 
+const SESSION_STATE = JSON.stringify({ title: "shop", workflow: "pathfinder" });
+
 test("cleanup finds old sessions and strays in both folders, and keeps every protected name and this session", async () => {
   const plan2code = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-cleanup-"));
   const consoleDir = path.join(plan2code, "console");
@@ -420,7 +422,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
       return p;
     };
     const session = (sid, stale) => {
-      const state = put(path.join(consoleDir, "sessions", sid, "state.json"));
+      const state = put(path.join(consoleDir, "sessions", sid, "state.json"), SESSION_STATE);
       if (stale) backdate(state);
       return path.dirname(state);
     };
@@ -492,6 +494,12 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     for (const id of ["root:app", "root:app.json", "root:agents.json", "root:prototypes", "root:learning"]) assert.equal(items.some((i) => i.id === id), false, `${id} is never a stray`);
     assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
     assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
+    // A session row names itself by title, skill and when it was last touched, never by path.
+    const row = items.find((i) => i.id === "session:20250801-101010-aaaaaa");
+    assert.equal(row.title, "shop");
+    assert.equal(row.workflow, "pathfinder");
+    assert.ok(Number.isFinite(Date.parse(row.at)), "at is an ISO time");
+    assert.equal(items.find((i) => i.id === "console:p1.json").title, undefined, "a stray carries no title");
     assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");
     assert.equal(bytes, items.reduce((n, i) => n + i.bytes, 0));
 
@@ -506,7 +514,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     );
     assert.deepEqual(done.removed.sort(), ["console:p1.json", "root:console-dev", "session:20250801-101010-aaaaaa"]);
     assert.deepEqual(done.failed, []);
-    assert.equal(done.bytes, 5 + 3 + 2);
+    assert.equal(done.bytes, 5 + 3 + SESSION_STATE.length);
     assert.equal(fs.existsSync(old), false);
     assert.equal(fs.existsSync(path.join(plan2code, "console-dev")), false);
     assert.ok(fs.existsSync(path.join(plan2code, "notes.txt")), "not asked for, so not removed");

@@ -1,9 +1,7 @@
 /* Learning on the dashboard: the slim row (screens/learning-row.js) and the
-   waiting banner. From the saved prototype's variant A
-   (specs/project-learning/prototypes/learning-row.html), on the page's own
-   tokens: the prototype's hold color is --stage, its border --rule. */
+   waiting banner. Hold color is --stage, border --rule. */
 
-/* The row. Under the spec picker while it needs the person (not set up, off,
+/* The row: under the spec picker while it needs the person (not set up, off,
    paused); after the last card group while on. */
 .learn-row { position: relative; }
 .learn-row.is-top { margin: 0 0 22px; }
@@ -16,32 +14,19 @@
   padding: 8px 12px;
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--ink);
 }
-/* Paused for you: the amber tint, so a paused person sees it at a glance. */
+/* Paused: amber tint, visible at a glance. */
 .learn-row.is-paused .learn-line {
   background: var(--stage-soft);
   border: 1px solid var(--stage);
-  border-radius: calc(var(--radius) * 0.7);
+  border-radius: var(--radius-md);
 }
-.learn-label { font-weight: 650; }
-.learn-pill {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border: 1px solid var(--rule-2);
-  border-radius: 999px;
-  color: var(--ink-3);
-}
-.learn-pill.is-on { color: var(--accent); border-color: var(--accent); }
-.learn-pill.is-hold { color: var(--stage); border-color: var(--stage); }
+.learn-label { font-weight: 600; }
 .learn-say { flex: 1 1 14em; min-width: 0; color: var(--ink-3); }
 .learn-row.is-paused .learn-say { color: var(--ink); }
 .learn-controls { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.learn-controls .btn { margin: 0; }
 
 /* Pause for me: a sliding switch. Amber while paused. */
 .learn-switch {
@@ -63,7 +48,7 @@
   width: 34px;
   height: 20px;
   box-sizing: border-box;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg);
   border: 1px solid var(--rule-2);
 }
@@ -76,15 +61,15 @@
   height: 14px;
   border-radius: 50%;
   background: var(--ink-3);
-  transition: left 0.15s ease;
+  transition: transform var(--dur-1);
 }
 .learn-switch.is-on .learn-track { background: var(--stage); border-color: var(--stage); }
-.learn-switch.is-on .learn-track::after { left: 16px; background: var(--panel); }
+.learn-switch.is-on .learn-track::after { transform: translateX(14px); background: var(--panel); }
 .learn-switch:hover:not(:disabled) .learn-track { border-color: var(--accent); }
 
 .learn-link {
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   min-height: 24px;
   padding: 0 4px;
   background: none;
@@ -96,14 +81,14 @@
 .learn-link:hover { text-decoration-thickness: 2px; }
 .learn-switch:focus-visible,
 .learn-link:focus-visible,
-.learn-more-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.learn-more-item:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 
 /* More: at the bottom of the page, so it opens upward. */
 .learn-more {
   position: absolute;
   right: 0;
   bottom: 100%;
-  z-index: 5;
+  z-index: var(--z-sticky);
   min-width: 17em;
   margin: 0 0 4px;
   padding: 4px;
@@ -111,100 +96,88 @@
   text-align: left;
   background: var(--panel);
   border: 1px solid var(--rule);
-  border-radius: calc(var(--radius) * 0.7);
-  box-shadow: var(--shadow);
-  font-size: 13.5px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-md);
   color: var(--ink);
 }
 .learn-more[hidden] { display: none; }
-.learn-more-item { padding: 7px 10px; border-radius: calc(var(--radius) * 0.5); cursor: pointer; }
+.learn-more-item { padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer; }
 .learn-more-item:hover,
-.learn-more-item:focus { background: var(--accent-soft); outline: none; }
+.learn-more-item:focus { background: var(--accent-soft); }
 .learn-more-item.is-danger { color: var(--warn); border-top: 1px solid var(--rule); border-top-left-radius: 0; border-top-right-radius: 0; }
 .learn-more-item[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .learn-more-item[aria-disabled="true"]:hover { background: none; }
 
 /* Lessons waiting: the banner nearest the title, in the accent tint. */
 .dash-nudge.learn-banner { border-left-width: 4px; }
-.learn-banner .btn { margin: 0 0 0 auto; }
+.learn-banner .btn { margin-left: auto; }
 
 /* Open the lessons: each file under its own name. */
 .learn-lessons-file + .learn-lessons-file { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
-.learn-lessons-name { margin: 0 0 6px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); }
+.learn-lessons-name { margin: 0 0 6px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink-3); }
 
-/* The lessons card (screens/cards.js buildLessons): one block per waiting
-   item, each with its own choices and nothing chosen at first. */
-.lessons-opening { margin: 14px 0 0; font-size: 13.5px; color: var(--ink-3); }
+/* The lessons card (cards.js buildLessons): one block per item, none chosen at first. */
+.lessons-opening { margin: 14px 0 0; font-size: var(--fs-md); color: var(--ink-3); }
 .lessons-rows { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
 .lessons-row {
   padding: 12px 14px;
   border: 1px solid var(--rule);
-  border-radius: calc(var(--radius) * 0.7);
+  border-radius: var(--radius-md);
   background: var(--panel);
 }
 .lessons-row.is-chosen { border-color: var(--accent); }
 .lessons-row p { margin: 0 0 6px; }
-.lessons-heading { font-size: 12.5px; font-weight: 650; color: var(--ink-2); }
+.lessons-heading { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); }
 .lessons-text { font-weight: 600; color: var(--ink); }
 .lessons-why,
-.lessons-found { font-size: 13.5px; color: var(--ink-2); }
+.lessons-found { font-size: var(--fs-md); color: var(--ink-2); }
 .lessons-origin,
-.lessons-note { font-size: 12.5px; color: var(--ink-3); }
-.lessons-fix-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.lessons-note { font-size: var(--fs-sm); color: var(--ink-3); }
 .lessons-fix blockquote {
   margin: 0 0 8px;
   padding: 6px 10px;
   border-left: 3px solid var(--rule-2);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .lessons-fix .lessons-after { border-left-color: var(--accent); }
-.lessons-become { margin: 0 0 6px; padding-left: 18px; font-size: 13.5px; }
+.lessons-become { margin: 0 0 6px; padding-left: 18px; font-size: var(--fs-md); }
 /* Flagged and refused: said in words, not only in color. */
 .lessons-flag,
-.lessons-refused {
-  padding: 5px 9px;
-  border-radius: calc(var(--radius) * 0.5);
-  font-size: 13px;
-  background: var(--stage-soft);
-  color: var(--ink);
-}
-.lessons-refused { background: var(--warn-soft); color: var(--warn); }
+.lessons-refused { padding: 5px 9px; font-size: var(--fs-sm); }
 .lessons-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.lessons-choices .btn { margin: 0; }
 .lessons-edit { margin-top: 10px; display: grid; gap: 8px; }
 .lessons-field { margin: 0; }
 .lessons-input,
 .lessons-select { width: 100%; box-sizing: border-box; }
 .lessons-error { margin: 10px 0 0; }
 .lessons-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
-.lessons-summary { margin: 0; font-size: 13.5px; color: var(--ink-2); }
-.lessons-foot .btn { margin: 0 0 0 auto; }
+.lessons-summary { margin: 0; font-size: var(--fs-md); color: var(--ink-2); }
+.lessons-foot .btn { margin-left: auto; }
 .lessons-first-lesson {
   margin: 14px 0 0;
   padding: 12px 14px;
   border-left: 4px solid var(--accent);
   background: var(--accent-soft);
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
 }
 .lessons-first-lesson p { margin: 0 0 4px; }
 .lessons-first-about { margin: 12px 0 0; }
 .lessons-later { margin-top: 8px; }
 
-/* Review from the dashboard: the same card in a dialog over the menu. Sized
-   like the Notebook dialog; max-width: none lifts the base .modal 440px cap. */
+/* Review: the same card in a dialog, sized like the Notebook; max-width: none
+   lifts the base .modal 440px cap. */
 .modal.lessons-dialog { width: min(1200px, 90vw); max-width: none; }
 .lessons-dialog .card { margin: 0; box-shadow: none; border: 0; padding: 0; max-width: none; }
 
-/* The lessons dialog: closable (the corner ×, Not now, Escape), and locked
-   while Save lessons goes. */
+/* Closable (corner x, Not now, Escape), locked while saving. */
 .lessons-dialog .modal-actions { align-items: center; justify-content: flex-end; }
-.lessons-dialog .modal-actions .btn { margin: 0; }
-.lessons-suggestions { flex: 1 1 100%; padding: 10px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: calc(var(--radius) * 0.5); }
-.lessons-suggestions h3 { margin: 0 0 6px; font-size: 13.5px; }
-.lessons-suggestions .md { max-height: 40vh; overflow: auto; font-size: 13.5px; }
+.lessons-suggestions { flex: 1 1 100%; }
+.lessons-suggestions h3 { margin: 0 0 6px; font-size: var(--fs-md); }
+.lessons-suggestions .md { max-height: 40vh; overflow: auto; font-size: var(--fs-md); }
 .lessons-dialog .modal-actions { flex-wrap: wrap; }
 .lessons-dialog .modal-actions .btn .spinner { margin-right: 8px; }
 .modal-x {
@@ -216,25 +189,24 @@
   display: grid;
   place-items: center;
   padding: 0;
-  font-size: 22px;
+  font-size: var(--fs-h2);
   line-height: 1;
   color: var(--ink-3);
   background: none;
   border: 0;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .modal-x:hover:not(:disabled),
 .modal-x:focus-visible { color: var(--ink); background: var(--panel-2); }
 .modal-x:disabled { opacity: 0.4; cursor: default; }
 .lessons-dialog.is-saving .card { opacity: 0.6; }
-.lessons-unsaved { flex: 1 1 100%; padding: 10px 12px; border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: calc(var(--radius) * 0.5); }
+.lessons-unsaved { flex: 1 1 100%; }
 .lessons-unsaved .modal-actions { flex-wrap: wrap; }
 .lessons-unsaved .btn { white-space: nowrap; }
-.lessons-unsaved-text { margin: 0 0 8px; font-size: 13.5px; color: var(--ink); }
+.lessons-unsaved-text { margin: 0 0 8px; font-size: var(--fs-md); color: var(--ink); }
 
-/* Switching Learning on or off, opening Review, saving: shown the moment the
-   button is pressed. */
+/* Shown the moment a Learning, Review or save button is pressed. */
 .learn-busy { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); }
 .learn-banner.is-busy .dash-nudge-text { display: inline-flex; align-items: center; gap: 8px; }
 .learn-row.is-busy .learn-pill { opacity: 0.6; }

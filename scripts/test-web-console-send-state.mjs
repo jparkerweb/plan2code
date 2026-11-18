@@ -26,12 +26,13 @@ function setup({ agent = { status: "waiting" }, items = [question()], ...S } = {
 
 const working = (sinceMs, extra = {}) => ({ status: "working", since: ago(sinceMs), ...extra });
 
-test("send state: a finished session is closed, and says paused when its headline does", () => {
+test("send state: a finished session is closed, and says stopped when its headline says paused", () => {
   setup({ finish: { headline: "Phase 3 is done" } });
   page.local.staged.q1 = { k: "A" };
-  assert.deepEqual(sendState(), { disabled: true, why: "This session is finished.", short: "Session finished" });
+  // A finished session has nothing to send, ever: the button is hidden and the words stay.
+  assert.deepEqual(sendState(), { disabled: true, why: "This session is finished.", short: "Session finished", hide: true });
   setup({ finish: { headline: "Paused at Step 2" } });
-  assert.deepEqual(sendState(), { disabled: true, why: "This session is paused.", short: "Session paused" });
+  assert.deepEqual(sendState(), { disabled: true, why: "This session is stopped.", short: "Session stopped", hide: true });
 });
 
 test("send state: a finish wins over a dropped connection", () => {
@@ -183,4 +184,25 @@ test("suggest state: the chip follows Send, and waits while its own request does
   const replied = { ...asked, thread: [...asked.thread, { who: "agent", at: ago(0), text: "I would pick CSV." }] };
   setup({ items: [replied] });
   assert.deepEqual(suggestState(replied), ready, "the agent's reply frees it");
+});
+
+// One phrase for a page that lost the server (Help's "Not connected" state):
+// the constant is exported, the send button uses it, and every other place
+// that says it imports it instead of typing its own wording.
+test("the not-connected phrase is one exported constant and the sites use it", async () => {
+  const { NOT_CONNECTED, NOT_CONNECTED_KEPT, notConnected } = await import("../src/web-console/public/labels.js");
+  assert.equal(NOT_CONNECTED, "Not connected right now.");
+  assert.equal(notConnected(), NOT_CONNECTED);
+  assert.equal(notConnected(NOT_CONNECTED_KEPT), `${NOT_CONNECTED} ${NOT_CONNECTED_KEPT}`);
+  setup();
+  page.gone = true;
+  assert.equal(sendState().why, NOT_CONNECTED);
+  const fs = await import("node:fs");
+  const root = new URL("../src/web-console/public/", import.meta.url);
+  const sites = ["send-state.js", "notepad.js", "screens/core.js", "screens/cleanup.js", "screens/learning-row.js", "screens/ask.js", "screens/notepad.js", "screens/ending.js"];
+  for (const file of sites) {
+    const text = fs.readFileSync(new URL(file, root), "utf8");
+    assert.match(text, /labels\.js"/, `${file} imports the constant`);
+    assert.doesNotMatch(text, /["'`][^"'`\n]*(Lost contact with Plan2Code|Plan2Code is not reachable|Plan2Code is not answering)/, `${file} types no wording of its own`);
+  }
 });

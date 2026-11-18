@@ -993,10 +993,11 @@ export const MAX_OPEN_REQUIRED = 3;
 // The `more` body is markdown drawn under its row: kept short enough to read.
 export const MAX_MORE_BYTES = 4096;
 export const MAX_GROUP_CHARS = 40;
+export const MAX_TAG_CHARS = 16;
 
-// A multi's optional pick-list fields: `group`, `more`, `batch` and `locked` on
-// options, and no preset naming a locked option (a preset only ticks what can
-// be picked).
+// A multi's optional pick-list fields: `group`, `more`, `batch`, `locked`,
+// `ticked` and `tag` on options, and no preset naming a locked option (a preset
+// only ticks what can be picked).
 function pickListProblems(item, at) {
   const problems = [];
   const locked = new Set();
@@ -1016,6 +1017,14 @@ function pickListProblems(item, at) {
       problems.push(rule(at, "options", `${which} has a "locked" that is not true or false`, { text: "left-pad 1.0.0 to 2.0.0", locked: true }));
     }
     if (o.locked === true && typeof o.k === "string") locked.add(o.k);
+    if (o.ticked != null && typeof o.ticked !== "boolean") {
+      problems.push(rule(at, "options", `${which} has a "ticked" that is not true or false (true starts the row ticked)`, { text: "Colors", ticked: true }));
+    } else if (o.ticked === true && o.locked === true) {
+      problems.push(rule(at, "options", `${which} is locked and ticked; a locked option can never be picked. Drop "ticked"`, { text: "left-pad 1.0.0 to 2.0.0", locked: true }));
+    }
+    if (o.tag != null && (typeof o.tag !== "string" || !o.tag.trim() || o.tag.trim().length > MAX_TAG_CHARS)) {
+      problems.push(rule(at, "options", `${which} has a "tag" that is not a string of 1 to ${MAX_TAG_CHARS} characters (the small pill beside the label)`, { text: "Colors", tag: "Keep" }));
+    }
   }
   if (locked.size && Array.isArray(item.presets)) {
     for (const p of item.presets) {
@@ -1100,6 +1109,13 @@ export function validate(state) {
           problems.push(
             rule(at, "options", `option "${o.k}" needs "text" (the label) and optionally "detail". Options use "text"/"detail", not "label"/"desc"`, OPTION_RIGHT),
           );
+        }
+        if (item.kind === "choice" && isPlainObject(o)) {
+          for (const field of ["ticked", "tag"]) {
+            if (o[field] != null) {
+              problems.push(rule(at, "options", `option "${o.k}" has "${field}", which only goes on a multi's options`, { kind: "multi" }));
+            }
+          }
         }
       });
     }

@@ -16,7 +16,7 @@ export function listEditor({ list, kind = "text", field = kind === "models" ? "m
     box.replaceChildren();
     list.forEach((item, i) => {
       const row = el("div", kind === "models" ? "agent-row model" : "agent-row");
-      const remove = el("button", "btn small ghost", "Remove");
+      const remove = el("button", "btn sm ghost", "Remove");
       remove.type = "button";
       remove.addEventListener("click", () => {
         list.splice(i, 1);
@@ -59,7 +59,7 @@ export function listEditor({ list, kind = "text", field = kind === "models" ? "m
       }
       box.appendChild(row);
     });
-    const add = el("button", "btn small ghost", addLabel);
+    const add = el("button", "btn sm ghost", addLabel);
     add.type = "button";
     add.addEventListener("click", () => {
       list.push(kind === "models" ? (optionalName ? { id: "" } : { id: "", label: "" }) : "");

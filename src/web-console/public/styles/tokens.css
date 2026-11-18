@@ -1,8 +1,7 @@
 /* tokens.css: Colors, type, sizes and the light and dark themes: the variables every other file reads. */
 
-/* Plan2Code Console.
-   Light by default, dark when the system asks. No external fonts: the page must
-   work offline and under a CSP with no 'unsafe-inline'. */
+/* Light by default, dark when the system asks. No external fonts: the page
+   must work offline under a CSP with no 'unsafe-inline'. */
 
 :root {
   --bg: #f6f3ee;
@@ -10,7 +9,7 @@
   --panel-2: #fbf9f6;
   --ink: #1d1a17;
   --ink-2: #5d564d;
-  /* Same hue as before, darkened to 4.56:1 on --bg (WCAG AA for body text). */
+  /* 4.56:1 on --bg (WCAG AA body text). */
   --ink-3: #756e62;
   --rule: #e4ddd1;
   --rule-2: #cfc6b6;
@@ -20,41 +19,92 @@
   --accent-line: #9ab4d3;
   --ok: #2f6b45;
   --ok-soft: #e4f0e8;
-  --stage: #9a6a12;
+  --stage: #8f620f;
   --stage-soft: #fbf0d8;
   --warn: #9c3327;
   --warn-soft: #fbe7e3;
+  /* Text on a --warn fill. */
+  --warn-ink: #ffffff;
   --focus: #1f6feb;
+  /* Not a color, so the dark blocks need no copy. */
+  --focus-offset: 2px;
   /* Rank colors for low / mid / high badges (a helper's strength and effort). */
   --lvl-0: #5b6472;
   --lvl-0-soft: #e8eaee;
   --lvl-1: #23716a;
   --lvl-1-soft: #e1f1ee;
-  --lvl-2: #9a6a12;
+  --lvl-2: #8f620f;
   --lvl-2-soft: #fbf0d8;
   --lvl-3: #7a3fa8;
   --lvl-3-soft: #f1e7f8;
-  --shadow: 0 1px 2px rgba(29, 26, 23, 0.05), 0 8px 24px rgba(29, 26, 23, 0.06);
-  /* A soft accent halo for the things that want noticing: the update banner
-     and an enabled Send. Built from --accent, so a picked accent glows too. */
+  /* Three elevations: cards, popovers, dialogs. --shadow stays for the games. */
+  --shadow-1: 0 1px 2px rgba(29, 26, 23, 0.05), 0 8px 24px rgba(29, 26, 23, 0.06);
+  --shadow-2: 0 2px 4px rgba(29, 26, 23, 0.08), 0 12px 28px rgba(29, 26, 23, 0.14);
+  --shadow-3: 0 24px 64px rgb(0 0 0 / 0.22);
+  --shadow: var(--shadow-1);
+  /* Accent halo for the update banner and an enabled Send; follows --accent. */
   --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  /* Sticky footer shadow, dialog dim, and form control fill (sunken). */
+  --shadow-up: 0 -4px 14px rgba(29, 26, 23, 0.07);
+  --scrim: rgba(29, 26, 23, 0.45);
+  --field: #fbf9f6;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --serif: "Iowan Old Style", Charter, Georgia, Cambria, serif;
+  --serif: "Iowan Old Style", Charter, Cambria, Georgia, serif;
   --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+  /* Shape: xs chips and focus rings, sm small controls, md inputs and rows,
+     --radius cards and dialogs. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
   --radius: 10px;
+  --radius-pill: 999px;
+  /* Layers (local 0/1/2 stacking keeps its literal). The skip link outranks the
+     arrival overlay so a keyboard user can still see it. */
+  --z-sticky: 5;
+  --z-pop: 40;
+  --z-wake: 45;
+  --z-toast: 46;
+  --z-overlay: 50;
+  --z-menu: 60;
+  /* Spacing steps, for new work only. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
   /* The column's width: the card, the pager and the documents. */
   --card-width: 880px;
+  /* Type: text steps, h1 to h4, one poster size; weights 400, 600, 700 only. */
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-base: 15px;
+  --fs-lg: 17px;
+  --fs-h4: 16px;
+  --fs-h3: 18px;
+  --fs-h2: 21px;
+  --fs-h1: 25px;
+  --fs-poster: 38px;
+  --lh-tight: 1.25;
+  --lh-ui: 1.4;
+  --lh-body: 1.55;
+  /* Motion. */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 350ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.3, 1.6, 0.5, 1);
 }
-/* The card-width presets. These must agree with CARD_WIDTHS in palette.js,
-   which validates the saved choice and paints data-width on first load. */
+/* Card-width presets: must agree with CARD_WIDTHS in palette.js. */
 :root[data-width="narrow"] { --card-width: 720px; }
 :root[data-width="wide"] { --card-width: 1080px; }
 :root[data-width="ultrawide"] { --card-width: 1440px; }
 
-/* Dark is written twice on purpose, and the duplication is the whole mechanism.
-   The first copy follows the system unless the person has explicitly asked for
-   light; the second is the explicit ask. Without the `:not()` a system-dark
-   browser would win over someone who chose light in the settings panel. */
+/* Dark is written twice on purpose. The first copy follows the system unless
+   light was chosen; the second is the explicit ask. Without the `:not()` a
+   system-dark browser would override a chosen light. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #171513;
@@ -62,7 +112,7 @@
     --panel-2: #262220;
     --ink: #f0ece5;
     --ink-2: #b6afa3;
-    --ink-3: #8b8376;
+    --ink-3: #9a9285;
     --rule: #332e29;
     --rule-2: #46403a;
     --accent: #619fe5;
@@ -75,6 +125,7 @@
     --stage-soft: #332a17;
     --warn: #f0897a;
     --warn-soft: #34201d;
+    --warn-ink: #1a0f0d;
     --lvl-0: #a9b1bf;
     --lvl-0-soft: #262a31;
     --lvl-1: #6cc4b8;
@@ -84,8 +135,14 @@
     --lvl-3: #c49bea;
     --lvl-3-soft: #2a2035;
     --focus: #6aa3ff;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-2: 0 4px 8px rgba(0, 0, 0, 0.45), 0 14px 32px rgba(0, 0, 0, 0.45);
+    --shadow-3: 0 24px 64px rgb(0 0 0 / 0.55);
+    --shadow-up: 0 -1px 0 var(--rule-2), 0 -6px 18px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.6);
+    --field: #1b1816;
     --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+    -webkit-font-smoothing: antialiased;
   }
 }
 
@@ -95,7 +152,7 @@
   --panel-2: #262220;
   --ink: #f0ece5;
   --ink-2: #b6afa3;
-  --ink-3: #8b8376;
+  --ink-3: #9a9285;
   --rule: #332e29;
   --rule-2: #46403a;
   --accent: #619fe5;
@@ -108,6 +165,7 @@
   --stage-soft: #332a17;
   --warn: #f0897a;
   --warn-soft: #34201d;
+  --warn-ink: #1a0f0d;
   --lvl-0: #a9b1bf;
   --lvl-0-soft: #262a31;
   --lvl-1: #6cc4b8;
@@ -117,11 +175,24 @@
   --lvl-3: #c49bea;
   --lvl-3-soft: #2a2035;
   --focus: #6aa3ff;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 4px 8px rgba(0, 0, 0, 0.45), 0 14px 32px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 24px 64px rgb(0 0 0 / 0.55);
+  --shadow-up: 0 -1px 0 var(--rule-2), 0 -6px 18px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --field: #1b1816;
   --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+  -webkit-font-smoothing: antialiased;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--rule-2) transparent; }
+
+/* Georgia, the Windows serif, has only old-style figures and ignores lining-nums
+   (checked in Chrome on Windows), so Cambria sits ahead of it in --serif. */
+h1, h2, h3, .md-h, .dash-title, .git-branch, .git-step-title { font-variant-numeric: lining-nums; text-wrap: balance; }
+.launch-title, .arrival-title { text-wrap: balance; }
+.md-p, .card .prompt { text-wrap: pretty; }
+::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
 
 html, body { height: 100%; }
 
@@ -129,7 +200,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.55 var(--sans);
+  font: var(--fs-base)/var(--lh-body) var(--sans);
   display: grid;
   grid-template-rows: auto 1fr auto;
   min-height: 100vh;
@@ -137,8 +208,21 @@ body {
 
 :focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-xs);
+}
+
+/* The one small-caps label: every selector here is an eyebrow. Own rules add
+   only margin, color or a deliberate difference (posters widen spacing to 0.14em). */
+.dash-group-title, .spec-chip-state, .handoff-preview-label, .block-tag,
+.handoff-label, .git-step-kicker, .git-table th, .help-row dt,
+.lessons-fix-label, .card-kicker, .note-kicker, .option-group, .answered-head,
+.pager-kicker, .modal-ranges legend, .rail-title, .rail-end-label, .aside h2,
+.msg-who, .arrival-kicker, .welcome-kicker {
+  font: 700 var(--fs-2xs)/1.3 var(--sans);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }
 
 .skip {
@@ -148,14 +232,12 @@ body {
   background: var(--panel);
   color: var(--ink);
   padding: 10px 16px;
-  z-index: 50;
+  z-index: var(--z-menu);
   border-radius: 0 0 var(--radius) 0;
 }
 .skip:focus { left: 0; }
 
-/* Pin each region to its own row rather than relying on order: the banner
-   is fixed now and never a grid item, but keeping the rows explicit means a
-   future element that hides the same way cannot shuffle the tracks. */
+/* Explicit rows, so a future element hidden the same way cannot shuffle tracks. */
 .topbar { grid-row: 1; }
 .layout { grid-row: 2; }
 .footer { grid-row: 3; }

@@ -478,7 +478,9 @@ function refusalLine(names) {
  * notepad whose newest file is `maxAgeMs` old is listed too, one item per
  * folder carrying the `folder` it belongs to (null when its meta.json is gone):
  * this is the only way a notepad is ever removed.
- * Resolves to `{ items: [{ id, where, name, kind, bytes, folder? }], bytes }`.
+ * Resolves to `{ items: [{ id, where, name, kind, bytes, folder?, title?, workflow?, at? }], bytes }`;
+ * a session item also carries its `title`, `workflow` and `at` (when it was last touched, ISO), which the
+ * page reads in place of the folder name. Paths never go to the page.
  */
 export async function cleanupFindings({
   consoleDir = HOME_DIR,
@@ -492,7 +494,19 @@ export async function cleanupFindings({
   const sessionsDir = path.join(consoleDir, "sessions");
   for (const sid of staleSessions(sessionsDir, now, maxAgeMs, skipSid)) {
     if (now - newestMtime(path.join(sessionsDir, sid)) <= maxAgeMs) continue;
-    found.push({ id: "session:" + sid, where: "session", name: sid, kind: "folder", path: path.join(sessionsDir, sid) });
+    const dir = path.join(sessionsDir, sid);
+    const state = readJson(path.join(dir, "state.json"), null);
+    const str = (v) => (typeof v === "string" ? v.slice(0, 120) : "");
+    found.push({
+      id: "session:" + sid,
+      where: "session",
+      name: sid,
+      kind: "folder",
+      path: dir,
+      title: str(state && state.title),
+      workflow: str(state && state.workflow),
+      at: new Date(newestMtime(dir)).toISOString(),
+    });
   }
   found.push(...strayEntries(consoleDir, KEPT_CONSOLE_ENTRIES, "console", now, CONSOLE_VERSION_DIR));
   if (path.resolve(consoleDir) === path.resolve(plan2codeDir, "console")) {
@@ -513,6 +527,7 @@ export async function cleanupFindings({
     bytes += size;
     const item = { id: f.id, where: f.where, name: f.name, kind: f.kind, bytes: size, path: f.path };
     if (f.where === "notepad") item.folder = f.folder;
+    if (f.where === "session") Object.assign(item, { title: f.title, workflow: f.workflow, at: f.at });
     if (f.where === "completed") item.tracked = f.tracked;
     items.push(item);
   }

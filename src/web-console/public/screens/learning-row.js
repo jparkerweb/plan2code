@@ -9,20 +9,21 @@
 // in dashboard.js, reached through hooks: a screen never imports another),
 // and is disabled whenever a card would be.
 
+import { NOT_CONNECTED } from "../labels.js";
 import { page, redraw, hooks, stage } from "../state.js";
-import { el, md, mdInto, lightDismiss } from "../render.js";
+import { el, icon, md, mdInto, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
 import { sendState, suggestState } from "../send-state.js";
 import { threadWho, threadText } from "../answers.js";
 import { loopDriving, isOpen, stagedCount, learningBusyNow } from "../selectors.js";
 
-const TOP_STATES = new Set(["not-set-up", "off", "paused"]);
+const TOP_STATES = new Set(["off", "paused"]);
 
 const PILLS = {
   "not-set-up": { text: "Not set up", cls: "" },
   off: { text: "Off", cls: "" },
-  on: { text: "On", cls: " is-on" },
-  paused: { text: "Paused for you", cls: " is-hold" },
+  on: { text: "On", cls: " is-accent" },
+  paused: { text: "Paused for you", cls: " is-stage" },
 };
 
 // The More menu stays open across the dashboard's redraws until it is closed.
@@ -42,9 +43,9 @@ function shortDate(iso) {
  * same conditions that disable a dashboard card (dashCard()).
  */
 export function learningBlocked() {
-  if (page.gone) return "Plan2Code is not answering right now.";
+  if (page.gone) return NOT_CONNECTED;
   if (page.pendingResult) return "Plan2Code is still picking up your last choice.";
-  if (page.local && page.local.launching) return "A workflow is starting.";
+  if (page.local && page.local.launching) return "A skill is starting.";
   if (loopDriving()) return "The Implementation Loop is running.";
   return "";
 }
@@ -77,7 +78,7 @@ function pauseSwitch(paused) {
   b.setAttribute("role", "switch");
   b.setAttribute("aria-checked", paused ? "true" : "false");
   b.disabled = pausing || Boolean(page.gone);
-  if (page.gone) b.title = "The console is not reachable right now.";
+  if (page.gone) b.title = NOT_CONNECTED;
   const track = el("span", "learn-track");
   track.setAttribute("aria-hidden", "true");
   b.append(track, document.createTextNode("Pause for me"));
@@ -107,7 +108,7 @@ function closeMore(focusButton) {
 
 function moreMenu() {
   const wrap = document.createDocumentFragment();
-  const btn = el("button", "learn-link learn-more-btn", "More ▴");
+  const btn = el("button", "learn-link learn-more-btn", "More");
   btn.type = "button";
   btn.setAttribute("aria-haspopup", "menu");
   btn.setAttribute("aria-expanded", moreOpen ? "true" : "false");
@@ -318,14 +319,15 @@ export function renderLessonsDialog(on) {
   dlg.setAttribute("aria-busy", saving ? "true" : "false");
   const card = hooks.renderCard(item);
   if (saving) card.inert = true;
-  const x = el("button", "modal-x", "×");
+  const x = el("button", "modal-x");
+  x.appendChild(icon("close"));
   x.type = "button";
   x.setAttribute("aria-label", "Close without saving");
   x.disabled = saving;
   x.addEventListener("click", () => requestClose(item));
   const actions = el("div", "modal-actions");
   if (askingClose && !saving) {
-    const ask = el("div", "lessons-unsaved");
+    const ask = el("div", "callout is-warn lessons-unsaved");
     ask.setAttribute("role", "alert");
     ask.appendChild(el("p", "lessons-unsaved-text", "You have choices that are not saved."));
     const row = el("div", "modal-actions");
@@ -391,7 +393,7 @@ function suggestionsBox(item) {
   const waiting = item.sentNote && item.sentNote.suggest === true && !thread.slice(asked + 1).some((m) => threadWho(m) === "agent");
   const reply = asked >= 0 ? thread.slice(asked + 1).filter((m) => threadWho(m) === "agent").pop() : null;
   if (!waiting && !reply) return null;
-  const box = el("div", "lessons-suggestions");
+  const box = el("div", "callout is-info lessons-suggestions");
   box.id = "lessons-suggestions";
   box.setAttribute("role", "status");
   box.appendChild(el("h3", null, "Suggestions"));
@@ -494,7 +496,7 @@ async function openLessons() {
 
 /**
  * The Learning row for `position` ("top" or "bottom"), or null: the top place
- * takes Not set up, Off and Paused, the bottom place takes On, and no row is
+ * takes Off and Paused, the bottom place takes On and Not set up, and no row is
  * drawn when the scan carries no `learning` (an unknown settings format).
  */
 export function renderLearningRow(scan, position) {
@@ -511,7 +513,7 @@ export function renderLearningRow(scan, position) {
   const line = el("div", "learn-line");
   line.appendChild(el("span", "learn-label", "Learning"));
   const pill = PILLS[state];
-  line.appendChild(el("span", "learn-pill" + pill.cls, pill.text));
+  line.appendChild(el("span", "pill is-caps learn-pill" + pill.cls, pill.text));
   const controls = el("span", "learn-controls");
   const busy = busySwitch(state);
   if (busy) {
@@ -524,10 +526,10 @@ export function renderLearningRow(scan, position) {
     controls.appendChild(working);
   } else if (state === "not-set-up") {
     line.appendChild(el("span", "learn-say", "Plan2Code can keep lessons about this codebase, approved by you."));
-    controls.appendChild(agentButton("Switch on", "btn small primary", "switch-on"));
+    controls.appendChild(agentButton("Switch on", "btn sm", "switch-on"));
   } else if (state === "off") {
     line.appendChild(el("span", "learn-say", "Off for this project."));
-    controls.appendChild(agentButton("Switch on", "btn small", "switch-on"));
+    controls.appendChild(agentButton("Switch on", "btn sm", "switch-on"));
   } else if (state === "paused") {
     const since = shortDate(learning.pausedSince);
     line.appendChild(

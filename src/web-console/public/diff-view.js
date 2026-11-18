@@ -41,6 +41,7 @@ function renameLabel(f) {
 }
 
 const STATUS_WORD = { added: "Added", deleted: "Deleted", renamed: "Renamed" };
+const STATUS_TONE = { added: "is-ok", deleted: "is-warn", renamed: "is-accent" };
 
 function counts(f) {
   const box = el("span", "diff-counts");
@@ -71,8 +72,8 @@ async function askAgain(button, status, reply) {
     });
     if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
     if (!res.ok) throw new Error(String(res.status));
-    hooks.banner("Asked for the changes again. The tab updates when they are read.", "good");
-    setTimeout(() => hooks.banner(null), 5000);
+    const again = hooks.banner("Asked for the changes again. The tab updates when they are read.", "good");
+    setTimeout(() => hooks.clearBanner(again), 5000);
     page.pendingResult = true;
     redraw();
   } catch (err) {
@@ -89,7 +90,7 @@ function stateBox(kind, message, buttonLabel, reply) {
   const box = el("div", "diff-state diff-" + kind);
   box.appendChild(el("p", "diff-state-msg", message));
   if (buttonLabel) {
-    const btn = el("button", "btn small diff-again", buttonLabel);
+    const btn = el("button", "btn sm diff-again", buttonLabel);
     btn.type = "button";
     const status = el("p", "diff-state-why");
     status.setAttribute("role", "status");
@@ -167,7 +168,7 @@ function drawReady(b, result) {
   totals.appendChild(el("span", "diff-minus", `-${removed}`));
   view.appendChild(totals);
   if (result.tooLarge) {
-    view.appendChild(el("p", "diff-notice", "This change is too large to show in full: every file is listed, but some show no lines."));
+    view.appendChild(el("p", "callout is-stage diff-notice", "This change is too large to show in full: every file is listed, but some show no lines."));
   }
 
   const cols = el("div", "diff-cols");
@@ -182,7 +183,7 @@ function drawReady(b, result) {
     row.setAttribute("role", "option");
     const name = el("span", "diff-file-name");
     name.appendChild(el("strong", null, f.status === "renamed" ? renameLabel(f) : baseName(f.path)));
-    if (STATUS_WORD[f.status]) name.appendChild(el("span", "diff-status diff-status-" + f.status, STATUS_WORD[f.status]));
+    if (STATUS_WORD[f.status]) name.appendChild(el("span", "code-tag " + STATUS_TONE[f.status] + " diff-status diff-status-" + f.status, STATUS_WORD[f.status]));
     row.appendChild(name);
     const folder = folderOf(f.path);
     if (folder) row.appendChild(el("span", "diff-file-dir", folder));

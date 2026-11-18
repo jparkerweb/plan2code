@@ -315,7 +315,7 @@ test("framed, a finished screen with a button still to press is the person's mov
   const paused = await openSession(browser, { t, workflow: "implement", payload: WORKING, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
   await until(async () => (await last(paused)) === "busy", 5000);
   paused.post({ finish: { headline: "Paused at Phase 2", command: "/plan2code-3-implement specs/audit-export/overview.md" } });
-  await until(async () => (await paused.page.locator("#agent-text").textContent()).startsWith("Paused"), 5000);
+  await until(async () => (await paused.page.locator("#agent-text").textContent()).startsWith("Stopped"), 5000);
   assert.equal(await last(paused), "plain", "a paused finish has nothing left to press");
 });
 

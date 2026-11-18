@@ -7,6 +7,8 @@
 // import this file. The limits mirror notepads.mjs (a test keeps them equal),
 // copied rather than imported because the page cannot load server modules.
 
+import { NOT_CONNECTED_KEPT, notConnected } from "./labels.js";
+
 export const SAVE_DEBOUNCE_MS = 800;
 export const RETRY_STEPS_MS = Object.freeze([1000, 2000, 4000, 8000, 16000, 30000]);
 export const NOTE_MAX_BYTES = 1024 * 1024;
@@ -134,23 +136,23 @@ const ERROR_SENTENCES = Object.freeze({
   "too-long": `This note is too long to save. Notes can be up to ${sizeWords(NOTE_MAX_BYTES)}.`,
   "not-jpeg": "That picture could not be added. Try a PNG, JPEG or a screenshot.",
   "too-large": "That picture is too large to add. Try a smaller one.",
-  "too-many": `This notepad already holds ${NOTEPAD_MAX_IMAGES} pictures, the most it can keep. Delete one to add another.`,
-  "not-found": "That picture is no longer in this notepad.",
+  "too-many": `This Notebook already holds ${NOTEPAD_MAX_IMAGES} pictures, the most it can keep. Delete one to add another.`,
+  "not-found": "That picture is no longer in this Notebook.",
   "bad-name": `A tab name needs 1 to ${TAB_NAME_MAX} characters, with no control characters.`,
   "bad-sent": "Plan2Code could not record where that tab was sent, so nothing was changed.",
   "duplicate-name": "There is already a tab with that name.",
-  "too-many-tabs": `This notepad already has ${NOTEPAD_MAX_TABS} tabs, the most it can have. Delete one to add another.`,
-  "no-such-tab": "That tab is no longer in this notepad.",
+  "too-many-tabs": `This Notebook already has ${NOTEPAD_MAX_TABS} tabs, the most it can have. Delete one to add another.`,
+  "no-such-tab": "That tab is no longer in this Notebook.",
 });
 
-const LOST_CONTACT = "Lost contact with Plan2Code. Your text is kept here and will be saved once it's back.";
+const LOST_CONTACT = notConnected(NOT_CONNECTED_KEPT);
 
 // The status line when the note could not be read on first open: the editor
 // stays read-only, since anything typed would be saved over the real note.
-export const NOT_LOADED = "Could not read the note. Close the notepad and open it again.";
+export const NOT_LOADED = "Could not read the note. Close the Notebook and open it again.";
 
 // The status line when the editor itself could not be loaded.
-export const EDITOR_NOT_LOADED = "The editor could not be loaded. Close the notepad and open it again.";
+export const EDITOR_NOT_LOADED = "The editor could not be loaded. Close the Notebook and open it again.";
 
 // One plain sentence for a server refusal; anything else (status 0, an
 // unknown code) is treated as a lost connection.

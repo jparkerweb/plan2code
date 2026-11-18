@@ -391,6 +391,22 @@ test("a note that cannot be read leaves the editor read-only, and nothing typed 
   assert.equal(await shows(s, "The real note"), "The real note");
 });
 
+test("a Notebook that cannot be read offers Try again, which reads it again and clears the line", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  saveNote(s.project, "The real note");
+  await s.page.route("**/notepad", (route) => (route.request().method() === "GET" ? route.abort() : route.continue()));
+  await s.page.click("#btn-notepad");
+  await s.page.locator("#notepad-modal[open]").waitFor();
+  const retry = s.page.locator("#notepad-retry");
+  await retry.waitFor();
+  assert.equal(await retry.innerText(), "Try again");
+  await s.page.unroute("**/notepad");
+  await retry.click();
+  await retry.waitFor({ state: "hidden" });
+  assert.equal(await shows(s, "The real note"), "The real note");
+  assert.equal(await s.page.locator("#notepad-status").innerText(), "", "the read-failure line is gone");
+});
+
 test("a note too long to save keeps its text when the notepad is closed and opened again", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   saveNote(s.project, "Saved earlier");
@@ -914,7 +930,7 @@ const sendPicture = (s, kind, color) =>
     { kind, fill: color },
   );
 
-test("Add image, paste and drop each add a thumbnail whose files are on disk and which survives closing", async (t) => {
+test("Add picture, paste and drop each add a thumbnail whose files are on disk and which survives closing", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
   assert.equal(await thumbs(s).count(), 0);
@@ -931,9 +947,9 @@ test("Add image, paste and drop each add a thumbnail whose files are on disk and
   assert.equal(await docText(s), "", "no picture landed in the text");
 
   const alts = await s.page.locator("#notepad-strip img").evaluateAll((imgs) => imgs.map((i) => i.alt));
-  assert.deepEqual(alts, ["Notebook image 1", "Notebook image 2", "Notebook image 3"]);
+  assert.deepEqual(alts, ["Notebook picture 1", "Notebook picture 2", "Notebook picture 3"]);
   const xs = await s.page.locator("#notepad-strip .notepad-thumb-delete").evaluateAll((b) => b.map((x) => x.getAttribute("aria-label")));
-  assert.deepEqual(xs, ["Delete image 1", "Delete image 2", "Delete image 3"]);
+  assert.deepEqual(xs, ["Delete picture 1", "Delete picture 2", "Delete picture 3"]);
 
   // Closed and opened again, the strip is drawn from the stored pictures,
   // oldest first, each from its stored thumbnail.
@@ -972,7 +988,7 @@ test("the X asks first: Keep keeps the picture, Delete removes both its files", 
 
   await s.page.click("#notepad-strip li:nth-child(1) .notepad-thumb-delete");
   await s.page.locator(".notepad-ask").waitFor();
-  assert.match(await s.page.locator(".notepad-ask").innerText(), /Delete this image\?/);
+  assert.match(await s.page.locator(".notepad-ask").innerText(), /Delete this picture?\?/);
   assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Keep", "Keep has the focus");
   assert.deepEqual(filesOf(s, first), [true, true], "one click deleted nothing");
   // Enter on the focused button keeps it.
@@ -986,7 +1002,7 @@ test("the X asks first: Keep keeps the picture, Delete removes both its files", 
   await until(() => !filesOf(s, first).some(Boolean), 4000);
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li").length === 1);
   assert.deepEqual(stored(s).map((img) => img.id), [second]);
-  assert.equal(await s.page.locator("#notepad-strip img").getAttribute("alt"), "Notebook image 1");
+  assert.equal(await s.page.locator("#notepad-strip img").getAttribute("alt"), "Notebook picture 1");
 });
 
 test("the preview opens at the clicked picture, steps and wraps, and Esc closes it before the Notebook", async (t) => {
@@ -1103,7 +1119,7 @@ test("a delete that fails keeps the thumbnail and says why", async (t) => {
   await s.page.waitForFunction(() => !document.querySelector(".notepad-ask"));
   assert.equal(await thumbs(s).count(), 1);
   assert.deepEqual(filesOf(s, id), [true, true]);
-  assert.equal(await s.page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Delete image 1", "the focus is back on the X");
+  assert.equal(await s.page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Delete picture 1", "the focus is back on the X");
 });
 
 /* ------------------------------------------------- Cleanup, phone, Help */
@@ -1141,6 +1157,9 @@ test("User Preferences, Cleanup offers a month-old notepad by its folder and rem
   assert.ok((await list.locator(".cleanup-summary").innerText()).includes("1 old notebook"), "the summary counts it as a notepad");
   assert.equal(await list.locator(".cleanup-row").filter({ hasText: "notepads/" }).count(), 0, "the notepads folder is no stray");
   assert.equal(fs.existsSync(notepadFolder(s.project)), true, "a scan only looks");
+  // A Notebook is your own writing, so it starts unticked: deleting it is a choice.
+  assert.equal(await row.locator("input[type=checkbox]").isChecked(), false, "a Notebook starts unticked");
+  await row.locator("input[type=checkbox]").check();
 
   await s.page.click("#cleanup-delete");
   await s.page.waitForFunction(() => /^Deleted /.test(document.getElementById("cleanup-status").textContent));
@@ -1163,6 +1182,7 @@ test("the notepad works at phone width: full screen, nothing wider than the wind
   await openNotepad(s);
   await addViaButton(s, "#c33");
   await noSideScroll("the notepad");
+  await s.page.waitForFunction(() => document.getElementById("notepad-modal").getAnimations().length === 0);
   const modal = await box("#notepad-modal");
   assert.deepEqual([modal.x, modal.y, modal.width, modal.height], [0, 0, 390, 844], "the notepad fills the screen");
   const inner = await s.page.$eval("#notepad-modal", (m) => ({ sw: m.scrollWidth, cw: m.clientWidth }));
@@ -1171,9 +1191,10 @@ test("the notepad works at phone width: full screen, nothing wider than the wind
   const x = await box(".notepad-thumb-delete");
   assert.ok(x.width >= 30 && x.height >= 30, "the X is big enough to tap");
   const strip = await box("#notepad-strip");
-  assert.ok(strip.width > 300, "the pictures get the full width under Add image");
+  assert.ok(strip.width > 300, "the pictures get the full width under Add picture");
 
   await s.page.click(".attach-open");
+  await s.page.waitForFunction(() => document.getElementById("picview").getAnimations().length === 0);
   await s.page.locator("#picview[open]").waitFor();
   await noSideScroll("the preview");
   const img = await box("#picview-img");

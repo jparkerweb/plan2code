@@ -3,31 +3,31 @@
   "claude": [
     {
       "id": "default",
-      "label": "Default (your account setting)"
+      "label": "your account setting"
     },
     {
       "id": "sonnet",
-      "label": "Sonnet — latest Sonnet"
+      "label": "latest Sonnet"
     },
     {
       "id": "opus",
-      "label": "Opus — latest Opus"
+      "label": "latest Opus"
     },
     {
       "id": "haiku",
-      "label": "Haiku — latest Haiku"
+      "label": "latest Haiku"
     },
     {
       "id": "opusplan",
-      "label": "Opus Plan — Opus in plan mode, Sonnet otherwise"
+      "label": "Opus in plan mode, Sonnet otherwise"
     },
     {
       "id": "fable",
-      "label": "Fable, latest Fable"
+      "label": "latest Fable"
     },
     {
       "id": "best",
-      "label": "Best, same model as Opus"
+      "label": "same model as Opus"
     }
   ],
   "devin": [

@@ -4,7 +4,7 @@ import { looksReady, looks, saveLooks } from "../looks.js";
 import { page } from "../state.js";
 import { isDashboard, finish, agentAdrift } from "../selectors.js";
 import { releasesLink, el, copyButton, lightDismiss } from "../render.js";
-import { HELP_TABS, helpTabFor } from "../help.js";
+import { HELP_TABS, helpGroupStart, helpTabFor } from "../help.js";
 import { wireTabs } from "../tabs.js";
 import { CATALOG_GROUPS, SKILL_CATALOG } from "../answers.js";
 
@@ -20,15 +20,14 @@ export function maybeWelcome() {
   openWelcome();
 }
 
-// The same "finish the step and start fresh" tip the meter popover and the
-// dashboard's own red banner give, worded for the app's New Session button there.
-function renderWelcomeRefreshHelp() {
+// Under the app the agent runs in the window's terminal panel, not a terminal.
+function renderWelcomeTerminalHelp() {
   if (!page.inApp) return;
-  $("welcome-refresh-text").textContent = "Once the session meter passes half, finish the step and press New Session at the top of the window.";
+  $("welcome-terminal-text").textContent = "If the page goes quiet, your agent may be asking permission in the terminal panel.";
 }
 
 export function openWelcome() {
-  renderWelcomeRefreshHelp();
+  renderWelcomeTerminalHelp();
   if ($("help-modal").open) $("help-modal").close();
   const slot = $("welcome-bot");
   if (!slot.firstElementChild) {
@@ -67,21 +66,23 @@ function renderAbout() {
   }
 }
 
-// Under the app, a new release still needs a terminal (the app cannot replace
-// itself), but not the terminal panel, and the restart is the app's, not a
-// new /plan2code; a skills/app mismatch is the bar's one-click Update
-// skills (see docs/desktop-app.md). Patched once, the first time Help opens,
-// since page.inApp never changes for the session's life.
+// Under the app, a new release is the bar's one click, Update and restart;
+// the command stays as the fallback, run outside the terminal panel, and the
+// restart is the app's, not a new /plan2code; a skills/app mismatch is the
+// bar's one-click Update skills (see docs/desktop-app.md). Patched once, the
+// first time Help opens, since page.inApp never changes for the session's life.
 function renderUpdateHelp() {
   if (!page.inApp) return;
   $("help-update-text").replaceChildren(
     "When a newer Plan2Code release is out, the dashboard shows ",
-    el("strong", null, "UPDATE AVAILABLE"),
+    el("strong", null, "Update available"),
     " at the top and the app's top bar shows ",
     el("strong", null, "Update available"),
-    ". Both give you the same command, ",
+    " with ",
+    el("strong", null, "Update and restart"),
+    ", which installs the new release and reopens the app on the same project. If that fails, run ",
     el("code", null, "plan2code update"),
-    ": run it in a terminal outside the app (not its terminal panel), then close the app and open it again. The app cannot replace itself while it runs, so a new release has no one-click update. When the app and the installed skills fall out of step, the bar offers ",
+    " in a terminal outside the app (not its terminal panel), then close the app and open it again. When the app and the installed skills fall out of step, the bar offers ",
     el("strong", null, "Update skills"),
     " instead, which brings them level in one click."
   );
@@ -108,7 +109,7 @@ function renderFinishingHelp() {
 function renderFinishingDashboardHelp() {
   if (!page.inApp) return;
   $("help-finishing-dashboard-text").replaceChildren(
-    "A finished screen (never a paused one) has a ",
+    "A finished screen (never a stopped one) has a ",
     el("strong", null, "Back to the dashboard"),
     " button. It turns this page back into the cards, in the same conversation, so the next step starts right here. Plan2Code listens for it for as long as the session is open. Once the session has closed, the app's own bar notices and offers to reconnect it, no command needed."
   );
@@ -277,7 +278,7 @@ function buildHelp() {
   }
   for (const row of panels.querySelectorAll("[data-copy]")) {
     const code = row.querySelector("code");
-    row.appendChild(copyButton(code.textContent, "btn small handoff-copy", code));
+    row.appendChild(copyButton(code.textContent, "btn sm handoff-copy", code));
   }
   helpTabs = wireTabs({
     tabs: HELP_TABS,
@@ -285,6 +286,8 @@ function buildHelp() {
     panels,
     prefix: "help",
     tabClass: "help-tab",
+    groupStart: helpGroupStart,
+    groupClass: "help-tab-group",
     renderTab: (t, btn) => {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("class", "help-tab-icon");
@@ -298,6 +301,29 @@ function buildHelp() {
     onSelect: () => {
       $("help-panels").scrollTop = 0;
     },
+  });
+  // The filter box: a topic stays when every word typed is in its label or its
+  // panel's text (the panels are all in the page once Help is built).
+  const filterBox = $("help-filter");
+  filterBox.addEventListener("input", () => {
+    const words = filterBox.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = helpTabs.filter(
+      words.length
+        ? (t) => {
+            const text = (t.label + " " + (panels.querySelector(`[data-tab="${t.id}"]`)?.textContent || "")).toLowerCase();
+            return words.every((w) => text.includes(w));
+          }
+        : null
+    );
+    $("help-filter-empty").hidden = shown > 0;
+  });
+  // From the filter box, the down arrow steps into the topics that are left.
+  filterBox.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowDown") return;
+    const first = helpTabs.shown()[0];
+    if (!first) return;
+    e.preventDefault();
+    $("help-tab-" + first.id).focus();
   });
   helpBuilt = true;
 }
@@ -319,6 +345,13 @@ export function openHelp() {
     renderFinishingStopHelp();
     renderPlannyDoneHelp();
     renderHandoffCopyHelp();
+  }
+  // A filter left typed in a closed Help would hide the topic it opens on.
+  const filterBox = $("help-filter");
+  if (filterBox.value) {
+    filterBox.value = "";
+    helpTabs.filter(null);
+    $("help-filter-empty").hidden = true;
   }
   const id = helpTabFor({
     view: page.view,

@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { gitInit } from "./skill-script-helpers.mjs";
-import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf , fillBox, boxValue, settled } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, sendAndCollect, drawn, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf , fillBox, boxValue, settled } from "./page-test-helpers.mjs";
 
 const suite = pageSuite(test);
 
@@ -991,4 +991,115 @@ test("a long pick list draws group headings, opens a row, holds a locked row and
 
   const got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "deps").ks.sort(), ["C1", "S1"], "the locked row never reaches the agent");
+});
+
+// A multi card that starts with ticks (`ticked`) and notes its rows with a pill (`tag`).
+const carry = (extra = {}) => ({
+  id: "carry",
+  kind: "multi",
+  title: "Carry over",
+  body: "What to keep from your app.",
+  options: [
+    { k: "A", text: "Colors", ticked: true, tag: "Keep", detail: "You did not ask to change them." },
+    { k: "B", text: "Layout", tag: "Free up", detail: "You asked to rethink the table." },
+    { k: "C", text: "Fonts", ticked: true, tag: "Keep" },
+  ],
+  ...extra,
+});
+
+test("a multi's ticked rows open ticked and ready to send, its tags draw as pills the checkbox names, and sending untouched sends the ticks", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, carry());
+
+  assert.equal(await card.getByLabel("A: Colors").isChecked(), true);
+  assert.equal(await card.getByLabel("B: Layout").isChecked(), false);
+  assert.equal(await card.getByLabel("C: Fonts").isChecked(), true);
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), false, "ready to send without a click");
+
+  // The pill is text on the row and part of the checkbox's accessible name (the key prefix stays).
+  assert.deepEqual(await card.locator(".pill.tag").allTextContents(), ["Keep", "Free up", "Keep"]);
+  assert.equal(await card.getByLabel("A: Colors, Keep").count(), 1);
+  assert.equal(await card.getByLabel("B: Layout, Free up").count(), 1);
+  // The pill is the agent's note: ticking a row does not move it.
+  await card.getByLabel("B: Layout").check();
+  assert.deepEqual(await card.locator(".pill.tag").allTextContents(), ["Keep", "Free up", "Keep"]);
+  await card.getByLabel("B: Layout").uncheck();
+
+  const got = await sendAndCollect(s);
+  assert.deepEqual(answerTo(got, "carry"), { ks: ["A", "C"] });
+  assert.equal(got.reply, "Carry over: A, C");
+});
+
+test("unticking every starting tick is an answer that reads none, and a cleared card is never re-ticked by a redraw or a reload", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, carry());
+
+  await card.getByLabel("A: Colors").uncheck();
+  await card.getByLabel("C: Fonts").uncheck();
+  await card.getByLabel("C: Fonts").waitFor();
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), false, "an empty pick on a card with starting ticks is still sendable");
+
+  // An agent post redraws the page: the card stays cleared.
+  s.post({ title: "Carry over", agent: { status: "waiting" } });
+  await settled(s.page, "#main");
+  assert.equal(await card.getByLabel("A: Colors").isChecked(), false);
+  assert.equal(await card.getByLabel("C: Fonts").isChecked(), false);
+
+  // So does a reload.
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  const again = itemCard(s.page, "carry");
+  await again.waitFor();
+  await settled(s.page, "#main");
+  assert.equal(await again.getByLabel("A: Colors").isChecked(), false, "a reload never re-ticks a cleared card");
+  assert.equal(await again.getByLabel("C: Fonts").isChecked(), false);
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), false);
+
+  const got = await sendAndCollect(s);
+  assert.deepEqual(answerTo(got, "carry"), { ks: [] });
+  assert.match(got.reply, /none$/);
+});
+
+test("clearing the note on a card with starting ticks keeps its empty pick, so the card stays sendable", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, carry());
+  await card.getByLabel("A: Colors").uncheck();
+  await card.getByLabel("C: Fonts").uncheck();
+  const box = card.locator(".md-host");
+  await fillBox(box, "only the logo");
+  await fillBox(box, "");
+  await settled(s.page, "#main");
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), false, "the empty pick is still an answer");
+  const got = await sendAndCollect(s);
+  assert.deepEqual(answerTo(got, "carry"), { ks: [] });
+});
+
+test("a card with starting ticks cleared and sent with a note still says none, then the note", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, carry());
+  await card.getByLabel("A: Colors").uncheck();
+  await card.getByLabel("C: Fonts").uncheck();
+  await fillBox(card.locator(".md-host"), "keep the logo");
+  await settled(s.page, "#main");
+  const got = await sendAndCollect(s);
+  assert.deepEqual(answerTo(got, "carry"), { ks: [], text: "keep the logo" });
+  assert.equal(got.reply, "Carry over: none; keep the logo", "the agent hears the cleared pick, not the note alone");
+});
+
+test("a multi with no ticked row still opens empty, and unticking its last box stages nothing", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, {
+    id: "plain",
+    kind: "multi",
+    title: "Columns",
+    body: "Which?",
+    options: [opt("1", "Date"), opt("2", "User")],
+  });
+  assert.equal(await card.getByLabel("Date").isChecked(), false);
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), true, "nothing ticked, nothing to send");
+  await card.getByLabel("Date").check();
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), false);
+  await card.getByLabel("Date").uncheck();
+  await settled(s.page, "#main");
+  assert.equal(await s.page.locator("#btn-send").isDisabled(), true, "unticking the last box is no answer, as before");
 });

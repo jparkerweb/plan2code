@@ -2,8 +2,7 @@
 
 /* ---------------------------------------------------------------- print */
 
-/* What gets printed is the document being read, on its own. Everything that
-   steers the session is furniture and has no business on paper. */
+/* Print only the document; session furniture stays off paper. */
 @media print {
   .topbar, .rail, .aside, .footer, .banner, .skip, .doc-tools, .pager, .modal, .arrival, .review-offer { display: none !important; }
   html, body { height: auto; background: #fff; color: #000; }
@@ -11,7 +10,7 @@
   .layout { display: block; overflow: visible; }
   .main { overflow: visible; padding: 0; max-width: none; }
   .main > * { max-width: none; }
-  /* The diagnosis prints whole, not cut at the box's on-screen height. */
+  /* Diagnosis prints whole. */
   .handoff-report-body { max-height: none; overflow: visible; }
   .block, .card { break-inside: avoid; box-shadow: none; }
   .doc-head { border-bottom: 1px solid #ccc; }
@@ -22,22 +21,32 @@
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 1080px) {
-  .layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .layout,
+  .layout:has(> .aside:empty),
+  .layout:has(.git-board) { grid-template-columns: 210px minmax(0, 1fr); }
   .aside { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--rule); }
 }
 
-@media (max-width: 720px) {
+/* V20, from a live look at 700 to 1000px: from 900px down the rail beside the
+   question and the notes pane under it left the card a few lines tall, so the
+   rail becomes a strip above the page (Planny beside the list) and the notes
+   follow the card, as on a phone. */
+@media (max-width: 900px) {
   body { display: block; }
-  .layout { display: block; }
+  .layout, .layout:has(> .aside:empty), .layout:has(.git-board) { display: block; }
   .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
   .sidebar, .aside { border: 0; border-bottom: 1px solid var(--rule); max-height: 30vh; }
   .main { padding: 18px 16px 30px; }
-  .card { --card-pad-b: 18px; padding: 18px 16px var(--card-pad-b); border-radius: 8px; }
+  .dock { flex-direction: row; text-align: left; gap: 12px; padding: 12px 16px; }
+  .planny { width: 32px; height: 44px; }
+}
+
+@media (max-width: 720px) {
+  .card { --card-pad-b: 18px; padding: 18px 16px var(--card-pad-b); border-radius: var(--radius-md); }
   .main > .card { padding-right: 22px; }
-  .card h2 { font-size: 21px; }
-  /* Back to a wrapping row: the summary and Send take two lines here and fill
-     the bar's middle, so the where slot has no room and goes. */
-  .footer { display: flex; flex-wrap: wrap; position: sticky; bottom: 0; z-index: 20; box-shadow: 0 -4px 14px rgba(0,0,0,0.07); }
+  .card h2 { font-size: var(--fs-h2); }
+  /* Wrapping row: summary and Send fill the bar, so the where slot goes. */
+  .footer { display: flex; flex-wrap: wrap; position: sticky; bottom: 0; z-index: var(--z-sticky); box-shadow: var(--shadow-up); }
   .footer-summary { flex: 1; }
   .footer-actions { white-space: normal; }
   .footer-where { display: none; }
@@ -47,17 +56,15 @@
   .topbar { padding: 12px 16px 0; }
   .topbar-row.second { gap: 9px; }
   .views-arrow { display: none; }
-  /* Side by side, because vertical space is the scarce thing here. */
+  .topbar-label { display: none; }
+  /* Side by side: vertical space is scarce. */
   .dock { flex-direction: row; text-align: left; gap: 12px; padding: 12px 16px; }
   .planny { width: 32px; height: 44px; }
-  /* Three items on one line is one too many at this width, and the count is
-     the one that is only nice to have. */
+  /* Three items per line is too many; the count is the optional one. */
   .pager { gap: 8px; }
   .pager-count { display: none; }
-  /* The Notebook takes the whole screen, and every control in it is a
-     fingertip wide. The pictures go under Add image rather than beside it, so
-     the strip gets the full width, and the preview's side columns narrow to
-     give the picture their room. */
+  /* The Notebook is full screen with fingertip-sized controls. Pictures go
+     under Add image for full strip width; the preview's side columns narrow. */
   .btn.notepad-btn { min-width: 44px; }
   .modal.notepad { width: 100%; height: 100%; margin: 0; padding: 18px 16px 16px; border: 0; border-radius: 0; }
   .modal.notepad .notepad-add,
@@ -71,73 +78,95 @@
   .notepad-tab-x { min-height: 44px; }
   .notepad-tab-x { width: 32px; }
   .notepad-add { align-self: flex-start; }
-  .notepad-thumb .notepad-thumb-delete { width: 30px; height: 30px; font-size: 18px; }
+  .notepad-thumb .notepad-thumb-delete { width: 30px; height: 30px; font-size: var(--fs-h3); }
   .modal.picview[open] { grid-template-columns: 52px minmax(0, 1fr) 52px; }
 }
 
+/* A finger, not a pointer: buttons are at least 40px tall and the small close
+   buttons 32px. Nothing here is drawn for a mouse. */
+@media (pointer: coarse) {
+  .btn, .btn.sm, .btn.tiny { min-height: 40px; }
+  .attach-remove, .notepad-tab-x, .modal-x { min-width: 32px; min-height: 32px; }
+}
+
+/* No hover to reveal them, so the controls that wait for one are always shown. */
+@media (hover: none) {
+  .md-copy, .spec-chip-del { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  /* Re-enable the indicators whose whole job is to show that time is passing.
-     Frozen, the spinner reads as a broken ring and Planny's star as a dead
-     light, so the star keeps turning, slowly. His lean, blink, arms and feet
-     are decoration and stay off. */
+  /* Pseudo-elements too, and no delay (a delayed entrance would sit blank). */
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  /* Keep the progress indicators: frozen, the spinner looks broken and
+     Planny's star dead, so the star turns slowly. Lean, blink, arms and feet
+     stay off. */
   .spinner { animation: spin 1.6s linear infinite !important; }
   .planny.is-work .eye { animation: planny-spin 4s linear infinite !important; }
-  /* The flight holds still rather than collapsing. Collapsed to its last
-     frame every star would sit off the left edge and the sky would be empty;
-     stopped, the field stays and Planny keeps his forward lean. */
+  /* The flight holds still: collapsed to its last frame every star would sit
+     off the left edge and the sky would be empty. */
   .sky .star, .trail i, .dock.is-flying .planny { animation: none !important; }
-  /* The step poses hold their finished drawing -- every tick and line
-     written, confetti where it was drawn -- and keep only the star's pulse. */
+  /* Step poses hold their finished drawing; only the star pulses. */
   .pose, .pose * { animation: none !important; }
   .pose .ey.blink { animation: pose-pulse 2.4s ease-in-out infinite !important; }
-  /* Help's Planny moods are pictures, not indicators: all of them hold
-     still, the working star included. */
+  /* Help's Planny moods are pictures: all hold still. */
   .help-mood-bot, .help-mood-bot *, .help-mood-bot.is-work .eye { animation: none !important; }
   #btn-send { animation: none; }
   .nudge { animation: none; }
 }
 
-/* User Preferences: action rows (Cleanup's scan/delete buttons share this
-   class; the model menu's own rules moved to agents.css). */
+/* Preferences action rows (Cleanup's buttons share this class). */
 .models-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.models-actions .help.error { color: var(--danger, #d64545); }
+.models-actions .help.error { color: var(--warn); }
 
-/* User Preferences: Cleanup's list of what would go, shown before anything
-   is deleted. */
+/* Cleanup's list of what would go. */
 .cleanup-list { display: grid; gap: 4px; max-height: 200px; overflow: auto; font-size: 0.88em; }
 .cleanup-list:empty { display: none; }
 .cleanup-summary { margin: 0 0 2px; font-weight: 600; }
-.cleanup-row { display: flex; justify-content: space-between; gap: 12px; }
-.cleanup-row span:first-child { min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); }
-.cleanup-size { flex: none; color: var(--ink-3); }
+.cleanup-row { display: flex; align-items: baseline; gap: 10px; }
+label.cleanup-row { cursor: pointer; }
+.cleanup-row input { flex: none; margin: 0; align-self: center; }
+.cleanup-row > span:not(.cleanup-size) { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); }
+.cleanup-kept-note summary { cursor: pointer; color: var(--ink-2); font-size: var(--fs-sm); }
+.cleanup-size { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .cleanup-more { display: grid; gap: 4px; }
 .cleanup-more summary { cursor: pointer; color: var(--ink-2); }
 #cleanup-delete[hidden] { display: none; }
 
-/* A word the person has to type, bold and in their highlight color so it
-   does not get lost in the status sentence. */
+/* A word to type, bold and accented so it stands out in the sentence. */
 .agent-key {
   color: var(--accent);
   font-weight: 700;
 }
-/* Under the app, the word is a button that types it into the agent's terminal;
-   "terminal" itself, while the app's panel is collapsed, expands it. */
+/* In the app the word is a button typing it into the terminal; "terminal"
+   expands a collapsed panel. */
 .agent-key-btn, .agent-terminal-btn {
   font: inherit; font-weight: 700; color: var(--accent);
-  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 6px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius-sm);
   padding: 0 6px; cursor: pointer;
 }
 .agent-key-btn:hover:not(:disabled), .agent-terminal-btn:hover { border-color: var(--accent); }
 .agent-key-btn:disabled { opacity: 0.55; cursor: default; }
 .agent-key-btn:focus-visible, .agent-terminal-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-/* "What to check", beside the quiet and Not running lines. A link in a button's clothes. */
+/* "What to check": a link styled as a button. */
 .status-help {
   font: inherit; font-size: 0.92em; font-weight: 600;
   color: var(--accent); background: none; border: 0; padding: 0 2px;
   text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
 }
 .status-help:hover { text-decoration-thickness: 2px; }
-.status-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.status-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-xs); }
 
+
+/* V25: Windows High Contrast. Looked at first (forced colors, emulated in
+   Chromium): the progress bar vanished (its fill and track are backgrounds),
+   and the selected tab and the current rail item looked like the others
+   (their selected look is a background). Those get a system-color outline;
+   the filled marks keep their own colors, the switch thumbs take the text
+   color so they stay visible. */
+@media (forced-colors: active) {
+  .swatch, .progress-fill, .meter-ring { forced-color-adjust: none; }
+  .progress-track { outline: 1px solid CanvasText; }
+  [aria-selected="true"], [aria-current="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .learn-track::after, .learn-switch.is-on .learn-track::after { background: ButtonText; }
+}

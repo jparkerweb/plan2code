@@ -14,7 +14,8 @@
 // The shots use the console's Ocean highlight rather than its default orange:
 // it is the console's nearest to the Plan2Code blue the site and README use.
 //
-// Shots: dashboard, dashboard-plan, dashboard-utilities, question, doc, build, signoff, finish, ask, git.
+// Shots: dashboard, dashboard-plan, dashboard-utilities, question, doc, build, signoff, signoff-changes, finish, ask, git,
+// notebook, learning, lessons, deps, activities and prototypes.
 // --compare adds workspace, stop, delete, help, prefs and cleanup: screens the
 // docs never show, for checking a change by eye against a "before" set. Its
 // --out must be outside docs/screenshots/, so the set is never published.
@@ -86,15 +87,50 @@ const SHOTS = {
   doc: { workflow: "plan", posts: ["doc"], tab: "What we've agreed" },
   build: { workflow: "implement", posts: ["build"], tab: "phase-3.md" },
   signoff: { workflow: "implement", posts: ["signoff"] },
+  // The sign-off with its Changes tab open: the diff is a file in the session folder.
+  "signoff-changes": { workflow: "implement", posts: ["signoff", "signoff-changes"], files: { "changes.diff": "changes.diff" }, tab: "Changes" },
   finish: { workflow: "implement", posts: ["signoff", "finish"] },
   ask: { workflow: "plan", posts: ["question"], ask: "Where are tasks paged?" },
   // The git board draws itself from a real repository, so this shot runs in
   // its own git sample project; the post only hands the board back to you.
   git: { workflow: "git", posts: ["git"], repo: true },
+  // The dashboard of a project with Learning on and two lessons waiting: its
+  // Learning row and the banner with Review.
+  learning: {
+    workflow: "dashboard",
+    posts: ["dashboard"],
+    project: "learning",
+    // The Learning row sits last on the dashboard, below the fold: bring the
+    // end of the page into view.
+    open: async (page) => {
+      await page.locator(".learn-row").first().waitFor({ timeout: 10000 });
+      await page.evaluate(() => document.querySelector(".learn-row").scrollIntoView({ block: "end", behavior: "instant" }));
+      await sleep(400);
+    },
+  },
+
+  // The card that offers the lessons noted during a phase, at the end of the run.
+  lessons: { workflow: "implement", posts: ["lessons"], project: "learning" },
+  // The Update dependencies report and its finish.
+  deps: { workflow: "deps", posts: ["deps"] },
+  // The Activities picker, opened over a build in progress.
+  activities: {
+    workflow: "implement",
+    posts: ["build"],
+    open: async (page) => {
+      // Activities is off by default: switch it on for this page, then open it.
+      await page.evaluate(() => { document.getElementById("btn-activities").hidden = false; });
+      await page.click("#btn-activities");
+      await page.waitForSelector("#activities-modal[open]", { timeout: 10000 });
+      await page.waitForSelector("#activities-picker:not([hidden])", { timeout: 10000 });
+    },
+  },
+  // A spec with two saved prototypes: the Prototypes tab lists them.
+  prototypes: { workflow: "implement", posts: ["build", "prototypes"], project: "prototypes", tab: "Prototypes" },
   // The Notebook dialog over the plan question, with two named tabs: Call notes
   // (a heading, bullets and bold, shown live) and Ideas, with the first one
   // open. The store is the scratch folder's, never the real one.
-  notepad: {
+  notebook: {
     workflow: "plan",
     posts: ["question"],
     open: async (page) => {
@@ -304,6 +340,41 @@ function makeFreshProject() {
   return project;
 }
 
+// The Learning shots' project: the sample with Learning switched on and two
+// lessons waiting, noted through the same script the skills use, into the
+// throwaway Learning store.
+function makeLearningProject() {
+  const project = path.join(SCRATCH, "learning", "task-api");
+  fs.mkdirSync(path.join(project, ".plan2code"), { recursive: true });
+  fs.cpSync(path.join(SCRATCH, "task-api"), project, { recursive: true });
+  fs.writeFileSync(path.join(project, ".plan2code", "settings.json"), JSON.stringify({ format: 1, learning: "on" }, null, 2) + "\n");
+  const note = (text, kind, about) =>
+    spawnSync(
+      process.execPath,
+      [path.join(ROOT, "src", "skill-scripts", "lessons.mjs"), "note", "--type", "lesson", "--text", text, "--kind", kind, "--about", about, "--source", "said", "--skill", "implement"],
+      { cwd: project, env: ENV, encoding: "utf8" }
+    );
+  note("Every list endpoint pages with a cursor, never an offset.", "convention", "src/tasks");
+  note("Run one test file with node --test test/tasks.test.js; npm test also starts the Postgres container.", "command", "test/tasks.test.js");
+  return project;
+}
+
+// The Prototypes shot's project: the sample spec with two saved prototype
+// choices, one a Markdown note and one an HTML page.
+function makePrototypesProject() {
+  const project = path.join(SCRATCH, "prototypes", "task-api");
+  fs.cpSync(path.join(SCRATCH, "task-api"), project, { recursive: true });
+  const dir = path.join(project, "specs", "task-api", "prototypes");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "task-list.md"),
+    "# Task list prototype\n\n**Chosen:** Variant B, a compact list with the status as a colored dot.\n\n- Filters sit in one row above the list.\n- Each row shows the title, the assignee and the due date.\n- Empty state: \"No tasks yet. Add the first one.\"\n"
+  );
+  fs.writeFileSync(path.join(dir, "task-list.html"), "<!doctype html><title>Task list</title><h1>Task list</h1>\n");
+  fs.writeFileSync(path.join(dir, "task-detail.md"), "# Task detail prototype\n\n**Chosen:** Variant A, a side panel over the list.\n");
+  return project;
+}
+
 // The Workspace shot's second folder, beside the sample project.
 function makeExtraFolder() {
   const dir = path.join(SCRATCH, "task-web");
@@ -368,9 +439,12 @@ function post(project, sid, name) {
 }
 
 // Opens a session for the shot and posts its payloads. Returns { sid, url }.
+// `files` are copied into the session folder first, the way a skill's own
+// script (changes.mjs) leaves a diff there.
 function stage(project, spec) {
   const r = cli(project, "open", "--workflow", spec.workflow, "--no-open");
   if (r.code !== 0 || !r.out || !r.out.url) throw new Error(`open failed (${r.code}): ${r.err.trim()}`);
+  for (const [name, from] of Object.entries(spec.files || {})) fs.copyFileSync(path.join(PAYLOADS, from), path.join(r.out.session, name));
   for (const name of spec.posts) post(project, r.out.sid, name);
   return { sid: r.out.sid, url: r.out.url };
 }
@@ -608,13 +682,22 @@ async function main() {
     // A saved role keeps the dashboard's "pick your role" banner out of shot,
     // and the Ocean highlight is the console's nearest to the Plan2Code blue
     // the landing page uses.
-    fs.writeFileSync(path.join(HOME, "looks.json"), JSON.stringify({ looks: { role: "engineer", accent: "ocean", welcomeSeen: true } }));
+    fs.writeFileSync(path.join(HOME, "looks.json"), JSON.stringify({ looks: { role: "engineer", accent: "ocean", welcomeSeen: true, skillLaunched: true, meterTipSeen: true } }));
     browser = await launchBrowser({
       ...(typeof args.browser === "string" ? { executablePath: args.browser } : {}),
       args: ["--no-first-run", "--no-default-browser-check", "--mute-audio"],
     });
     for (const name of names) {
-      const where = table[name].repo ? makeGitProject() : table[name].fresh ? makeFreshProject() : project;
+      const spec = table[name];
+      const where = spec.repo
+        ? makeGitProject()
+        : spec.fresh
+          ? makeFreshProject()
+          : spec.project === "learning"
+            ? makeLearningProject()
+            : spec.project === "prototypes"
+              ? makePrototypesProject()
+              : project;
       const { sid, url } = stage(where, table[name]);
       try {
         if (table[name].ask) await captureAsk(browser, where, sid, url, table[name].ask);

@@ -1,8 +1,6 @@
-/* agents.css: the Agents & models view - a master-detail split shared by User
-   Preferences' tab and the agent-less setup page. The list is pinned left;
-   the right pane holds the picked agent's form (prefs), the picked entry's
-   state and way forward (setup), or the empty text. Every rule that used to
-   be spread over prefs.css and responsive.css lives here. */
+/* agents.css: the Agents & models view, a master-detail split shared by
+   Preferences' tab and the agent-less setup page. List left; the pane holds
+   the agent's form (prefs), the entry's state (setup), or the empty text. */
 
 /* ------------------------------------------------------------- the mount */
 
@@ -10,7 +8,7 @@
 .prefs-agents > .help { margin: 0; }
 .prefs-agents [hidden], .setup-agents [hidden] { display: none; }
 [data-av="status"]:empty { display: none; }
-[data-av="status"].error { color: var(--danger, #d64545); }
+[data-av="status"].error { color: var(--warn); }
 
 /* ----------------------------------------------------------- the split */
 
@@ -29,7 +27,7 @@
   min-width: 0;
   background: var(--panel-2);
 }
-.split-list-head { padding: 8px 12px 2px; color: var(--ink-3); font-size: 13px; }
+.split-list-head { padding: 8px 12px 2px; color: var(--ink-3); font-size: var(--fs-sm); }
 .split-row {
   appearance: none;
   font: inherit;
@@ -45,11 +43,11 @@
 }
 .split-row:hover { background: var(--accent-soft); }
 .split-row[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-.split-row .row-name { font-weight: 600; font-size: 13.5px; }
-.split-row .row-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); flex-wrap: wrap; }
+.split-row .row-name { font-weight: 600; font-size: var(--fs-md); }
+.split-row .row-sub { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-3); flex-wrap: wrap; }
 .split-row .row-sub code { color: var(--ink-3); }
 .split-row .row-models { color: var(--ink-2); overflow-wrap: anywhere; }
-.split-row .row-note { display: block; margin-top: 2px; font-size: 12px; }
+.split-row .row-note { display: block; margin-top: 2px; font-size: var(--fs-xs); }
 .split-row.soon { color: var(--ink-3); font-style: italic; cursor: default; }
 .split-add { margin: 8px; align-self: flex-start; }
 
@@ -60,70 +58,54 @@
   align-content: start;
   min-width: 0;
 }
-.split-empty { color: var(--ink-3); display: grid; place-items: center; min-height: 240px; text-align: center; }
 
 /* ------------------------------------------------------------- badges */
 
-.prefs-badge, .prefs-unsaved-badge {
-  display: inline-block;
-  font-size: 11.5px;
-  line-height: 1.5;
-  padding: 0 7px;
-  border-radius: 10px;
-  background: var(--panel-2);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.split-row .prefs-badge { background: var(--panel); }
-.prefs-badge.ok { color: var(--ok); }
-.prefs-badge.missing { color: var(--warn); }
-.prefs-unsaved-badge { background: none; border: 1px solid var(--warn); color: var(--warn); }
 
 /* -------------------------------------------------------------- the form */
 
 .form-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.prefs-agents-title { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 15px; }
-.prefs-agents-title code { font-size: 12px; color: var(--ink-3); }
+.prefs-agents-title { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: var(--fs-base); }
+.prefs-agents-title code { font-size: var(--fs-xs); color: var(--ink-3); }
 .prefs-agents-title:focus { outline: none; }
 
 .prefs-agents-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .prefs-agents-fields input { min-width: 0; }
-.prefs-agents-fields input.invalid, .split-pane input.invalid { border-color: var(--danger, #d64545); }
+.prefs-agents-fields input.invalid, .split-pane input.invalid { border-color: var(--warn); }
 
 .agent-field { display: grid; gap: 4px; min-width: 0; }
-.agent-field > span, .agent-field > label { font-size: 0.85em; opacity: 0.85; }
+.agent-field > span, .agent-field > label { font-size: var(--fs-sm); color: var(--ink-2); }
 .agent-rows { display: grid; gap: 4px; }
 .agent-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .agent-row.model { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
 .agent-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .agent-foot .help { margin: 0; }
 .prefs-agents-test .agent-test-result { flex: 1 1 auto; }
-.agent-error { margin: 0; color: var(--danger, #d64545); font-size: 0.9em; }
+.agent-error { margin: 0; color: var(--warn); font-size: var(--fs-sm); }
 
 .prefs-agents-test { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .prefs-agents-test .help { margin: 0; }
 .prefs-agents-none { margin: 0; }
 
-/* A folded section (Models, Command-line arguments): the picked design keeps
-   both behind a summary line until opened. */
+/* Folded sections (Models, Command-line arguments). */
 .agent-fold { display: grid; gap: 8px; }
-.agent-fold > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.agent-fold > summary { cursor: pointer; color: var(--accent); font-size: var(--fs-sm); }
 .agent-fold[open] > summary { margin-bottom: 4px; }
 .agent-fold > .agent-field + .agent-field, .agent-fold > .models-note + .agent-field { margin-top: 8px; }
 .prefs-agents-args > .agent-field + .agent-field { margin-top: 8px; }
 
-/* The Saved mark sits in the form's foot, in the flow, after the buttons. */
+/* The Saved mark flows in the foot after the buttons. */
 .prefs-agents-foot > .prefs-saved { position: static; max-width: none; text-align: left; }
 
 /* ------------------------------------------------------------- models lists */
 
-.models-note { font-size: 0.9em; opacity: 0.85; }
+.models-note { font-size: var(--fs-sm); color: var(--ink-2); }
 .models-note p, .models-note ul { margin: 0 0 6px; }
 .models-note ul { padding-left: 18px; }
 .models-list { display: grid; gap: 4px; max-height: 160px; overflow: auto; }
 .models-list:empty { display: none; }
 .models-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
-.models-row.locked { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: 0.88em; opacity: 0.75; }
+.models-row.locked { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: var(--fs-sm); color: var(--ink-3); }
 .models-row input { min-width: 0; }
 
 /* --------------------------------------------------------- the setup pane */
@@ -133,7 +115,7 @@
 .setup-agent-line {
   margin: 0;
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .setup-install {
   display: flex;
@@ -144,9 +126,9 @@
 }
 .setup-install code {
   background: var(--panel-2);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 2px 7px;
-  font-size: 12px;
+  font-size: var(--fs-xs);
 }
 
 /* --------------------------------------------------------- narrow screens */
@@ -162,16 +144,15 @@
 .strength-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .strength-row:has(select + select) { grid-template-columns: 5.5em minmax(0, 1fr) minmax(0, 8em) auto; }
 .strength-row select { min-width: 0; }
-.strength-word { font-size: 0.9em; }
-.strength-default { margin: 0; font-size: 0.8em; color: var(--ink-3); }
+.strength-word { font-size: var(--fs-sm); }
+.strength-default { margin: 0; font-size: var(--fs-xs); color: var(--ink-3); }
 .strength-empty, .strength-offer { margin: 0; }
 
 /* ------------------------------------------------- Preferences: the roster */
 
-/* The Agents & models tab in User Preferences: a roster of cards, the picked
-   agent's form in a drawer over it, and the Add agent chooser over both. The
-   drawer and chooser sit in the tab's own box (absolute) and stick to the top
-   of the dialog's scroll, so they stay in view on a long roster. */
+/* Roster of cards, the agent's form in a drawer over it, the Add agent
+   chooser over both. Drawer and chooser are absolute in the tab and stick to
+   the dialog's scroll top, staying in view on a long roster. */
 .prefs-agents { position: relative; min-height: 520px; align-content: start; }
 .roster-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
 .roster-head > .help { max-width: 62ch; }
@@ -192,16 +173,16 @@
   align-content: start;
   min-width: 0;
 }
-.agent-card:hover { border-color: var(--accent-line); box-shadow: var(--shadow); }
+.agent-card:hover { border-color: var(--accent-line); box-shadow: var(--shadow-2); }
 .agent-card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .agent-card .card-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
 .agent-card .card-who { display: grid; gap: 2px; min-width: 0; }
-.agent-card .row-name { font-weight: 700; font-size: 14.5px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.agent-card .card-who code { color: var(--ink-3); font-size: 12px; }
-.agent-card .card-tiers { display: grid; gap: 5px; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
-.agent-card .card-tier { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.agent-card .row-name { font-weight: 700; font-size: var(--fs-base); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.agent-card .card-who code { color: var(--ink-3); font-size: var(--fs-xs); }
+.agent-card .card-tiers { display: grid; gap: 5px; background: var(--panel-2); border-radius: var(--radius-md); padding: 8px 10px; }
+.agent-card .card-tier { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 8px; align-items: center; font-size: var(--fs-sm); }
 .agent-card .card-tier .muted, .strength-model.none { color: var(--ink-3); font-style: italic; }
-.agent-card .card-foot { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 12px; }
+.agent-card .card-foot { display: flex; justify-content: space-between; color: var(--ink-3); font-size: var(--fs-xs); }
 .agent-card .card-edit { color: var(--accent); font-weight: 600; }
 .agent-card .row-note { margin: 0; }
 .agent-card.ghost {
@@ -214,31 +195,19 @@
   min-height: 150px;
   color: var(--ink-2);
 }
-.agent-card.ghost .plus { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 20px; }
-.agent-card.ghost .muted { font-size: 12.5px; color: var(--ink-3); }
+.agent-card.ghost .plus { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-h2); }
+.agent-card.ghost .muted { font-size: var(--fs-sm); color: var(--ink-3); }
 
-.tag {
-  display: inline-block;
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.5;
-  padding: 0 7px;
-  border-radius: 10px;
-  border: 1px solid var(--rule-2);
-  background: var(--panel-2);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
 
 /* Thrifty, Balanced and Best take the rank colors (see tokens.css). */
 .tier {
   display: inline-block;
   justify-self: start;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   line-height: 1.5;
   padding: 0 8px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   white-space: nowrap;
 }
 .tier.t-thrifty { color: var(--lvl-1); background: var(--lvl-1-soft); }
@@ -247,9 +216,9 @@
 
 /* ---------------------------------------------------------------- the drawer */
 
-.agents-drawer, .agents-chooser { position: absolute; inset: 0; z-index: 5; }
+.agents-drawer, .agents-chooser { position: absolute; inset: 0; z-index: var(--z-sticky); }
 .agents-drawer[hidden], .agents-chooser[hidden] { display: none; }
-.drawer-scrim, .chooser-scrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(1px); }
+.drawer-scrim, .chooser-scrim { position: absolute; inset: 0; background: var(--scrim); }
 .drawer {
   position: sticky;
   top: 0;
@@ -262,16 +231,16 @@
   background: var(--panel);
   border: 1px solid var(--rule-2);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-3);
   overflow: hidden;
 }
 .drawer .form-head { padding: 14px 16px 6px; justify-content: space-between; align-items: center; flex-wrap: nowrap; }
-.drawer .prefs-agents-title { font-size: 16px; flex-wrap: wrap; }
+.drawer .prefs-agents-title { font-size: var(--fs-h4); flex-wrap: wrap; }
 .agent-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--rule); }
 .agent-tab {
   appearance: none;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   background: none;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -280,40 +249,40 @@
   cursor: pointer;
 }
 .agent-tab:hover { color: var(--ink); }
-.agent-tab[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+.agent-tab[aria-selected="true"] { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
 .agent-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 16px; display: grid; gap: 12px; align-content: start; }
 .drawer .prefs-agents-foot { border-top: 1px solid var(--rule); padding: 10px 16px; background: var(--panel); }
 /* Nothing to offer on a clean built-in: no empty bar. */
 .drawer .prefs-agents-foot:not(:has(> :not([hidden]))) { display: none; }
-/* The same form on the setup page's split pane is not a drawer: let it flow. */
+/* In the setup split pane the form is not a drawer: let it flow. */
 .split-pane .agent-body { overflow: visible; padding: 12px 0 0; }
 .split-pane .agent-tabs { padding: 0; }
 
-.note { background: var(--accent-soft); color: var(--ink); border-radius: 8px; padding: 9px 12px; font-size: 13px; }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 13px; }
+.note { padding: 9px 12px; font-size: var(--fs-sm); }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: var(--fs-sm); }
 .kv dt { color: var(--ink-3); }
 .kv dd { margin: 0; }
 
-/* In the loop: the three words, what each resolves to, and the model pills. */
+/* In the loop: the three words, what they resolve to, the model pills. */
 .strength-body .strength-row { grid-template-columns: minmax(0, 11em) minmax(0, 1fr) auto auto; }
 .strength-body .strength-row:not(:has(select)) { grid-template-columns: minmax(0, 11em) minmax(0, 1fr) auto; }
 .strength-word { display: grid; gap: 1px; font-size: inherit; }
-.strength-word small { font-size: 11.5px; }
-.strength-model { overflow-wrap: anywhere; font-size: 13px; }
+.strength-word small { font-size: var(--fs-xs); }
+.strength-model { overflow-wrap: anywhere; font-size: var(--fs-sm); }
 .models-tip { margin: 0; }
 .models-list { max-height: none; }
-.models-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: 13px; }
-.models-row.locked { grid-template-columns: minmax(0, 1fr) auto auto; font-size: 13px; opacity: 1; }
+.models-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 6px; border-radius: var(--radius-sm); font-size: var(--fs-sm); }
+.models-row.locked { grid-template-columns: minmax(0, 1fr) auto auto; font-size: var(--fs-sm); color: inherit; }
 .models-row:hover { background: var(--panel-2); }
 .model-name { display: grid; min-width: 0; overflow-wrap: anywhere; }
-.model-name code { font-size: 11.5px; color: var(--ink-3); }
+.model-name code { font-size: var(--fs-xs); color: var(--ink-3); }
 .strength-pills { display: inline-flex; gap: 4px; }
 .strength-pill {
   appearance: none;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   padding: 1px 9px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1px solid var(--rule-2);
   background: transparent;
   color: var(--ink-3);
@@ -339,11 +308,11 @@
   background: var(--panel);
   border: 1px solid var(--rule-2);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-3);
   padding: 16px 18px 18px;
 }
 .chooser-head { display: flex; justify-content: space-between; align-items: center; }
-.chooser-head h3 { margin: 0; font-size: 16px; }
+.chooser-head h3 { margin: 0; font-size: var(--fs-h4); }
 .chooser-sheet > .help { margin: 0; }
 .chooser-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .chooser-tile {
@@ -353,23 +322,23 @@
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--rule-2);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   cursor: pointer;
   display: grid;
   gap: 3px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .chooser-tile:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 .chooser-tile:disabled { opacity: 0.55; cursor: default; }
-.chooser-tile b { font-size: 14px; }
-.chooser-tile code { color: var(--ink-3); font-size: 12px; }
+.chooser-tile b { font-size: var(--fs-md); }
+.chooser-tile code { color: var(--ink-3); font-size: var(--fs-xs); }
 .chooser-tile .muted { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink-3); }
 .chooser-tile.wide { border-style: dashed; }
-.chooser-state { font-size: 12px; color: var(--ink-3); }
+.chooser-state { font-size: var(--fs-xs); color: var(--ink-3); }
 .chooser-state.ok { color: var(--ok); }
 .chooser-state.missing { color: var(--warn); }
-.chooser-or { text-align: center; color: var(--ink-3); font-size: 12px; display: flex; align-items: center; gap: 10px; }
+.chooser-or { text-align: center; color: var(--ink-3); font-size: var(--fs-xs); display: flex; align-items: center; gap: 10px; }
 .chooser-or::before, .chooser-or::after { content: ""; flex: 1; border-top: 1px solid var(--rule); }
 
 @media (max-width: 720px) {
@@ -382,4 +351,4 @@
   .model-add { grid-template-columns: 1fr; }
 }
 
-.drawer .help, .chooser-sheet .help, .strength-offer { font-size: 12.5px; color: var(--ink-3); }
+.drawer .help, .chooser-sheet .help, .strength-offer { font-size: var(--fs-sm); color: var(--ink-3); }

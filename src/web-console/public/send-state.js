@@ -1,5 +1,6 @@
 // Plan2Code Web Console - whether Send is available, and what its button says; defines only.
 
+import { NOT_CONNECTED } from "./labels.js";
 import {
   finish,
   stranded,
@@ -22,13 +23,24 @@ import { pendingNotes } from "./uploads.js";
 // the main Send would carry. The suggestion chip passes `true`: its request is
 // the payload.
 export function sendState(hasPayload = stagedCount() || pendingNotes().length > 0) {
+  const state = sendStateFor(hasPayload);
+  // A view with nothing to send, ever: a finished session, or the git board
+  // with no card open and nothing staged. The button goes (`hide`), and the
+  // footer keeps its status words, so the bar says why rather than showing a
+  // dead button.
+  const finished = Boolean(finish());
+  const idleGit = page.S && page.S.workflow === "git" && !hasPayload && openItems().length === 0;
+  return finished || idleGit ? { ...state, hide: true } : state;
+}
+
+function sendStateFor(hasPayload) {
   // Before `gone`, and before the grace period that can re-enable a send. A
   // finished session has nobody left to send to, whatever the socket says.
   if (finish())
     return finishPaused(finish())
-      ? { disabled: true, why: "This session is paused.", short: "Session paused" }
+      ? { disabled: true, why: "This session is stopped.", short: "Session stopped" }
       : { disabled: true, why: "This session is finished.", short: "Session finished" };
-  if (page.gone) return { disabled: true, why: "Not connected right now.", short: "Not connected" };
+  if (page.gone) return { disabled: true, why: NOT_CONNECTED, short: "Not connected" };
   // The Implementation Loop answers for the agent: nothing to send until it
   // stops to ask the person something (FR-15, FR-14).
   if (loopDriving() && !loopWaiting()) {

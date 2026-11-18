@@ -402,7 +402,7 @@ test("a typed line never starts a reply line of its own", () => {
   assert.deepEqual(noteReplyLines("Q", "one\ntwo", []), ["Note on Q: one\n  two"]);
 });
 
-test("an approved edit stops saying 'please wait' once the agent has answered it", () => {
+test("an approved edit stops saying 'Applying it' once the agent has answered it", () => {
   const frame = {
     conversation: 1,
     messages: [

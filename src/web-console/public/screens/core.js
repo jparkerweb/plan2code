@@ -11,6 +11,8 @@
 // the one that starts it. The screens draw through state.js's redraw() and
 // keep the draft through saveNow(), never by importing this file.
 
+import { looks, saveLooks } from "../looks.js";
+import { notConnected } from "../labels.js";
 import { fresh, freshChat, page, redraw, saveNow, scrollMemory } from "../state.js";
 import {
   CATALOG_GROUPS,
@@ -31,7 +33,9 @@ import {
   progressTotal,
   pruneStaged,
   recordedAnswer,
+  seedStaged,
   sentAnswer,
+  startsTicked,
   staleLaunchFeedback,
   submittedAwaiting,
   suggestAction,
@@ -47,7 +51,7 @@ import {
   shouldChime,
   unreadDot,
 } from "../chat.js";
-import { copyButton, el, isMac, textWithCode } from "../render.js";
+import { copyButton, el, hiddenText, icon, isMac, stateMark, textWithCode } from "../render.js";
 import { isBuild, isAgentless } from "../skills.js";
 import { startsClean } from "../hops.js";
 import { faviconState, setFavicon } from "../favicon.js";
@@ -65,7 +69,7 @@ import { sound } from "../sound.js";
 import { renderConfirm, renderDashboard } from "./dashboard.js";
 import { renderLoopSetup } from "./loop-setup.js";
 import { renderLaunching, renderWaiting } from "./starting.js";
-import { attachFiles, heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
+import { attachFiles, findSetAside, heldNotes, noteImages, pendingNotes, purgeImages } from "../uploads.js";
 import { closeMentions } from "../mention-box.js";
 import { destroyFields } from "../md-field.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
@@ -73,8 +77,9 @@ import { sendState, suggestState } from "../send-state.js";
 import { renderAgentsDoc, renderBriefButton, renderDoc, renderOverview, renderPrototypes } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
-import { openHelpOn } from "./help-dialog.js";
-import { framed, linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
+import { openHelp, openHelpOn } from "./help-dialog.js";
+import { framed, linkLeavesPage, onAppMessage, shortcutIdFor, startNewSession, tellApp } from "../app-bridge.js";
+import { openPrefs as openPrefsDialog } from "./prefs-dialog.js";
 import { continueButton } from "../continue-button.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, renderFooterDashboard, stopInProgress, stopWarning } from "./ending.js";
@@ -112,7 +117,16 @@ export const GONE_AFTER_MS = 8000;
 // wipe an unrelated warning that landed while the page was gone (an upload
 // failure, a refused send).
 const GONE_BANNER =
-  "Lost contact with Plan2Code. Nothing you have typed is lost. A blip clears by itself; if Plan2Code starts again, it gives you a new link, so open that one.";
+  notConnected("Nothing you have typed is lost. A blip clears by itself; if Plan2Code starts again, it gives you a new link, so open that one.");
+// Under the app there is no link to open: its own bar offers the way back
+// (the same split as Help's Troubleshooting wording, help-dialog.js).
+const GONE_BANNER_IN_APP =
+  notConnected("Nothing you have typed is lost. A blip clears by itself; otherwise the bar at the top offers Reconnect the console.");
+const goneBanner = () => (page.inApp ? GONE_BANNER_IN_APP : GONE_BANNER);
+// The token of the "not connected" banner while it is up (banner() hands it back).
+let goneBannerToken = 0;
+// True while the popover that first showed the one-time meter tip is open.
+let meterTipOpen = false;
 
 // The server's frame counter as of the last frame, and the last time the page
 // heard from the server at all.
@@ -250,7 +264,7 @@ async function pushDraft() {
     await fetch("/draft", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ staged: page.local.staged, drafts: page.local.drafts, images: page.local.images }),
+      body: JSON.stringify({ staged: page.local.staged, drafts: page.local.drafts, images: page.local.images, seeded: page.local.seeded }),
     });
   } catch {}
 }
@@ -302,8 +316,8 @@ export function adopt(body) {
   // A "still being picked up" banner is over once the send is: it said a
   // moment, and left up it reads as a fault through every later screen.
   if (!page.pendingResult && page.pendingBannerUp) {
+    clearBanner(page.pendingBannerUp);
     page.pendingBannerUp = false;
-    banner(null);
   }
   page.pendingStop = Boolean(body.pendingStop);
   page.chatFrame = body.chat || null;
@@ -325,7 +339,7 @@ export function adopt(body) {
   lastContact = Date.now();
   if (page.gone) {
     page.gone = false;
-    if ($("banner").textContent === GONE_BANNER) banner(null);
+    clearBanner(goneBannerToken);
   }
   if (firstLoad) {
     load();
@@ -335,6 +349,8 @@ export function adopt(body) {
       page.local.staged = body.draft.staged;
       page.local.drafts = body.draft.drafts || {};
       page.local.images = body.draft.images || {};
+      // A draft saved by an older page has no `seeded`: none were seeded.
+      page.local.seeded = body.draft.seeded || {};
       settleStaleUploads();
     }
   }
@@ -447,9 +463,9 @@ export function adopt(body) {
     // banner wait for the first thing it actually puts on the page.
     if (!finish() && (asked().length || doingNow() || docs().length)) {
       sound("skillReady");
-      banner(`${was.title} is ready.`, "good");
+      const ready = banner(`${was.title} is ready.`, "good");
       clearTimeout(arrivalBannerTimer);
-      arrivalBannerTimer = setTimeout(() => !page.gone && banner(null), 4000);
+      arrivalBannerTimer = setTimeout(() => !page.gone && clearBanner(ready), 4000);
     }
   }
   // Anything the agent has now recorded is no longer "staged" or in flight.
@@ -489,9 +505,17 @@ export function adopt(body) {
     save();
     const titles = pruned.dropped.map((id) => (byId(id) && byId(id).title) || id).join(", ");
     staleLine = `A pick on ${titles} no longer matches the reworded question, so it was cleared.`;
-    banner(staleLine, "info");
+    const stale = banner(staleLine, "info");
     clearTimeout(arrivalBannerTimer);
-    arrivalBannerTimer = setTimeout(() => !page.gone && $("banner").textContent === staleLine && banner(null), 8000);
+    arrivalBannerTimer = setTimeout(() => !page.gone && clearBanner(stale), 8000);
+  }
+  // A multi card that asks to start with ticks gets them staged once, as if the
+  // person had ticked them (an `answer` on the item would settle it instead).
+  const seeding = seedStaged(page.S.items || [], page.local.staged, page.local.seeded || {}, page.local.sent || {});
+  if (seeding.changed) {
+    page.local.staged = seeding.staged;
+    page.local.seeded = seeding.seeded;
+    save();
   }
   // A retracted send suppresses exactly that send. Once the item moves --
   // settled, sent again (a new `at`), or answered by an agent reply -- the
@@ -532,7 +556,7 @@ export function adopt(body) {
       // The question already on screen needs no mark: it is where they are looking.
       for (const q of arrived) if (!(page.view === "questions" && page.selected === q.id)) page.newQuestions.add(q.id);
       arrivalNotice = staleLine ? `${staleLine} ${arrivedLine}` : arrivedLine;
-      banner(arrivalNotice, "info");
+      arrivalToken = banner(arrivalNotice, "info");
       clearTimeout(arrivalBannerTimer);
     } else {
       page.selected = arrived[0].id;
@@ -614,9 +638,10 @@ function scrollRail(where) {
 let arrivalBannerTimer = null;
 // The text of a notice that stays up (see adopt), so only that banner is cleared.
 let arrivalNotice = "";
+let arrivalToken = 0;
 
 function dropArrivalNotice() {
-  if (arrivalNotice && $("banner").textContent === arrivalNotice) banner(null);
+  if (arrivalNotice) clearBanner(arrivalToken);
   arrivalNotice = "";
 }
 
@@ -713,12 +738,12 @@ function markGone() {
     // of the server means there, and a banner promising a reconnect would
     // argue with it.
     if (!finish() && !stopInProgress()) {
-      banner(GONE_BANNER, "warn");
+      goneBannerToken = banner(goneBanner(), "warn");
     }
     render();
   } else if (!bad && page.gone) {
     page.gone = false;
-    if ($("banner").textContent === GONE_BANNER) banner(null);
+    clearBanner(goneBannerToken);
     render();
   }
 }
@@ -1065,18 +1090,40 @@ function restoreScroll() {
   scroller.scrollTop = saved ? saved.top : 0;
 }
 
-// `extras` are nodes shown after the text: a copyable hint, an action.
+// `extras` are nodes shown after the text: a copyable hint, an action. Hands
+// back a token for this message: a timer that wants it gone calls
+// clearBanner(token), which clears only that message, so a timed success never
+// erases a newer warning. A warning carries a Dismiss button.
+let bannerSeq = 0;
+let bannerShowing = 0;
+
 export function banner(text, kind, extras) {
   const n = $("banner");
   if (!text) {
     n.hidden = true;
     n.textContent = "";
-    return;
+    bannerShowing = 0;
+    return 0;
   }
   n.hidden = false;
   n.className = "banner " + (kind || "");
   n.textContent = text;
   for (const node of extras || []) n.appendChild(node);
+  bannerShowing = ++bannerSeq;
+  if (kind === "warn") {
+    const close = el("button", "banner-dismiss");
+    close.type = "button";
+    close.setAttribute("aria-label", "Dismiss");
+    close.appendChild(icon("close"));
+    close.addEventListener("click", () => banner(null));
+    n.appendChild(close);
+  }
+  return bannerShowing;
+}
+
+// Clears the banner only when it is still the message `token` named.
+export function clearBanner(token) {
+  if (token && token === bannerShowing) banner(null);
 }
 
 // The session meter's pill, straight from the frame's `meter` (meter.js did
@@ -1094,6 +1141,18 @@ function renderMeter() {
   $("meter-words").textContent = page.meterFrame.words;
   pill.title = page.meterFrame.tooltip;
   $("meter-tip").textContent = page.meterFrame.tooltip;
+  // The one-time tip (it used to sit in the Welcome dialog): the first time the
+  // pill leaves green, the popover says what to do about it. It counts as read
+  // once the popover has been opened with it showing (toggleMeterPop), and
+  // stays up until that popover closes, so a redraw cannot take it away mid-read.
+  const once = $("meter-once");
+  const showOnce = page.meterFrame.level !== "green" && (looks.meterTipSeen !== true || meterTipOpen);
+  once.hidden = !showOnce;
+  if (showOnce) {
+    once.textContent = page.inApp
+      ? "Tip: once the meter passes half, finish the step and press New Session at the top of the window."
+      : "Tip: once the meter passes half, finish the step and start a new conversation.";
+  }
   // What the points are made of: one row per piece of work that scored.
   const list = $("meter-list");
   const rows = Array.isArray(page.meterFrame.items) ? page.meterFrame.items : [];
@@ -1121,7 +1180,7 @@ function renderMeter() {
   fresh.dataset.built = "1";
   if (page.inApp) {
     // The same press as the app bar's New Session, confirm and all.
-    const press = el("button", "btn small primary meter-fresh-btn", "Start a New Session");
+    const press = el("button", "btn sm primary meter-fresh-btn", "Start a New Session");
     press.type = "button";
     press.addEventListener("click", () => !loopDriving() && tellApp("new-session"));
     press.disabled = loopDriving();
@@ -1131,9 +1190,9 @@ function renderMeter() {
   const text = handoffText({ command: DASHBOARD_COMMAND });
   const code = el("code", "handoff-code", text);
   const row = el("div", "handoff-command meter-fresh-row");
-  row.append(code, copyButton(text, "btn small ghost handoff-copy", code));
+  row.append(code, copyButton(text, "btn sm ghost handoff-copy", code));
   fresh.append(
-    textWithCode("p", "meter-fresh-text", `To start a new session, run \`${DASHBOARD_COMMAND}\` in a new conversation:`),
+    textWithCode("p", "meter-fresh-text", `To start fresh, run \`${DASHBOARD_COMMAND}\` in a new conversation:`),
     row
   );
 }
@@ -1189,7 +1248,7 @@ function renderChrome() {
       : `${done} of ${total} ${building ? "done" : "answered"}`
     : h.stage || "Getting started";
   $("confidence").textContent = h.confidence || "";
-  $("progress-fill").style.width = pct + "%";
+  $("progress-fill").style.setProperty("--p", String(pct / 100));
   const bar = $("progress-bar");
   // A stage with nothing to count (a review starting) says its words, no track.
   bar.hidden = !total && Boolean(h.stage);
@@ -1341,7 +1400,7 @@ export function renderStatus() {
     if (page.local.afterBuild === "dashboard" && !page.gone) return say("work", "Opening the dashboard…", "", true);
     if (page.local.afterBuild === "commit" && !page.gone) return say("work", "Opening Git…", "", true);
     if (page.local.afterBuild === "changelog" && !page.gone) return say("work", "Opening Changelog…", "", true);
-    if (page.local.afterBuild === "launch" && !page.gone) return say("work", "Starting the next step…", "", true);
+    if (page.local.afterBuild === "launch" && !page.gone) return say("work", "Starting the next skill…", "", true);
     const offer = reviewPending();
     // There is no tab to close under the app, only the one window.
     const closeWord = page.inApp ? "window" : "tab";
@@ -1352,10 +1411,10 @@ export function renderStatus() {
     if (offer === "open") return say("point", `Done. Review it here first, or close this ${closeWord}.`);
     // A stop past a warning kept nothing, so it promises no saved place.
     if (finishPaused(finish()))
-      return say("done", stopWarning() ? "Paused. The command above starts it again." : "Paused. Your place is saved: the command above picks it up.");
+      return say("done", stopWarning() ? "Stopped. The command above starts it again." : "Stopped. Your place is saved: the command above picks it up.");
     return say("done", `All done. You can close this ${closeWord}.`);
   }
-  if (page.gone) return say("gone", "Not connected. Your answers are saved.", "", false, true);
+  if (page.gone) return say("gone", notConnected("Your answers are saved."), "", false, true);
   // The loop's own end screen (the app's `loopEnd`) is no `finish()`: while it
   // still has presses on offer the move is theirs; with none, it is done.
   if (page.S.loopEnd) {
@@ -1527,11 +1586,15 @@ function renderViews() {
     }
     b.setAttribute("aria-current", String(page.view === t.id || (t.id === "questions" && page.view === "end")));
     if (t.count) {
+      // The number is drawn for the eye; the name reads ", 3 waiting".
       const c = el("span", "tab-count", String(t.count));
+      c.setAttribute("aria-hidden", "true");
       b.appendChild(c);
+      b.appendChild(hiddenText(t.id === "questions" ? `, ${t.count} waiting` : `, ${t.count}`));
     }
     if (t.dot) {
       const dot = el("span", "tab-dot");
+      dot.setAttribute("role", "img");
       dot.setAttribute("aria-label", "New reply");
       b.appendChild(dot);
     }
@@ -1596,13 +1659,13 @@ export function renderSidebar() {
         b.setAttribute("aria-current", String(Boolean(page.dashPick && page.dashPick.skill === e.skill)));
         const isGoing = page.local.launching && (page.local.launching.skill === e.skill || page.local.launching.skill === e.review);
         const isPicked = page.dashPick && page.dashPick.skill === e.skill;
-        const mark = el(
-          "span",
-          "rail-mark " + (isGoing || isPicked ? "staged" : "open"),
-          isGoing ? "◐" : isPicked ? "●" : "○"
+        b.appendChild(
+          stateMark(
+            "rail-mark " + (isGoing || isPicked ? "staged" : "open"),
+            isGoing ? "half" : isPicked ? "dot" : "circle",
+            isGoing ? "starting" : isPicked ? "picked" : "pick to start"
+          )
         );
-        mark.title = isGoing ? "starting" : isPicked ? "picked" : "pick to start";
-        b.appendChild(mark);
         b.appendChild(el("span", null, e.title));
         // The center pane's own "Suggested" pill scrolls out of view, so the
         // rail repeats the call-out here as a small dot next to the title.
@@ -1626,10 +1689,8 @@ export function renderSidebar() {
   }
 
   const list = asked();
-  if (!list.length) {
-    rail.appendChild(el("p", "rail-empty", "Nothing here yet."));
-    return;
-  }
+  // Nothing asked yet: the rail stays empty, with no placeholder line.
+  if (!list.length) return;
 
   const groups = new Map();
   for (const item of list) {
@@ -1654,12 +1715,10 @@ export function renderSidebar() {
       // the question that was last selected is not the thing being looked at.
       b.setAttribute("aria-current", String(page.view === "questions" && page.selected === item.id));
       const m = markFor(item);
-      const mark = el("span", "rail-mark " + m.cls, m.glyph);
-      mark.title = m.label;
-      b.appendChild(mark);
+      b.appendChild(stateMark("rail-mark " + m.cls, m.icon, m.label));
       b.appendChild(el("span", null, item.title));
       if (page.newQuestions.has(item.id)) {
-        const fresh = el("span", "rail-new", "New");
+        const fresh = el("span", "pill is-accent is-caps rail-new", "New");
         fresh.title = "arrived while you were typing";
         b.appendChild(fresh);
       }
@@ -1824,7 +1883,7 @@ function paintMain(main) {
   // an ending, and until there was a way to tell the two apart the page said
   // it in both. The ending has its own page now, reached from the rail.
   if (!finish() && !myTurn().length && !stagedCount()) {
-    const lull = el("div", "card-note card-lead");
+    const lull = el("div", "callout is-info card-note card-lead");
     lull.appendChild(el("p", "note-kicker", "All caught up"));
     lull.appendChild(el("h3", "note-title", "Nothing needs you right now"));
     lull.appendChild(
@@ -1891,7 +1950,7 @@ export function renderFooter() {
   } else if (finish()) {
     // Not "nothing to send yet". There is no yet.
     const fin = finish();
-    next.appendChild(el("strong", null, finishPaused(fin) ? "Paused." : "All done."));
+    next.appendChild(el("strong", null, finishPaused(fin) ? "Stopped." : "All done."));
     next.appendChild(
       document.createTextNode(
         n || notes.length
@@ -1949,6 +2008,8 @@ export function renderFooter() {
   const state = sendState();
   const btn = $("btn-send");
   btn.disabled = state.disabled;
+  // Nothing to send on this view: the button is gone, the status words stay.
+  btn.hidden = Boolean(state.hide);
   // Filled accent means "this is the step". That is only true of Send once
   // nothing is left to answer; before then it is the quieter of the two, so
   // the next question wins the eye. Still one click either way: someone who
@@ -1957,7 +2018,7 @@ export function renderFooter() {
   btn.classList.toggle("primary", state.disabled || sendIsStep);
   btn.classList.toggle("standby", !state.disabled && !sendIsStep);
   // The chevron before Send sways only while Send is the filled, live step.
-  $("send-nudge").hidden = !sendIsStep;
+  $("send-nudge").hidden = !sendIsStep || Boolean(state.hide);
 
   const hint = $("send-hint");
   hint.replaceChildren();
@@ -2156,11 +2217,11 @@ export async function askSuggestions(itemId) {
       }),
     });
     if (res.status === 409) {
-      banner(
+      // The token, so the end of the send clears only this line.
+      page.pendingBannerUp = banner(
         "Your last answers are still being picked up. Nothing is lost, and nothing was sent twice. Try again in a moment.",
         "info"
       );
-      page.pendingBannerUp = true;
       page.pendingResult = true;
     } else if (!res.ok) {
       const body = await res.json().catch(() => null);
@@ -2169,8 +2230,8 @@ export async function askSuggestions(itemId) {
       // A note held back on an upload did not go, so it stays drafted.
       if (note) clearSentNote(itemId, new Set(images.map((i) => i.key)));
       save();
-      banner("Asked for suggestions. Plan2Code is picking it up now.", "good");
-      setTimeout(() => banner(null), 4000);
+      const asked = banner("Asked for suggestions. Plan2Code is picking it up now.", "good");
+      setTimeout(() => clearBanner(asked), 4000);
     }
   } catch {
     await sendLost();
@@ -2220,8 +2281,8 @@ export async function send() {
     // for the next, different one.
     if (loopWaiting()) page.local.askLockedAfterSend = loopWaitingKey();
     markSent(payload);
-    banner("Sent. Plan2Code is picking it up now.", "good");
-    setTimeout(() => banner(null), 4000);
+    const sentBanner = banner("Sent. Plan2Code is picking it up now.", "good");
+    setTimeout(() => clearBanner(sentBanner), 4000);
     // A menu option the agent marked `fresh` is a clean start, which under the
     // app is the bar's New Session; the agent still gets the pick, so a
     // declined confirm carries on with its usual finish.
@@ -2229,11 +2290,11 @@ export async function send() {
     if (freshMenu) startNewSession(freshMenu.command ? handoffText({ command: freshMenu.command }) : "");
   } catch (err) {
     if (err && err.pending) {
-      banner(
+      // The token, so the end of the send clears only this line.
+      page.pendingBannerUp = banner(
         "Your last answers are still being picked up. Nothing is lost, and nothing was sent twice. Try again in a moment.",
         "info"
       );
-      page.pendingBannerUp = true;
       page.pendingResult = true;
     } else if (err && err.reason) {
       banner(refusedLine(err), "warn");
@@ -2291,6 +2352,9 @@ function tokenFor(item, v) {
   const parts = [];
   if (v.k) parts.push(map[v.k] || v.k);
   if (Array.isArray(v.ks) && v.ks.length) parts.push(v.ks.map((k) => map[k] || k).join(", "));
+  // A card that opened ticked can be sent with nothing ticked: that is an
+  // answer, said even when a note rides with it ("none; keep the logo").
+  else if (Array.isArray(v.ks) && startsTicked(item)) parts.push("none");
   if (v.verdict) parts.push(map[v.verdict] || v.verdict);
   if (typeof v.yes === "boolean") parts.push(map[v.yes ? "yes" : "no"] || (v.yes ? "yes" : "no"));
   if (typeof v.ok === "boolean") parts.push(v.ok ? "confirmed" : "needs changes");
@@ -2323,6 +2387,69 @@ function fmtMs(ms) {
   return `${m}m ${s % 60}s`;
 }
 
+/* ----------------------------------------------------------- Clear, with Undo */
+
+// Clear throws away what has not been sent, at once, and offers Undo for ten
+// seconds. The staged answers, the typed boxes and the attachments are kept in
+// memory meanwhile; the attachments' files on the server are deleted only when
+// the window closes (or the next Clear), so Undo has something to restore.
+const UNDO_CLEAR_MS = 10000;
+let clearedUndo = null;
+findSetAside((itemId, key) => (clearedUndo && (clearedUndo.images[itemId] || []).find((img) => img.key === key)) || null);
+
+// The window is over: the set-aside pictures go for good.
+function settleClear() {
+  if (!clearedUndo) return;
+  clearTimeout(clearedUndo.timer);
+  purgeImages(clearedUndo.images);
+  clearBanner(clearedUndo.banner);
+  clearedUndo = null;
+}
+
+function clearUnsent() {
+  // A second Clear closes the first one's window.
+  settleClear();
+  const count = Object.keys(page.local.staged).length + pendingNotes().length;
+  const kept = { staged: page.local.staged, images: page.local.images, drafts: {} };
+  page.local.staged = {};
+  page.local.images = {};
+  // Every typed box, the same set markSent clears: a draft left behind would
+  // refill its box on the next render and look as if nothing was cleared.
+  const typed = ["thread-", "other-", "text-", "note-"];
+  for (const key of Object.keys(page.local.drafts)) {
+    if (!typed.some((p) => key.startsWith(p))) continue;
+    kept.drafts[key] = page.local.drafts[key];
+    delete page.local.drafts[key];
+  }
+  saveNow();
+  redraw();
+  const undo = el("button", "btn xs soft banner-action", "Undo");
+  undo.type = "button";
+  undo.addEventListener("click", () => undoClear());
+  const said = count ? `Cleared ${count} ${count === 1 ? "answer" : "answers"}. ` : "Cleared what you had not sent. ";
+  const token = banner(said, "info", [undo]);
+  clearedUndo = { ...kept, banner: token, timer: setTimeout(settleClear, UNDO_CLEAR_MS) };
+}
+
+// Puts back what Clear set aside, except where the person has already typed or
+// picked something newer for the same question.
+function undoClear() {
+  const was = clearedUndo;
+  if (!was) return;
+  clearTimeout(was.timer);
+  clearedUndo = null;
+  page.local.staged = { ...was.staged, ...page.local.staged };
+  for (const [key, text] of Object.entries(was.drafts)) if (!(key in page.local.drafts)) page.local.drafts[key] = text;
+  // Per note, so a picture attached during the window sits beside the restored ones.
+  for (const [itemId, list] of Object.entries(was.images)) {
+    const now = page.local.images[itemId] || [];
+    page.local.images[itemId] = [...list.filter((img) => !now.some((x) => x.key === img.key)), ...now];
+  }
+  clearBanner(was.banner);
+  saveNow();
+  redraw();
+}
+
 /* ----------------------------------------------------------- page chrome */
 
 function toggleMeterPop(open) {
@@ -2330,6 +2457,14 @@ function toggleMeterPop(open) {
   const show = open ?? pop.hidden;
   pop.hidden = !show;
   $("meter-pill").setAttribute("aria-expanded", String(show));
+  if (show && !$("meter-once").hidden && looks.meterTipSeen !== true) {
+    meterTipOpen = true;
+    looks.meterTipSeen = true;
+    saveLooks();
+  } else if (!show && meterTipOpen) {
+    meterTipOpen = false;
+    renderMeter();
+  }
 }
 
 let whereResizeTimer = null;
@@ -2348,7 +2483,7 @@ async function openOutside(href) {
     .catch(() => false);
   if (ok) return;
   const link = el("code", "banner-link", href);
-  banner("That link could not open from here. Copy it and paste it into your browser: ", "warn", [link, document.createTextNode(" "), copyButton(href, "btn small", link)]);
+  banner("That link could not open from here. Copy it and paste it into your browser: ", "warn", [link, document.createTextNode(" "), copyButton(href, "btn sm", link)]);
 }
 
 export function wireChrome() {
@@ -2365,6 +2500,30 @@ export function wireChrome() {
   onAppMessage("terminal-state", (data) => {
     page.terminalCollapsed = data.collapsed === true;
     renderStatus();
+  });
+
+  // The app's shortcuts (Ctrl or Cmd with a backtick, 1, 2, Shift+N, O and a comma) are also typed
+  // here, inside its frame, where the shell never hears them: the page forwards the id and nothing
+  // else. And its Preferences shortcut asks this page to open User Preferences.
+  if (framed()) {
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        const id = shortcutIdFor(e, isMac());
+        if (!id) return;
+        e.preventDefault();
+        tellApp("shortcut", { id });
+      },
+      true
+    );
+  }
+  onAppMessage("open-help", () => {
+    if (document.querySelector("dialog[open]")) return;
+    openHelp();
+  });
+  onAppMessage("open-preferences", () => {
+    if (document.querySelector("dialog[open]")) return;
+    openPrefsDialog();
   });
 
   // Under the app, a link off the page goes to the default browser through
@@ -2412,19 +2571,7 @@ export function wireChrome() {
   });
 
   $("btn-send").addEventListener("click", send);
-  $("btn-clear").addEventListener("click", () => {
-    if (!confirm("Clear everything you have not sent yet?")) return;
-    page.local.staged = {};
-    // Every typed box, the same set markSent clears: a draft left behind would
-    // refill its box on the next render and look as if nothing was cleared.
-    const typed = ["thread-", "other-", "text-", "note-"];
-    for (const key of Object.keys(page.local.drafts)) if (typed.some((p) => key.startsWith(p))) delete page.local.drafts[key];
-    for (const [itemId, list] of Object.entries(page.local.images)) {
-      for (const img of list) removeImage(itemId, img.key);
-    }
-    saveNow();
-    redraw();
-  });
+  $("btn-clear").addEventListener("click", clearUnsent);
 
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -2434,6 +2581,22 @@ export function wireChrome() {
       e.preventDefault();
       send();
       return;
+    }
+    // ? opens Help where the `?` button does (its contextual tab), but never
+    // from a field, a select, an editor or the Notebook, behind an open dialog
+    // (a game plays in one) or with a modifier held. Matches the typed
+    // character, so a layout that needs Shift for it works.
+    if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.defaultPrevented && !document.querySelector("dialog[open]")) {
+      // The Markdown editors live in a shadow root, so the target is their
+      // host (.md-host) at the document: read the whole composed path.
+      const typing = e.composedPath().some(
+        (n) => n.nodeType === 1 && (n.isContentEditable || n.matches("input, textarea, select, .md-host, .cm-editor, [contenteditable]"))
+      );
+      if (!typing) {
+        e.preventDefault();
+        openHelp();
+        return;
+      }
     }
     // Escape is the confirm pane's Back — but not while a dialog has it. Native
     // dialogs close themselves on the same key; backing out of the pick at the

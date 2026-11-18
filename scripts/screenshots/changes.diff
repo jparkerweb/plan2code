@@ -1,0 +1,51 @@
+diff --git a/src/tasks/paginate.js b/src/tasks/paginate.js
+index 3f1a2b4..8c9d0e1 100644
+--- a/src/tasks/paginate.js
++++ b/src/tasks/paginate.js
+@@ -1,7 +1,9 @@
+ // Cursor paging for GET /tasks: up to 50 tasks a page, oldest first.
+-export function paginate(tasks, cursor, limit = 50) {
++export const MAX_LIMIT = 50;
++
++export function paginate(tasks, cursor, limit = MAX_LIMIT) {
+   const start = cursor ? tasks.findIndex((t) => t.id === cursor) + 1 : 0;
+-  const page = tasks.slice(start, start + limit);
++  const page = tasks.slice(start, start + Math.min(limit, MAX_LIMIT));
+   return { tasks: page, nextCursor: page.length === limit ? page[page.length - 1].id : null };
+ }
+diff --git a/src/tasks/routes.js b/src/tasks/routes.js
+new file mode 100644
+index 0000000..b7d5e22
+--- /dev/null
++++ b/src/tasks/routes.js
+@@ -0,0 +1,14 @@
++import { paginate } from "./paginate.js";
++import { taskSchema } from "./schema.js";
++
++// The /tasks routes: list with paging and filters, create, update, delete.
++export default async function routes(app) {
++  app.get("/tasks", async (req) => {
++    const { cursor, limit, status, assignee } = req.query;
++    const all = await app.db.tasks.find({ status, assignee });
++    return paginate(all, cursor, Number(limit) || undefined);
++  });
++
++  app.post("/tasks", { schema: { body: taskSchema } }, async (req, reply) => {
++    return reply.code(201).send(await app.db.tasks.insert(req.body));
++  });
++}
+diff --git a/src/tasks/schema.js b/src/tasks/schema.js
+new file mode 100644
+index 0000000..4d0e9a1
+--- /dev/null
++++ b/src/tasks/schema.js
+@@ -0,0 +1,8 @@
++// The Zod schema for a task.
++export const taskSchema = {
++  type: "object",
++  required: ["title"],
++  properties: {
++    title: { type: "string", minLength: 1 },
++    status: { enum: ["todo", "doing", "done"] },
++  },
++};

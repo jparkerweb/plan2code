@@ -13,9 +13,9 @@ export const CHAT_MAX_CHARS = 4000;
 export const CHAT_MAX_ATTACHMENTS = MAX_ATTACHMENTS;
 export const CHAT_MAX_IMAGES = CHAT_MAX_ATTACHMENTS;
 
-export const CHAT_LIMIT_TEXT = "That's 10 questions in this conversation — start a new one to keep going.";
-export const CHAT_OFFLINE_TEXT = "No agent available — wait for one to become available (your terminal might be working on a task or waiting a permission approval)";
-export const CHAT_LAST_WAIT_TEXT = "That was the last question in this conversation — its answer will land here.";
+export const CHAT_LIMIT_TEXT = "That's 10 questions in this conversation: start a new one to keep going.";
+export const CHAT_OFFLINE_TEXT = "No agent is free right now. It may be mid-task or waiting on a permission approval in your terminal.";
+export const CHAT_LAST_WAIT_TEXT = "That was the last question in this conversation: its answer will land here.";
 export const CHAT_WAITING_TEXT = "Plan2Code will answer at its next check-in";
 export const CHAT_WORKING_TEXT = "Plan2Code is working on the answer…";
 

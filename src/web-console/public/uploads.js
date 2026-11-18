@@ -2,7 +2,7 @@
 //
 // Shared by the question cards and the Ask pane, so neither imports the other.
 
-import { SVG_NS, el } from "./render.js";
+import { SVG_NS, el, icon } from "./render.js";
 import {
   docExt,
   formatBytes,
@@ -66,7 +66,7 @@ export function docChip(entry, status) {
 // card's own. Files go to the item's note attachments either way.
 export function attachRow(itemId, ariaLabel) {
   const row = el("div", "attach-row");
-  const btn = el("button", "btn small ghost", "+ Attach file");
+  const btn = el("button", "btn sm ghost", "+ Attach file");
   btn.type = "button";
   btn.setAttribute("aria-label", ariaLabel);
   btn.disabled = noteImages(itemId).length >= MAX_ATTACHMENTS;
@@ -114,7 +114,8 @@ export function attachTray(itemId, attached) {
         fig.appendChild(open);
       }
     }
-    const rm = el("button", "attach-remove", "×");
+    const rm = el("button", "attach-remove");
+    rm.appendChild(icon("close"));
     rm.type = "button";
     rm.setAttribute("aria-label", `Remove ${img.name}`);
     rm.addEventListener("click", () => removeImage(itemId, img.key));
@@ -126,10 +127,10 @@ export function attachTray(itemId, attached) {
     } else if (img.status === "failed") {
       const over = el("div", "attach-overlay failed");
       over.appendChild(el("span", null, "Upload failed"));
-      const retry = el("button", "btn tiny", "Retry");
+      const retry = el("button", "btn xs soft", "Retry");
       retry.type = "button";
       retry.addEventListener("click", () => retryImage(itemId, img.key));
-      const drop = el("button", "btn tiny", "Remove");
+      const drop = el("button", "btn xs soft", "Remove");
       drop.type = "button";
       drop.addEventListener("click", () => removeImage(itemId, img.key));
       over.appendChild(retry);
@@ -218,7 +219,14 @@ const retryBlobs = new Map();
 export const noteImages = (itemId) =>
   itemId === CHAT_IMAGES ? page.local.chat.images : (page.local.images && page.local.images[itemId]) || [];
 
-const findImage = (itemId, key) => noteImages(itemId).find((img) => img.key === key) || null;
+// A picture set aside by Clear (its Undo window is open) is still found by an
+// upload that lands meanwhile, so Undo restores it finished, not stuck uploading.
+let setAside = () => null;
+export function findSetAside(fn) {
+  setAside = fn;
+}
+
+const findImage = (itemId, key) => noteImages(itemId).find((img) => img.key === key) || setAside(itemId, key) || null;
 
 function setNoteImages(itemId, list) {
   if (itemId === CHAT_IMAGES) page.local.chat.images = list;
@@ -342,6 +350,20 @@ export async function removeImage(itemId, key) {
   redraw();
   // Errors are ignored: the 30-day sweep is the backstop.
   if (img && img.id) fetch(deleteUrl(img), { method: "DELETE" }).catch(() => {});
+}
+
+// Forgets pictures that were set aside by Clear once its Undo window closed:
+// their thumbnails, retry blobs and the files on the server. `lists` is the
+// page.local.images shape ({ itemId: [image] }). Errors are ignored: the
+// 30-day sweep is the backstop.
+export function purgeImages(lists) {
+  for (const list of Object.values(lists || {})) {
+    for (const img of list) {
+      thumbs.delete(img.key);
+      retryBlobs.delete(img.key);
+      if (img && img.id) fetch(deleteUrl(img), { method: "DELETE" }).catch(() => {});
+    }
+  }
 }
 
 async function retryImage(itemId, key) {

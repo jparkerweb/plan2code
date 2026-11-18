@@ -59,6 +59,15 @@ export function strengthsPanel(ctx, agentId, draft, { models, hasEffort }) {
     const m = modelList().find((x) => x.id === id);
     return m ? m.label || m.id : id;
   };
+  // The picked model as the model rows show it: the label (the description only,
+  // "latest Sonnet") with its id under it, as the launcher prints them side by side.
+  const modelName = (id) => {
+    const label = labelOf(id);
+    const span = el("span", "strength-model model-name");
+    span.append(label);
+    if (label !== id) span.append(el("code", null, id));
+    return span;
+  };
 
   const box = el("div", "strength-body prefs-agents-strengths");
   const pillSets = [];
@@ -100,7 +109,7 @@ export function strengthsPanel(ctx, agentId, draft, { models, hasEffort }) {
         label.append(wordChip(word), el("small", "help", HINTS[word]));
         row.appendChild(label);
         const pick = resolved[word];
-        row.appendChild(el("span", pick ? "strength-model" : "strength-model none", pick ? labelOf(pick.model) : "not mapped"));
+        row.appendChild(pick ? modelName(pick.model) : el("span", "strength-model none", "not mapped"));
         if (hasEffort) {
           const effort = el("select");
           effort.dataset.field = "effort";
@@ -117,7 +126,7 @@ export function strengthsPanel(ctx, agentId, draft, { models, hasEffort }) {
           row.appendChild(effort);
         }
         if (Object.prototype.hasOwnProperty.call(user, word)) {
-          const reset = el("button", "btn small ghost strength-reset", "Reset");
+          const reset = el("button", "btn sm ghost strength-reset", "Reset");
           reset.type = "button";
           reset.dataset.field = "reset";
           reset.setAttribute("aria-label", `Reset ${WORDS[word]}`);

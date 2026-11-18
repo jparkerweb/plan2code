@@ -30,12 +30,23 @@ const NARROW = "(max-width: 720px)";
 // `panels` the element holding one child per tab marked data-tab="<id>".
 // `beforeSelect(from, to)` returning false, or a Promise of false, holds the
 // switch; `onSelect(id)` runs after one.
-export function wireTabs({ tabs, list, panels, prefix, tabClass, renderTab, beforeSelect, onSelect }) {
+export function wireTabs({ tabs, list, panels, prefix, tabClass, renderTab, beforeSelect, onSelect, groupStart, groupClass = "tab-group" }) {
   const tabId = (id) => `${prefix}-tab-${id}`;
   const panelId = (id) => `${prefix}-panel-${id}`;
   let selected = null;
 
   for (const t of tabs) {
+    // A group heading: text only, never a tab stop, so the arrow keys skip it
+    // (they walk `tabs`, not the list's children).
+    const heading = groupStart ? groupStart(t.id) : null;
+    if (heading) {
+      const head = document.createElement("div");
+      head.className = groupClass;
+      head.setAttribute("role", "presentation");
+      head.dataset.before = t.id;
+      head.textContent = heading;
+      list.appendChild(head);
+    }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = tabClass;
@@ -60,14 +71,43 @@ export function wireTabs({ tabs, list, panels, prefix, tabClass, renderTab, befo
     panel.hidden = true;
   }
 
+  // The tabs a filter has not hidden, in order: what the arrow keys walk.
+  const shown = () => tabs.filter((t) => !document.getElementById(tabId(t.id)).hidden);
+
   list.addEventListener("keydown", (e) => {
-    const current = tabs.findIndex((t) => tabId(t.id) === e.target.id);
+    const walk = shown();
+    const current = walk.findIndex((t) => tabId(t.id) === e.target.id);
     if (current < 0) return;
-    const n = tabKeyTarget(e.key, current, tabs.length);
+    const n = tabKeyTarget(e.key, current, walk.length);
     if (n < 0) return;
     e.preventDefault();
-    select(tabs[n].id, { focus: true });
+    select(walk[n].id, { focus: true });
   });
+
+  // Hides the tabs `keep(tab)` refuses, and a group heading once none of its
+  // tabs is left. Returns how many tabs are still shown. The selected tab's
+  // panel stays up either way.
+  function filter(keep) {
+    let count = 0;
+    // One tab stop at a time: the selected tab's, or, when the filter hides it,
+    // the first one still shown, so the list stays reachable by keyboard.
+    for (const t of tabs) document.getElementById(tabId(t.id)).tabIndex = -1;
+    for (const t of tabs) {
+      const on = !keep || Boolean(keep(t));
+      document.getElementById(tabId(t.id)).hidden = !on;
+      if (on) count++;
+    }
+    // A heading belongs to the run of tabs from its own to the next heading.
+    const heads = [...list.querySelectorAll("." + groupClass)];
+    heads.forEach((head, i) => {
+      const from = tabs.findIndex((t) => t.id === head.dataset.before);
+      const next = heads[i + 1] ? tabs.findIndex((t) => t.id === heads[i + 1].dataset.before) : tabs.length;
+      head.hidden = !tabs.slice(from, next).some((t) => !document.getElementById(tabId(t.id)).hidden);
+    });
+    const stop = tabs.find((t) => t.id === selected && !document.getElementById(tabId(t.id)).hidden) || shown()[0];
+    if (stop) document.getElementById(tabId(stop.id)).tabIndex = 0;
+    return count;
+  }
 
   const narrow = matchMedia(NARROW);
   const orient = () => list.setAttribute("aria-orientation", narrow.matches ? "horizontal" : "vertical");
@@ -99,5 +139,5 @@ export function wireTabs({ tabs, list, panels, prefix, tabClass, renderTab, befo
     return true;
   }
 
-  return { select, current: () => selected };
+  return { select, filter, shown, current: () => selected };
 }

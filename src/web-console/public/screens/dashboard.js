@@ -13,8 +13,9 @@ import {
   learningBusyNow,
   LEARNING_BUSY_MS,
 } from "../selectors.js";
+import { whenTitle, whenWords } from "../labels.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
-import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss, SVG_NS } from "../render.js";
+import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss, icon, SVG_NS } from "../render.js";
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
 import { looks, saveLooks } from "../looks.js";
 import { RED_BANNER, RED_BANNER_IN_APP } from "../meter.js";
@@ -75,39 +76,56 @@ export let wakeHoldsChime = false;
 // the waking click, since browsers refuse sound before one.
 let snore = null;
 
-function roleNudge() {
-  const nudge = el("div", "dash-nudge");
-  nudge.setAttribute("role", "status");
-  nudge.appendChild(el("span", "dash-nudge-text", "Pick your role to get starter templates ordered for you."));
-  const actions = el("div", "dash-nudge-actions");
-  const setUp = el("button", "btn small primary", "Set up preferences");
-  setUp.type = "button";
-  setUp.addEventListener("click", () => {
-    // Closed without a role is a "Not now" too: having been to the dialog,
-    // they were asked, and the banner does not come back (Help says so).
-    $("looks-modal").addEventListener(
-      "close",
-      () => {
-        if (looks.role === undefined) {
-          looks.role = ROLE_NOT_SET;
-          saveLooks();
-          redraw();
-        }
-      },
-      { once: true }
-    );
+// The role is asked once; closing Preferences without one, or Not now, counts
+// as asked and ends the line (Help says so).
+function roleAsked() {
+  if (looks.role === undefined) {
+    looks.role = ROLE_NOT_SET;
+    saveLooks();
+    redraw();
+  }
+}
+
+// After the first launch: one quiet line for the two optional extras, a role
+// (starter templates ordered for you) and Learning. Until then both are held,
+// so the first dashboard offers a card and nothing else.
+function extrasLine() {
+  const line = el("p", "dash-extras");
+  // Learning is only on offer while it is Not set up; the role is always there
+  // (the line shows only while the role is unasked).
+  const learning = scan() && scan().learning;
+  const withLearning = Boolean(learning && learning.state === "not-set-up");
+  line.appendChild(document.createTextNode(withLearning ? "Two optional extras: " : "One optional extra: "));
+  const role = el("button", "dash-extras-link", "set your role");
+  role.type = "button";
+  role.addEventListener("click", () => {
+    $("looks-modal").addEventListener("close", roleAsked, { once: true });
     hooks.openPrefs("appearance");
   });
-  const notNow = el("button", "btn tiny ghost", "Not now");
+  line.appendChild(role);
+  if (withLearning) {
+    line.appendChild(document.createTextNode(", "));
+    const learn = el("button", "dash-extras-link", "switch on Learning");
+    learn.type = "button";
+    learn.addEventListener("click", () => {
+      const row = $("main").querySelector(".learn-row");
+      if (!row) return;
+      row.scrollIntoView({ block: "center" });
+      const go = row.querySelector("button");
+      if (go) go.focus();
+    });
+    line.appendChild(learn);
+  }
+  line.appendChild(document.createTextNode("."));
+  const notNow = el("button", "btn xs soft", "Not now");
   notNow.type = "button";
   notNow.addEventListener("click", () => {
     looks.role = ROLE_NOT_SET;
     saveLooks();
     redraw();
   });
-  actions.append(setUp, notNow);
-  nudge.appendChild(actions);
-  return nudge;
+  line.appendChild(notNow);
+  return line;
 }
 
 // × on the update banner hides it for this console session only, and only
@@ -131,7 +149,7 @@ function updateDismissed() {
 const UPDATE_COMMAND = "plan2code update";
 
 // For a machine without the plan2code command: the full installer, menu and all.
-const UPDATE_FALLBACK_COMMAND = "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git";
+const UPDATE_FALLBACK_COMMAND = "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release";
 
 function openUpdateModal() {
   if (!page.updateFrame) return;
@@ -139,24 +157,27 @@ function openUpdateModal() {
   versions.replaceChildren(
     document.createTextNode("Version "),
     releasesLink("v" + page.updateFrame.latest),
-    document.createTextNode(" is out — you have "),
+    document.createTextNode(" is out, you have "),
     el("code", null, page.updateFrame.installed),
     document.createTextNode(".")
   );
   const row = $("update-command");
   const code = el("code", null, UPDATE_COMMAND);
-  row.replaceChildren(code, copyButton(UPDATE_COMMAND, "btn small ghost handoff-copy", code));
+  row.replaceChildren(code, copyButton(UPDATE_COMMAND, "btn sm ghost handoff-copy", code));
   const fallbackRow = $("update-fallback");
   const fallback = el("code", null, UPDATE_FALLBACK_COMMAND);
-  fallbackRow.replaceChildren(fallback, copyButton(UPDATE_FALLBACK_COMMAND, "btn small ghost handoff-copy", fallback));
-  // Under the app, its terminal panel runs the agent, and the app it would
-  // update is the one running this page.
-  $("update-step-run").textContent = page.inApp
-    ? "Run this in a terminal outside the app (not in its terminal panel, which runs your agent):"
-    : "Run this in your terminal (not in this page or your agent):";
+  fallbackRow.replaceChildren(fallback, copyButton(UPDATE_FALLBACK_COMMAND, "btn sm ghost handoff-copy", fallback));
+  // Under the app, the bar's Update and restart does all of it in one click;
+  // the command is the fallback, and its terminal panel runs the agent, so
+  // it goes in a terminal outside the app.
+  $("update-step-run").replaceChildren(
+    ...(page.inApp
+      ? ["Press ", el("strong", null, "Update and restart"), " in the app's top bar. Or run this in a terminal outside the app (not in its terminal panel, which runs your agent):"]
+      : ["Run this in your terminal (not in this page or your agent):"])
+  );
   $("update-step-restart").replaceChildren(
     ...(page.inApp
-      ? ["When it finishes, close the app and open it again."]
+      ? ["Update and restart reopens the app by itself. After the command, close the app and open it again."]
       : ["When it finishes, close this console and start ", el("code", null, "plan2code"), " again."])
   );
   $("update-modal").showModal();
@@ -173,10 +194,10 @@ export function renderDashboard(main) {
   settleDeleting();
   const menu = (page.S && page.S.menu) || {};
   const wrap = el("div", "dash");
-  if (needsRoleNudge(looks)) wrap.appendChild(roleNudge());
+  const firstRun = looks.skillLaunched !== true;
   // Advice only: words, never a button, and nothing is blocked.
   if (page.meterFrame && page.meterFrame.level === "red") {
-    const warn = el("div", "dash-nudge meter-banner", page.inApp ? RED_BANNER_IN_APP : RED_BANNER);
+    const warn = el("div", "callout is-warn dash-nudge meter-banner", page.inApp ? RED_BANNER_IN_APP : RED_BANNER);
     warn.setAttribute("role", "status");
     wrap.appendChild(warn);
   }
@@ -186,12 +207,13 @@ export function renderDashboard(main) {
   // (the bar's one-click Update skills only levels skills to the app's own
   // version), and the modal words its steps for the app.
   if (page.updateFrame && !updateDismissed()) {
-    const notice = el("div", "dash-nudge update-banner");
+    const notice = el("div", "callout is-info dash-nudge update-banner");
     notice.setAttribute("role", "status");
-    const open = el("button", "update-banner-open", "UPDATE AVAILABLE · v" + page.updateFrame.latest);
+    const open = el("button", "update-banner-open", "Update available · v" + page.updateFrame.latest);
     open.type = "button";
     open.addEventListener("click", openUpdateModal);
-    const dismiss = el("button", "update-banner-dismiss", "×");
+    const dismiss = el("button", "update-banner-dismiss");
+    dismiss.appendChild(icon("close"));
     dismiss.type = "button";
     dismiss.setAttribute("aria-label", "Dismiss until next time");
     dismiss.addEventListener("click", () => {
@@ -207,6 +229,7 @@ export function renderDashboard(main) {
   // title (the others are more urgent). Hidden while paused or off.
   const learnBanner = learningBanner(scan());
   if (learnBanner) wrap.appendChild(learnBanner);
+  if (!firstRun && needsRoleNudge(looks)) wrap.appendChild(extrasLine());
   wrap.appendChild(el("p", "card-kicker", "Plan2Code"));
   wrap.appendChild(el("h2", "dash-title", "What are we doing today?"));
   // The agent's note reads the spec the picker opened on (the same "initial"
@@ -286,7 +309,7 @@ export function renderDashboard(main) {
   }
   if (!shown) {
     wrap.appendChild(
-      el("p", "dash-empty", "Nothing fits this pick right now. Turn off the toggle above to see every workflow.")
+      el("p", "empty", "Nothing fits this pick right now. Turn off the toggle above to see every skill.")
     );
   }
   // Learning while on: after the last card group, before the approval tip.
@@ -505,7 +528,7 @@ function hideUnavailableToggle() {
   });
   label.appendChild(box);
   label.appendChild(el("span", "dash-toggle-track"));
-  label.appendChild(el("span", "dash-toggle-text", "Hide unavailable workflows"));
+  label.appendChild(el("span", "dash-toggle-text", "Hide unavailable skills"));
   return label;
 }
 
@@ -563,7 +586,8 @@ function renderSpecPicker(specs) {
     if (isDeletableSpecDir(spec.dir)) {
       // A fixed bug is done with, so its Delete is a visible button rather
       // than the hover ✕ every other spec has.
-      const del = fixed ? el("button", "spec-chip-del-label", "Delete") : el("button", "spec-chip-del", "✕");
+      const del = fixed ? el("button", "spec-chip-del-label", "Delete") : el("button", "spec-chip-del");
+      if (!fixed) del.appendChild(icon("close"));
       del.type = "button";
       del.title = `Delete ${spec.dir}/`;
       del.setAttribute("aria-label", `Delete the spec ${spec.name}`);
@@ -611,11 +635,13 @@ function renderHandoffPreview(h) {
   box.appendChild(el("h3", "handoff-preview-title", h.title || "Handoff"));
   const entry = catalogEntry(h.skill);
   const meta = [
-    "Written " + (h.written ? new Date(h.written).toLocaleString() : "at an unknown time"),
+    "Written " + (h.written ? whenWords(h.written) || "at an unknown time" : "at an unknown time"),
     h.spec ? "spec " + h.spec.replace(/^specs\//, "") : "no spec",
     "from " + (entry ? entry.title : h.skill),
   ];
-  box.appendChild(el("p", "handoff-preview-meta", meta.join(" · ")));
+  const metaLine = el("p", "handoff-preview-meta", meta.join(" · "));
+  if (h.written) metaLine.title = whenTitle(h.written);
+  box.appendChild(metaLine);
   if (h.next) {
     box.appendChild(el("p", "handoff-preview-label", "Next task"));
     box.appendChild(el("p", "handoff-preview-next", h.next));
@@ -740,8 +766,8 @@ function dashCard(entry, menu) {
   if (!presentation.on && presentation.reason) b.title = presentation.reason;
 
   const head = el("span", "dash-card-head");
-  head.appendChild(el("span", "dash-chip", entry.chip));
-  if (presentation.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
+  head.appendChild(el("span", "pill is-neutral is-caps dash-chip", entry.chip));
+  if (presentation.recommended) head.appendChild(el("span", "pill is-accent is-caps suggested", "Suggested"));
   b.appendChild(head);
   const title = el("span", "dash-card-title");
   if (entry.icon) {
@@ -770,7 +796,14 @@ function dashCard(entry, menu) {
     page.dashPick = entry;
     redraw();
   });
-  if (entry.appOnly) b.appendChild(loopHelpLink());
+  // "How the loop works" is a link of its own beside the card, never inside
+  // the button (a link in a button is not valid and reads badly aloud).
+  if (entry.appOnly) {
+    const wrap = el("div", "dash-card-wrap");
+    wrap.appendChild(b);
+    wrap.appendChild(loopHelpLink());
+    return wrap;
+  }
   return b;
 }
 
@@ -782,19 +815,12 @@ function loopPresentation(entry, menu) {
   return { ...cardPresentation(entry, scan(), selSpec(), menu), recommended: false };
 }
 
-// "How the loop works" on the card: a link inside a button is not allowed, so
-// it is a span that acts like one and keeps the click from opening the setup.
+// "How the loop works" under the card: a real button styled as a link, a
+// sibling of the card button inside its wrapper.
 function loopHelpLink() {
-  const a = el("span", "dash-card-link", "How the loop works");
-  a.setAttribute("role", "link");
-  a.tabIndex = 0;
-  const open = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    hooks.openHelpOn("loop");
-  };
-  a.addEventListener("click", open);
-  a.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && open(e));
+  const a = el("button", "dash-card-link", "How the loop works");
+  a.type = "button";
+  a.addEventListener("click", () => hooks.openHelpOn("loop"));
   return a;
 }
 
@@ -908,7 +934,7 @@ function drawNoteBox(entry, box, cmdNote) {
   label.append(toggle, el("span", "confirm-note-switch-text", "Start with a note from your Notebook"));
   // A callout row, so the switch stands out under the card's long text; the
   // hint sits outside the label to keep the checkbox's name short.
-  const head = el("div", "confirm-note-head" + (state.on ? " is-on" : ""));
+  const head = el("div", "callout is-info confirm-note-head" + (state.on ? " is-on" : ""));
   head.appendChild(label);
   if (!state.on) {
     const hint = el("span", "confirm-note-hint", "Hand it a tab you wrote earlier, with its pictures.");
@@ -927,7 +953,12 @@ function drawNoteBox(entry, box, cmdNote) {
   if (state.tabs === null) {
     wrap.appendChild(el("p", "confirm-note-msg", "Reading your Notebook…"));
   } else if (state.failed) {
-    wrap.appendChild(el("p", "confirm-note-msg", "Your Notebook could not be read. Turn the switch off and on to try again."));
+    wrap.appendChild(el("p", "confirm-note-msg", "Your Notebook could not be read."));
+    const retry = el("button", "btn xs soft confirm-note-retry", "Try again");
+    retry.type = "button";
+    retry.dataset.noteFocus = "retry";
+    retry.addEventListener("click", () => refreshNoteTabs(state, true));
+    wrap.appendChild(retry);
   } else if (!state.tabs.length) {
     wrap.appendChild(el("p", "confirm-note-msg", "Your Notebook has no tabs yet. Open it from the top bar to write one."));
   } else {
@@ -943,7 +974,7 @@ function drawNoteBox(entry, box, cmdNote) {
       b.setAttribute("aria-pressed", String(t.id === state.picked));
       b.appendChild(el("span", "confirm-note-tab-name", t.name));
       if (t.sent) {
-        const badge = el("span", "notepad-sent-badge", "previously sent");
+        const badge = el("span", "pill is-accent notepad-sent-badge", "previously sent");
         badge.setAttribute("aria-hidden", "true");
         b.appendChild(badge);
       }
@@ -1055,8 +1086,8 @@ export function renderConfirm(main, entry) {
   pane.appendChild(stage);
 
   const head = el("div", "confirm-head");
-  head.appendChild(el("span", "dash-chip", entry.chip));
-  if (presentation.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
+  head.appendChild(el("span", "pill is-neutral is-caps dash-chip", entry.chip));
+  if (presentation.recommended) head.appendChild(el("span", "pill is-accent is-caps suggested", "Suggested"));
   pane.appendChild(head);
   pane.appendChild(el("h2", "dash-title", entry.title));
   pane.appendChild(el("p", "confirm-about", entry.about || entry.blurb));
@@ -1086,7 +1117,7 @@ export function renderConfirm(main, entry) {
       page.dashReview = review.checked;
       cmdCode.textContent = launchVariant(entry, review.checked).command;
     });
-    label.append(review, el("span", null, "Auto Review: fresh agent pass over the phase's changes before sign-off"));
+    label.append(review, el("span", null, "Review each phase with a fresh agent before sign-off"));
     pane.appendChild(label);
   }
 
@@ -1151,7 +1182,7 @@ export async function launchSkill(entry) {
   // The card was clickable, so this should never fire — but a spec picked in
   // one tab could have shifted the ground under a stale render in another.
   if (!cardAvailability(entry, scan(), selSpec()).on) {
-    hooks.banner("That card is not available for the spec you picked.", "warn");
+    hooks.banner("That skill is not available for the spec you picked.", "warn");
     redraw();
     return;
   }
@@ -1210,6 +1241,12 @@ export async function launchSkill(entry) {
     }
     if (!res.ok) throw new Error(String(res.status));
     sound("startSkill");
+    // The first launch from this machine ends the first-run hold on the
+    // optional extras (never cleared, not even by Back to default).
+    if (looks.skillLaunched !== true) {
+      looks.skillLaunched = true;
+      saveLooks();
+    }
     page.local.launching = { skill: entry.skill, title: entry.title, at: Date.now() };
     page.launchScoping = false;
     page.pendingResult = true;
@@ -1251,14 +1288,16 @@ function openHandoffDelete(h) {
   $("delete-warn-handoff").hidden = false;
   const facts = $("delete-facts");
   facts.replaceChildren();
-  const fact = (term, value) => {
+  const fact = (term, value, title) => {
     if (!value) return;
     facts.appendChild(el("dt", "", term));
-    facts.appendChild(el("dd", "", value));
+    const dd = el("dd", "", value);
+    if (title) dd.title = title;
+    facts.appendChild(dd);
   };
   const entry = catalogEntry(h.skill);
   fact("Handoff", h.title || h.id);
-  fact("Written", h.written ? new Date(h.written).toLocaleString() : "");
+  fact("Written", h.written ? whenWords(h.written) : "", h.written ? whenTitle(h.written) : "");
   fact("Spec", h.spec ? h.spec.replace(/^specs\//, "") : "");
   fact("From", entry ? entry.title : h.skill);
   $("delete-confirm").hidden = true;
@@ -1289,16 +1328,18 @@ function openDeleteConfirm(spec) {
   $("delete-blurb").textContent = `Everything in ${sum.folder} will be deleted from this project.`;
   const facts = $("delete-facts");
   facts.replaceChildren();
-  const fact = (term, value) => {
+  const fact = (term, value, title) => {
     if (!value) return;
     facts.appendChild(el("dt", "", term));
-    facts.appendChild(el("dd", "", value));
+    const dd = el("dd", "", value);
+    if (title) dd.title = title;
+    facts.appendChild(dd);
   };
   fact("Spec", spec.name);
   fact("Folder", sum.folder);
   fact("Stage", sum.stage);
   fact("Files", sum.files);
-  fact("Last changed", sum.touched ? new Date(sum.touched).toLocaleString() : "");
+  fact("Last changed", sum.touched ? whenWords(sum.touched) : "", sum.touched ? whenTitle(sum.touched) : "");
   $("delete-name-hint").textContent = spec.name;
   $("delete-name").value = "";
   $("delete-confirm").hidden = true;
@@ -1402,7 +1443,7 @@ function learningBanner(sc) {
   const working = busy && (busy.what === "review" || busy.what === "decide") ? busy : null;
   const text = learningBannerText(sc && sc.learning);
   if (!text && !working) return null;
-  const banner = el("div", "dash-nudge learn-banner");
+  const banner = el("div", "callout is-info dash-nudge learn-banner");
   banner.setAttribute("role", "status");
   if (working) {
     banner.classList.add("is-busy");
@@ -1411,7 +1452,7 @@ function learningBanner(sc) {
     line.append(el("span", "spinner tiny"), document.createTextNode(working.what === "review" ? "Opening lessons…" : "Saving your lessons…"));
     banner.appendChild(line);
     if (working.what === "review") {
-      const review = el("button", "btn small primary", "Review");
+      const review = el("button", "btn sm primary", "Review");
       review.type = "button";
       review.disabled = true;
       banner.appendChild(review);
@@ -1419,7 +1460,7 @@ function learningBanner(sc) {
     return banner;
   }
   banner.appendChild(el("span", "dash-nudge-text", text));
-  const review = el("button", "btn small primary", "Review");
+  const review = el("button", "btn sm primary", "Review");
   review.type = "button";
   const why = hooks.learningBlocked();
   review.disabled = Boolean(why);
@@ -1453,8 +1494,8 @@ function watchLearningBusy(busy) {
     clearInterval(timer);
     page.learningBusy = null;
     if (busy.what === "review") {
-      hooks.banner("No lessons are waiting any more.", "info");
-      setTimeout(() => hooks.banner(null), 4000);
+      const none = hooks.banner("No lessons are waiting any more.", "info");
+      setTimeout(() => hooks.clearBanner(none), 4000);
     }
     redraw();
   }, 400);

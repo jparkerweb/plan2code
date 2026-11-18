@@ -2,47 +2,34 @@
 
 /* ------------------------------------------------------------ dashboard */
 
-/* The dashboard replaces the question column with a menu, and the send bar
-   with a click on a card. `hidden` alone loses to the bar's own display
-   rule, so it needs saying here. */
+/* The dashboard replaces the question column and send bar. `hidden` alone loses to the bar's display rule. */
 .footer[hidden] { display: none; }
 
-/* The menu follows the Card width setting like the question column does. */
+/* Follows the Card width setting. */
 .dash { max-width: min(var(--card-width), 100%); padding-top: 8px; }
 .dash-title { margin: 6px 0 8px; font: 600 clamp(26px, 4vw, 36px)/1.1 var(--serif); }
-.dash-note { margin: 0 0 26px; font-size: 14.5px; color: var(--ink-2); }
-/* The first-run role nudge: one line above the title, wrapping on a narrow
-   window, until looks.json carries a role. */
+.dash-note { margin: 0 0 26px; font-size: var(--fs-base); color: var(--ink-2); }
+/* First-run role nudge, shown until looks.json carries a role. */
 .dash-nudge {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
   margin: 0 0 18px;
-  padding: 10px 14px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius);
-  color: var(--ink);
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .dash-nudge-text { flex: 1 1 16em; }
-/* The session meter at red: the same slot, in the careful color. */
-.dash-nudge.meter-banner {
-  background: var(--warn-soft);
-  border-color: var(--warn);
-  border-left-width: 4px;
-  color: var(--ink);
-}
-/* A newer release: the same slot, in the accent, with the label as the way
-   into the update modal and a small × that hides it for this session. */
+/* After the first launch: the two optional extras as one quiet line. */
+.dash-extras { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--ink-3); }
+.dash-extras .btn { margin-left: 10px; }
+.dash-extras-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+.dash-extras-link:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
+/* Session meter at red: same slot, warn color. */
+/* Newer release: same slot, accent; the label opens the update modal, the x hides it for the session. */
 .dash-nudge.update-banner {
   position: relative;
   padding-left: 40px;
   padding-right: 40px;
-  border-left-width: 4px;
-  border-left-color: var(--accent-line);
-  color: var(--ink);
   box-shadow: var(--glow);
 }
 .update-banner-open {
@@ -58,8 +45,7 @@
   cursor: pointer;
 }
 .update-banner-open:hover { text-decoration: underline; }
-/* Pinned to the right edge, out of the flow, so the label centers on the
-   whole banner rather than on what the × leaves of it. */
+/* Out of the flow so the label centers on the whole banner. */
 .update-banner-dismiss {
   position: absolute;
   top: 50%;
@@ -71,18 +57,21 @@
   background: none;
   color: inherit;
   font: inherit;
-  font-size: 16px;
+  font-size: var(--fs-h4);
   line-height: 1;
   cursor: pointer;
 }
 .update-banner-dismiss:hover { background: var(--accent-line); }
-/* Wide enough that the update command sits on one line beside Copy; a
-   narrow window still wraps it rather than overflowing. */
+/* Wide enough for the command on one line beside Copy; wraps when narrow. */
 #update-modal { max-width: 720px; }
 .update-steps { margin: 0 0 12px; padding-left: 1.4em; color: var(--ink); }
 .update-steps li { margin: 4px 0; }
-/* The hand-off copy row, in the modal's first step: the command and its Copy
-   side by side. */
+/* Closed until the one command did not work. */
+.update-more { margin: 10px 0 0; }
+.update-more summary { cursor: pointer; color: var(--ink-2); }
+.update-more summary:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
+.update-more p { margin: 8px 0 4px; color: var(--ink-2); }
+/* The command and its Copy side by side. */
 .update-command {
   margin: 6px 0 4px;
   display: flex;
@@ -93,17 +82,16 @@
 .update-command code {
   flex: 1 1 260px;
   min-width: 0;
-  font: 13px/1.5 var(--mono);
+  font: var(--fs-sm)/1.5 var(--mono);
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--rule-2);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .dash-nudge-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.dash-nudge-actions .btn.tiny { margin-bottom: 0; }
 .dash-working {
   display: flex;
   align-items: center;
@@ -114,22 +102,21 @@
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   font-weight: 600;
 }
 
 .dash-group { margin-bottom: 30px; }
 
-/* A switch, not a checkbox look: it filters the menu live rather than being
-   an answer. The real checkbox stays in the tree (visually hidden) so the
-   keyboard, focus ring and screen readers all work as for any input. */
+/* A switch: it filters live, not an answer. The real checkbox stays (visually
+   hidden) so keyboard, focus ring and screen readers work. */
 .dash-toggle {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   margin: -12px 0 26px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   color: var(--ink-2);
   cursor: pointer;
   user-select: none;
@@ -140,10 +127,10 @@
   flex: none;
   width: 34px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel-2);
   border: 1px solid var(--rule-2);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background var(--dur-1), border-color var(--dur-1);
 }
 .dash-toggle-track::after {
   content: "";
@@ -154,40 +141,31 @@
   height: 14px;
   border-radius: 50%;
   background: var(--ink-3);
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: transform var(--dur-1), background var(--dur-1);
 }
 .dash-toggle input:checked + .dash-toggle-track { background: var(--accent); border-color: var(--accent); }
 .dash-toggle input:checked + .dash-toggle-track::after { transform: translateX(14px); background: var(--accent-ink); }
-.dash-toggle input:focus-visible + .dash-toggle-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dash-toggle input:focus-visible + .dash-toggle-track { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .dash-toggle:hover .dash-toggle-track { border-color: var(--accent-line); }
 
-.dash-empty { margin: 0 0 30px; font-size: 13.5px; color: var(--ink-3); font-style: italic; }
 .dash-group-title {
   margin: 0 0 12px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-3);
   border-bottom: 1px solid var(--rule);
   padding-bottom: 8px;
 }
 
-/* Every card in a group has one width, `--dash-cols` to a row: the dashboard
-   picks the count (card-rows.js) so no card sits alone on a row, and centers a
-   last row still short. The 3 is only the first paint's guess. */
+/* One card width, `--dash-cols` per row: card-rows.js picks the count so no
+   card sits alone, and centers a short last row. The 3 is a first-paint guess. */
 .dash-grid {
   --dash-cols: 3;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
-.dash-grid > .dash-card { flex: 0 0 calc((100% - (var(--dash-cols) - 1) * 12px) / var(--dash-cols)); min-width: 0; }
+.dash-grid > .dash-card, .dash-grid > .dash-card-wrap { flex: 0 0 calc((100% - (var(--dash-cols) - 1) * 12px) / var(--dash-cols)); min-width: 0; }
 .dash-grid.is-centered { justify-content: center; }
 
-/* A card IS a button, so it carries the reset the page's other big clickable
-   surfaces do; the look is the panel look with a lift on hover, and the
-   accent border that elsewhere means "the thing in play". */
+/* A card is a button, so it carries the usual reset; panel look, lifts on hover. */
 .dash-card {
   display: flex;
   flex-direction: column;
@@ -200,35 +178,25 @@
   text-align: left;
   color: var(--ink);
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: transform var(--dur-1), box-shadow var(--dur-1), border-color var(--dur-1);
 }
 .dash-card:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: var(--accent-line);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-2);
 }
-.dash-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dash-card:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .dash-card:disabled { cursor: default; opacity: 0.55; }
 .dash-card.is-suggested { border-color: var(--accent); }
 .dash-card.is-going { border-color: var(--accent); opacity: 1; }
 
 .dash-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.dash-chip {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  border: 1px solid var(--rule-2);
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-.dash-card.is-suggested .dash-chip { color: var(--accent); border-color: var(--accent-line); }
+.dash-card.is-suggested .dash-chip { --t: var(--accent); --t-line: var(--accent-line); }
 
 /* The card icon sheet: present for <use href>, never drawn itself. */
 .card-icons { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-.dash-card-title { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 650; }
+.dash-card-title { display: flex; align-items: center; gap: 7px; font-size: var(--fs-base); font-weight: 600; }
 .dash-card-icon {
   width: 16px;
   height: 16px;
@@ -240,8 +208,8 @@
   stroke-linejoin: round;
 }
 .dash-card.is-suggested .dash-card-icon { stroke: var(--accent); }
-.dash-card-blurb { font-size: 13px; color: var(--ink-2); flex: 1; }
-.dash-card-detail { font-size: 12px; color: var(--accent); }
+.dash-card-blurb { font-size: var(--fs-sm); color: var(--ink-2); flex: 1; }
+.dash-card-detail { font-size: var(--fs-xs); color: var(--accent); }
 
 .dash-card-foot {
   display: flex;
@@ -252,26 +220,23 @@
   padding-top: 10px;
   border-top: 1px solid var(--rule);
 }
-/* Wraps at the dashes rather than cut off: a command missing its end
-   ("/plan2code-3-implement-revi…") is no command at all. */
+/* Wraps at the dashes, never cut off: a truncated command is no command. */
 .dash-card-cmd {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink-3);
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.dash-card-go { color: var(--accent); font-weight: 700; transition: transform 0.15s ease; }
+.dash-card-go { color: var(--accent); font-weight: 700; transition: transform var(--dur-1); }
 .dash-card:hover:not(:disabled) .dash-card-go { transform: translateX(3px); }
 
-/* The reason a card is off. The card grays via :disabled; this line is why,
-   so the menu teaches the pipeline instead of just refusing clicks. */
-.dash-card-off { font-size: 12px; color: var(--ink-3); font-style: italic; }
+/* Why a card is off (it grays via :disabled), so the menu teaches the pipeline. */
+.dash-card-off { font-size: var(--fs-xs); color: var(--ink-3); font-style: italic; }
 
 /* -------------------------------------------------------- spec picker */
 
-/* The picker's chips are the same vocabulary as the rail's items: a bordered
-   lozenge that lights up on the current one. */
+/* Chips match the rail's items: a bordered lozenge lit on the current one. */
 .spec-pick { margin-bottom: 30px; }
 .spec-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .spec-chip {
@@ -286,22 +251,18 @@
   text-align: left;
   color: var(--ink);
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--dur-1), box-shadow var(--dur-1);
 }
 .spec-chip:hover { border-color: var(--accent-line); }
-.spec-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.spec-chip.is-sel { border-color: var(--accent); box-shadow: var(--shadow); }
-.spec-chip-name { font-size: 13.5px; font-weight: 650; }
+.spec-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
+.spec-chip.is-sel { border-color: var(--accent); box-shadow: var(--shadow-1); }
+.spec-chip-name { font-size: var(--fs-md); font-weight: 600; }
 .spec-chip-state {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--accent);
 }
 .spec-chip:not(.is-sel) .spec-chip-state { color: var(--ink-3); }
-.spec-chip-detail { font-size: 11.5px; color: var(--ink-3); }
-/* A handoff in the picker: the same lozenge, dashed, in the stage color. */
+.spec-chip-detail { font-size: var(--fs-xs); color: var(--ink-3); }
+/* A handoff: dashed, stage color. */
 .spec-chip.is-handoff { border-style: dashed; }
 .spec-chip.is-handoff .spec-chip-state, .spec-chip.is-handoff:not(.is-sel) .spec-chip-state { color: var(--stage); }
 .spec-chip.is-handoff.is-sel { border-style: solid; border-color: var(--stage); }
@@ -315,17 +276,13 @@
   border: 1px solid var(--stage);
   border-radius: var(--radius);
 }
-.handoff-preview-title { font: 600 20px/1.25 var(--serif); margin: 0 0 4px; }
-.handoff-preview-meta { margin: 0 0 14px; font-size: 12.5px; color: var(--ink-3); }
+.handoff-preview-title { font: 600 var(--fs-h2)/1.25 var(--serif); margin: 0 0 4px; }
+.handoff-preview-meta { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--ink-3); }
 .handoff-preview-label {
   margin: 0 0 3px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--stage);
 }
-.handoff-preview-next { margin: 0 0 16px; font-size: 14px; color: var(--ink); }
+.handoff-preview-next { margin: 0 0 16px; font-size: var(--fs-md); color: var(--ink); }
 .handoff-preview-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .handoff-preview-actions .btn.danger { margin-left: auto; }
 .modal.handoff-read { width: min(960px, calc(100vw - 32px)); max-width: none; }
@@ -334,8 +291,7 @@
 .handoff-body.md { max-width: none; }
 .modal.handoff-read .modal-actions { flex: none; }
 
-/* A spec's Delete button sits beside its chip, not inside it: a button cannot
-   hold a button. Quiet until the chip is hovered or focused. */
+/* Delete sits beside its chip (a button cannot hold a button); quiet until hover or focus. */
 .spec-chip-wrap { position: relative; display: flex; }
 .spec-chip-wrap.is-fixed .spec-chip:not(.is-sel) { opacity: 0.6; }
 .spec-chip-wrap .spec-chip { padding-right: 36px; }
@@ -349,11 +305,11 @@
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--ink-3);
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-base);
   line-height: 1;
   cursor: pointer;
   opacity: 0.55;
@@ -361,11 +317,10 @@
 .spec-chip-wrap:hover .spec-chip-del,
 .spec-chip-del:focus-visible { opacity: 1; }
 .spec-chip-del:hover { color: var(--warn); border-color: var(--warn); opacity: 1; }
-.spec-chip-del:focus-visible { outline: 2px solid var(--warn); outline-offset: 1px; }
+.spec-chip-del:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .spec-chip-del:disabled { cursor: default; opacity: 0.3; }
-/* A fixed bug's Delete is always shown, as a pill at the chip's bottom right;
-   the chip makes room below its lines so the pill never covers the name. The
-   chip's is-fixed dimming targets .spec-chip, so the pill keeps full strength. */
+/* A fixed bug's Delete is always shown, a pill at the chip's bottom right with
+   room below the lines. The is-fixed dimming targets .spec-chip, so the pill stays full strength. */
 .spec-chip-wrap.is-fixed .spec-chip { padding-right: 14px; padding-bottom: 36px; }
 .spec-chip-del-label {
   position: absolute;
@@ -373,56 +328,44 @@
   bottom: 8px;
   padding: 2px 10px;
   border: 1px solid var(--warn);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
   color: var(--warn);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   line-height: 1.5;
   cursor: pointer;
 }
 .spec-chip-del-label:hover:not(:disabled) { background: var(--warn-soft); }
-.spec-chip-del-label:focus-visible { outline: 2px solid var(--warn); outline-offset: 1px; }
+.spec-chip-del-label:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .spec-chip-del-label:disabled { cursor: default; opacity: 0.4; }
 .spec-chip-wrap.is-deleting .spec-chip { opacity: 0.5; }
-.delete-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: 13.5px; }
+.delete-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: var(--fs-md); }
 .delete-facts dt { color: var(--ink-3); }
 .delete-facts dd { margin: 0; overflow-wrap: anywhere; }
-.delete-confirm { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.delete-confirm { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-md); }
 .delete-confirm[hidden] { display: none; }
-.delete-confirm input {
-  padding: 8px 10px;
-  border: 1px solid var(--rule-2);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-}
-.delete-confirm input:focus-visible { outline: 2px solid var(--warn); outline-offset: 1px; }
 
 /* ------------------------------------------------- dashboard confirm */
 
-/* The beat between "I clicked a card" and "it is running": what the pick is,
-   what it will do, and a START that means it. As wide as the menu (the page
-   width setting), centered like the launching pane it precedes. */
+/* Between clicking a card and running it: what it is, what it will do, a
+   START that means it. Menu width, centered like the launching pane. */
 .dash-confirm {
   max-width: min(var(--card-width), 100%);
   margin: 3vh auto 0;
   /* Column flex, not grid: a grid item's sticky range is its own row, so the
-     tail bar below could never travel. align-items does the centering
-     justify-items did; loop-setup opts back into grid. */
+     tail bar could never travel. loop-setup opts back into grid. */
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   text-align: center;
-  /* Focused controls must land above the pinned bar, never under it:
-     roughly .confirm-tail's height — keep them in step if the bar grows. */
+  /* Focused controls land above the pinned bar: about .confirm-tail's height, keep in step. */
   scroll-padding-bottom: 96px;
 }
 
-/* A smaller stage than the launching hero: the same sky, a moment shorter. */
+/* A smaller stage than the launching hero. */
 .confirm-stage { height: 130px; }
 .confirm-stage .sky .star { animation: star-fly var(--dur, 5s) linear var(--delay, 0s) infinite; }
 
@@ -438,38 +381,36 @@
 
 .confirm-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .dash-confirm .dash-title { margin: 2px 0 0; }
-/* The pane is as wide as the menu, but prose is not: its lines stop at a
-   readable measure while the controls below keep the full width. */
+/* Prose stops at a readable measure; the controls keep the full width. */
 .confirm-about, .confirm-detail, .confirm-spec { max-width: 70ch; }
-.confirm-about { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
-.confirm-detail { margin: 0; font-size: 13px; color: var(--accent); }
-.confirm-spec { margin: 0; font-size: 13px; color: var(--ink-2); }
-.confirm-spec code { font-family: var(--mono); font-size: 12px; }
+.confirm-about { margin: 0; font-size: var(--fs-base); line-height: 1.55; color: var(--ink-2); }
+.confirm-detail { margin: 0; font-size: var(--fs-sm); color: var(--accent); }
+.confirm-spec { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.confirm-spec code { font-family: var(--mono); font-size: var(--fs-xs); }
 .confirm-rule { width: 100%; height: 0; margin: 6px 0 2px; border: 0; border-top: 1px solid var(--accent); }
 .confirm-review { display: flex; gap: 8px; align-items: center; margin: 4px 0 8px; color: var(--ink-2); cursor: pointer; }
 .confirm-review input { accent-color: var(--accent, currentColor); }
 .confirm-cmd { margin: 2px 0 0; }
 .confirm-cmd code {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink-2);
   background: var(--panel-2);
   border: 1px solid var(--rule);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
 }
-.confirm-cmd-note { margin-left: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+.confirm-cmd-note { margin-left: 8px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--accent); }
 .confirm-actions { display: flex; gap: 10px; margin-top: 10px; }
 
-/* The command line and the buttons as one bar pinned to the pane's bottom
-   edge: .dash-confirm is the scroller, so a last-child sticky tail stays in
-   view whatever the Notebook box pushes past the fold. Opaque like .doc-head
-   (the pane sits on var(--bg)), with the footer's border and shadow for
-   separation; .confirm-actions keeps its own class so "Start" stays findable. */
+/* Command line and buttons as one bar pinned to the pane's bottom: .dash-confirm
+   is the scroller, so the sticky last child stays in view past the Notebook box.
+   Opaque like .doc-head, with the footer's border and shadow;
+   .confirm-actions keeps its class so "Start" stays findable. */
 .confirm-tail {
   position: sticky;
   bottom: 0;
-  z-index: 5;
+  z-index: var(--z-sticky);
   align-self: stretch;
   display: grid;
   gap: 10px;
@@ -477,37 +418,29 @@
   padding: 10px 0 6px;
   background: var(--bg);
   border-top: 1px solid var(--rule);
-  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.07);
+  box-shadow: var(--shadow-up);
 }
-/* The bar's gap sets the rhythm; the row's own margin is for loop-setup,
-   which has no tail. */
+/* The bar's gap sets the rhythm; the row's margin is for loop-setup (no tail). */
 .confirm-tail .confirm-actions { margin-top: 0; }
-/* The Notebook box frames itself, so the rule line is one separation too
-   many when it is on the pane; the shadow still marks the bar in a scroll. */
+/* The Notebook box has its own frame, so drop the rule; the shadow still marks the bar. */
 .dash-confirm:has(.confirm-note-box) .confirm-tail { border-top: 0; }
 
-/* "Start with a note from your Notebook": the switch, then the tabs beside a
-   preview of the picked one, its pictures each with a tick. */
-/* Capped rather than stretched past the confirm's centering, and left
-   aligned: a note reads as a document, and documents have a measure. */
-/* Its own frame sets it apart from the text above, so no rule: just room. */
+/* "Start with a note from your Notebook": the switch, then tabs beside a
+   preview, its pictures each with a tick. Capped and left aligned (a document
+   has a measure); its own frame sets it apart, so no rule. */
 .confirm-note-box { display: grid; gap: 8px; width: min(720px, 100%); text-align: left; margin-top: 12px; }
 .confirm-note-head {
   display: grid;
   gap: 2px;
   padding: 10px 12px;
-  border: 1px solid var(--accent-line);
-  border-left: 3px solid var(--accent);
-  border-radius: 8px;
-  background: var(--accent-soft);
 }
 .confirm-note-head.is-on { padding: 8px 12px; }
 .confirm-note-switch { display: flex; gap: 10px; align-items: center; color: var(--ink); font-weight: 600; cursor: pointer; }
 .confirm-note-switch input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent, currentColor); }
-.confirm-note-hint { padding-left: 28px; font-size: 12.5px; color: var(--ink-2); }
+.confirm-note-hint { padding-left: 28px; font-size: var(--fs-sm); color: var(--ink-2); }
 .confirm-note { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr); gap: 10px; }
 .confirm-note > .confirm-note-msg { grid-column: 1 / -1; }
-.confirm-note-msg { margin: 0; font-size: 13px; color: var(--ink-3); }
+.confirm-note-msg { margin: 0; font-size: var(--fs-sm); color: var(--ink-3); }
 .confirm-note-tabs { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
 .confirm-note-tab {
   display: flex;
@@ -515,18 +448,18 @@
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid var(--rule-2);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--panel-2);
   color: var(--ink-2);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   text-align: left;
   cursor: pointer;
 }
 .confirm-note-tab:hover:not(:disabled) { border-color: var(--accent-line); color: var(--accent); }
 .confirm-note-tab.is-picked { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 600; }
 .confirm-note-tab:disabled { opacity: 0.5; cursor: not-allowed; }
-.confirm-note-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.confirm-note-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .confirm-note-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .confirm-note-preview {
   display: grid;
@@ -537,14 +470,14 @@
   overflow-y: auto;
   padding: 8px 10px;
   border: 1px solid var(--rule-2);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--panel);
 }
-.confirm-note-text { font-size: 13.5px; max-width: 65ch; }
-.confirm-note-long { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warn); }
+.confirm-note-text { font-size: var(--fs-md); max-width: 65ch; }
+.confirm-note-long { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--warn); }
 .confirm-note-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .confirm-note-pic label { position: relative; display: block; cursor: pointer; }
-.confirm-note-pic img { display: block; width: 72px; height: 72px; object-fit: cover; border: 1px solid var(--rule-2); border-radius: 6px; }
+.confirm-note-pic img { display: block; width: 72px; height: 72px; object-fit: cover; border: 1px solid var(--rule-2); border-radius: var(--radius-sm); }
 .confirm-note-pic input { position: absolute; top: 4px; left: 4px; margin: 0; accent-color: var(--accent, currentColor); }
 .confirm-note-pic input:disabled + img { opacity: 0.45; }
 @media (max-width: 560px) {
@@ -562,9 +495,7 @@
   justify-items: center;
 }
 
-/* The same sky the dock fills behind Planny, here in a stage sized for a
-   hero: the mask fades the stars at the edges exactly the way it does in
-   the aside. */
+/* The dock's sky in a hero-sized stage; the mask fades the stars at the edges as in the aside. */
 .launch-stage {
   position: relative;
   width: 100%;
@@ -574,8 +505,7 @@
   mask-image: radial-gradient(120% 100% at 50% 40%, #000 42%, transparent 78%);
 }
 .launch-sky { opacity: 0.9; }
-/* The dock only animates its stars while .is-flying; center stage they are
-   the show, so the flight runs unconditionally. */
+/* The dock animates stars only while .is-flying; here the flight always runs. */
 .launch-stage .sky .star { animation: star-fly var(--dur, 5s) linear var(--delay, 0s) infinite; }
 
 .launch-planny {
@@ -585,25 +515,23 @@
   width: 74px;
   height: 102px;
   margin-left: -37px;
-  /* The dock's flight keyframes carry the forward lean; a second, slower bob
-     on top keeps a long wait from reading as a loop on rails. */
+  /* The flight keyframes carry the lean; a slower bob keeps a long wait from looking like rails. */
   animation:
     planny-fly 1.7s ease-in-out infinite,
     launch-bob 3.4s ease-in-out infinite;
 }
 @keyframes launch-bob {
-  0%, 100% { margin-bottom: 0; }
-  50% { margin-bottom: 10px; }
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -10px; }
 }
 
 .launch-title { margin: 0; font: 600 clamp(24px, 4vw, 34px)/1.12 var(--serif); }
 .launch-quip {
   margin: 0;
-  font-size: 14.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--accent);
-  /* The line swaps on a timer; a minimum keeps the hint under it from
-     hopping around as the words change length. */
+  /* The line swaps on a timer; min-height keeps the hint from hopping. */
   min-height: 1.4em;
   animation: launch-quip-in 0.35s ease-out;
 }
@@ -611,43 +539,46 @@
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: none; }
 }
-.launch-hint { margin: 0; font-size: 12.5px; color: var(--ink-3); max-width: 46ch; }
-/* Under the app, a saved pick nobody collected: the button that types continue. */
+.launch-hint { margin: 0; font-size: var(--fs-sm); color: var(--ink-3); max-width: 46ch; }
+/* A saved pick nobody collected: the button that types continue. */
 .launch-reconnect { margin-top: 14px; }
 .launch-reconnect[hidden] { display: none; }
 /* A line, never a banner: no border, no background, no icon. */
-.approval-tip { max-width: 70ch; margin: 18px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
-/* Under the dashboard's cards it centers on the grid and runs most of its width. */
+.approval-tip { max-width: 70ch; margin: 18px 0 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-3); }
+/* Under the cards it centers on the grid. */
 .dash > .approval-tip { max-width: 140ch; margin-inline: auto; text-align: center; }
 
 
 /* --------------------------------------------- the Implementation Loop */
 
-/* The card's own link; a span, since a link may not sit inside a button. */
-.dash-card-link { font-size: 12px; color: var(--accent); text-decoration: underline; cursor: pointer; justify-self: start; }
+/* A span: a link may not sit inside a button. */
+/* The loop card's wrapper: the card button, and its link under it. */
+.dash-card-wrap { display: flex; flex-direction: column; gap: 6px; }
+.dash-card-wrap > .dash-card { flex: 1 1 auto; }
+.dash-card-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: var(--fs-xs); color: var(--accent); text-decoration: underline; cursor: pointer; }
 
 /* The setup screen: the confirm pane's width, with a left-aligned form. */
 .loop-setup { display: grid; justify-items: stretch; text-align: left; gap: 14px; }
 .loop-setup .card-kicker, .loop-setup .dash-title, .loop-setup .confirm-spec { justify-self: start; }
 .loop-lines { display: grid; gap: 4px; }
-.loop-line { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); max-width: 75ch; }
-.loop-facts { display: grid; gap: 6px; margin: 0; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--rule); border-radius: 8px; }
-.loop-fact { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 10px; font-size: 13px; }
+.loop-line { margin: 0; font-size: var(--fs-md); line-height: 1.5; color: var(--ink-2); max-width: 75ch; }
+.loop-facts { display: grid; gap: 6px; margin: 0; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius-md); }
+.loop-fact { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 10px; font-size: var(--fs-sm); }
 .loop-fact dt { color: var(--ink-3); }
 .loop-fact dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; white-space: pre-line; }
 .loop-form { display: grid; gap: 16px; }
 .loop-field { display: grid; gap: 6px; }
-.loop-label { margin: 0; font-weight: 600; font-size: 13.5px; }
-.loop-hint { margin: 0; font-size: 12.5px; color: var(--ink-3); }
-.loop-switch, .loop-radio { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: 14px; color: var(--ink-2); }
+.loop-label { margin: 0; font-weight: 600; font-size: var(--fs-md); }
+.loop-hint { margin: 0; font-size: var(--fs-sm); color: var(--ink-3); }
+.loop-switch, .loop-radio { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: var(--fs-md); color: var(--ink-2); }
 .loop-switch input, .loop-radio input { accent-color: var(--accent, currentColor); margin-top: 3px; }
 .loop-radios { display: grid; gap: 6px; }
 .loop-radio-body { display: grid; gap: 1px; }
-.loop-radio-detail { font-size: 12.5px; color: var(--ink-3); }
+.loop-radio-detail { font-size: var(--fs-sm); color: var(--ink-3); }
 .loop-switch.is-gray { opacity: 0.55; cursor: default; }
 .loop-switch[hidden] { display: none; }
 .loop-strength-none .linky { font-size: inherit; }
-.loop-strength-all { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; color: var(--ink-2); }
+.loop-strength-all { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: var(--fs-sm); color: var(--ink-2); }
 .loop-strength-grid { position: relative; display: grid; gap: 6px; margin-top: 6px; }
 .loop-strength-line { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
 .loop-strength-line .step { fill: none; stroke: var(--ink-3); stroke-width: 3px; stroke-linecap: round; stroke-linejoin: round; }
@@ -657,21 +588,23 @@
 .loop-strength-line .col.lvl-2 { stroke: var(--lvl-2); }
 .loop-strength-line .col.lvl-3 { stroke: var(--lvl-3); }
 .loop-strength-rows { display: grid; gap: 0; }
-.loop-strength-head, .loop-strength-row { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(130px, 1.5fr) repeat(4, minmax(0, 1fr)) 64px; align-items: center; column-gap: 4px; font-size: 13.5px; }
+.loop-strength-head, .loop-strength-row { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(130px, 1.5fr) repeat(4, minmax(0, 1fr)) 64px; align-items: center; column-gap: 4px; font-size: var(--fs-md); }
 .loop-strength-row { min-height: 46px; }
-.loop-strength-chip { justify-self: center; font-size: 12px; padding: 5px 9px; white-space: normal; text-align: center; line-height: 1.15; max-width: 100%; border-radius: 16px; }
+.loop-strength-chip { justify-self: center; font-size: var(--fs-xs); padding: 5px 9px; white-space: normal; text-align: center; line-height: 1.15; max-width: 100%; border-radius: 16px; /* one-off: a two-line chip, taller than a pill */ }
 .loop-strength-chip.is-unmapped { opacity: 0.5; }
 .loop-strength-phase { overflow-wrap: anywhere; color: var(--ink); padding-right: 8px; }
-.loop-strength-model { font-size: 12.5px; color: var(--ink-3); overflow-wrap: anywhere; text-align: right; }
+.loop-strength-model { font-size: var(--fs-sm); color: var(--ink-3); overflow-wrap: anywhere; text-align: right; }
 .loop-strength-cell { --b: var(--lvl-0); position: relative; display: flex; align-items: center; justify-content: center; height: 46px; cursor: pointer; }
 .loop-strength-cell.lvl-1 { --b: var(--lvl-1); }
 .loop-strength-cell.lvl-2 { --b: var(--lvl-2); }
 .loop-strength-cell.lvl-3 { --b: var(--lvl-3); }
 .loop-strength-cell input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
-.loop-strength-node { box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink-3); background: var(--bg); display: grid; place-items: center; color: var(--bg); transition: all 0.12s; position: relative; z-index: 2; }
+.loop-strength-node { box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink-3); background: var(--bg); display: grid; place-items: center; color: var(--bg); transition: border-color var(--dur-1), background var(--dur-1), box-shadow var(--dur-1), transform var(--dur-1); position: relative; z-index: 2; }
 .loop-strength-cell:hover .loop-strength-node { border-color: var(--b); transform: scale(1.25); }
 .loop-strength-cell input:focus-visible + .loop-strength-node { outline: 2px solid var(--focus); outline-offset: 3px; }
 .loop-strength-cell input:checked + .loop-strength-node { width: 30px; height: 30px; background: var(--b); border-color: var(--b); box-shadow: 0 0 0 4px var(--bg); }
+.loop-strength-cell input:checked + .loop-strength-node.is-picked { animation: node-grow var(--dur-2) var(--ease-spring); }
+@keyframes node-grow { from { transform: scale(0.35); } }
 .loop-strength-node .sa-bars { display: none; }
 .loop-strength-cell input:checked + .loop-strength-node .sa-bars { display: inline-flex; }
 .loop-strength-cell.is-unmapped { cursor: default; }
@@ -682,25 +615,25 @@
 /* Match my session has no rank: three flat bars, the middle one lighter. */
 .sa-bars.is-flat i:nth-child(n) { height: 7px; opacity: 1; }
 .sa-bars.is-flat i:nth-child(2) { opacity: 0.55; }
-.loop-select { font: inherit; font-size: 13.5px; padding: 5px 8px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; max-width: 100%; }
+.loop-select { max-width: 100%; }
 @media (max-width: 620px) {
   .loop-strength-head, .loop-strength-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .loop-strength-spacer, .loop-strength-model { display: none; }
   .loop-strength-phase { grid-column: 1 / -1; padding-top: 8px; }
-  .loop-strength-chip { font-size: 10.5px; padding: 4px 6px; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  .loop-strength-chip { font-size: var(--fs-2xs); padding: 4px 6px; gap: 4px; flex-wrap: wrap; justify-content: center; }
 }
 .loop-ticks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-left: 4px; }
-.loop-text { font: inherit; font-size: 14px; padding: 6px 10px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; max-width: 520px; width: 100%; }
+.loop-text { max-width: 520px; width: 100%; }
 .loop-text.loop-narrow { width: 90px; }
 .loop-text.loop-param { width: 180px; }
 .loop-test { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.loop-test p { margin: 0; font-size: 12.5px; }
-.loop-number { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
-.loop-warn { margin: 0; font-size: 12.5px; color: var(--warn); }
+.loop-test p { margin: 0; font-size: var(--fs-sm); }
+.loop-number { display: flex; align-items: center; gap: 10px; font-size: var(--fs-md); color: var(--ink-2); }
+.loop-warn { margin: 0; font-size: var(--fs-sm); color: var(--warn); }
 .loop-start { display: grid; gap: 8px; justify-items: start; }
-.loop-why { margin: 0; font-size: 13px; color: var(--ink-2); }
-.loop-error { margin: 0; font-size: 13px; color: var(--warn); }
-.loop-problems { margin: 0; padding-left: 18px; font-size: 13px; color: var(--warn); }
+.loop-why { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.loop-error { margin: 0; font-size: var(--fs-sm); color: var(--warn); }
+.loop-problems { margin: 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--warn); }
 .loop-help { margin-left: auto; }
 
 /* A card the loop holds: a record with a tag, no inputs. */
@@ -709,23 +642,19 @@
 
 /* The stop and finish screens the loop's end draws. */
 .loop-end { display: grid; gap: 14px; }
-.loop-end-phases { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.loop-end-phases { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
 .loop-end-phases th, .loop-end-phases td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-.loop-end-phases code { font-family: var(--mono); font-size: 12px; }
-.loop-end-files { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.loop-end-phases code { font-family: var(--mono); font-size: var(--fs-xs); }
+.loop-end-files { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: var(--fs-xs); color: var(--ink-2); }
 .loop-end-heading, .loop-end .loop-line { overflow-wrap: anywhere; }
-.loop-end .loop-why, .loop-end .loop-advice {
-  padding: 9px 13px; border-left: 4px solid var(--warn); border-radius: 0 6px 6px 0;
-  background: var(--warn-soft); color: var(--ink); font-size: 14px; line-height: 1.5; max-width: 75ch; margin: 0;
-}
-.loop-end .loop-advice { border-left-color: var(--accent); background: var(--accent-soft); }
-.loop-end .loop-advice strong { color: var(--accent); }
-/* Each button with one plain line under it saying what it does. */
+.loop-end .loop-why, .loop-end .loop-advice { font-size: var(--fs-md); line-height: 1.5; max-width: 75ch; margin: 0; }
+/* Each button has a line under it saying what it does. */
 .loop-end-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .loop-end-choice { display: grid; gap: 6px; align-content: start; justify-items: start; }
 .loop-end-choice .btn { max-width: 100%; }
-.loop-end-hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
-.loop-end-safe { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.loop-end-hint { margin: 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-2); }
+.loop-end-safe { margin: 0; font-size: var(--fs-md); color: var(--ink-2); }
 .loop-end-details { display: grid; gap: 10px; }
-.loop-end-details > summary { cursor: pointer; font-size: 13.5px; color: var(--ink-2); }
+.loop-end-details > summary { cursor: pointer; font-size: var(--fs-md); color: var(--ink-2); }
 .loop-end-details[open] > summary { margin-bottom: 8px; }
+.confirm-note > .confirm-note-retry { justify-self: start; }

@@ -63,6 +63,7 @@ import {
   noteAction,
   noteReplyLines,
   pruneStaged,
+  seedStaged,
   suggestAction,
   suggestReplyLines,
   progressTotal,
@@ -103,6 +104,7 @@ import {
   loopLessonsLine,
 } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
+import { agoWords, whenTitle, whenWords } from "../src/web-console/public/labels.js";
 import { ACCENTS, DEFAULT_ACCENT, RETIRED_ACCENTS, accentId } from "../src/web-console/public/palette.js";
 import {
   needsRoleNudge,
@@ -606,6 +608,51 @@ test("pruneStaged drops a multi pick the re-posted card now locks, and leaves a 
   assert.deepEqual(out.staged.c1.k, "A", "only a multi draws locked rows");
 });
 
+test("seedStaged stages a multi card's starting ticks once, in option order, never touching its inputs", () => {
+  const multi = (id, options, extra = {}) => ({ id, kind: "multi", status: "open", options, ...extra });
+  const items = [multi("m1", [{ k: "A", text: "a", ticked: true }, { k: "B", text: "b" }, { k: "C", text: "c", ticked: true }])];
+  const staged = {};
+  const seeded = {};
+  const out = seedStaged(items, staged, seeded);
+  assert.equal(out.changed, true);
+  assert.deepEqual(out.staged.m1, { type: "answer", kind: "multi", ks: ["A", "C"] });
+  assert.deepEqual(out.seeded, { m1: true });
+  assert.deepEqual(staged, {});
+  assert.deepEqual(seeded, {});
+
+  // Once: after the person clears it, the returned seeded mark keeps it cleared.
+  const again = seedStaged(items, {}, out.seeded);
+  assert.equal(again.changed, false);
+  assert.deepEqual(again.staged, {});
+  // Reopened with the same id: still seeded once.
+  assert.equal(seedStaged([{ ...items[0], status: "reopened" }], {}, out.seeded).changed, false);
+  assert.equal(seedStaged([{ ...items[0], status: "reopened" }], {}, {}).changed, true);
+
+  // Left alone: already staged, already sent, settled, a choice, no ticked row.
+  const mine = { m1: { type: "answer", kind: "multi", ks: ["B"] } };
+  assert.deepEqual(seedStaged(items, mine, {}).staged, mine);
+  assert.equal(seedStaged(items, {}, {}, { m1: { at: 1 } }).changed, false);
+  assert.equal(seedStaged([{ ...items[0], status: "answered" }], {}, {}).changed, false);
+  assert.equal(seedStaged([{ ...items[0], kind: "choice" }], {}, {}).changed, false);
+  assert.equal(seedStaged([multi("m2", [{ k: "A", text: "a" }, { k: "B", text: "b", ticked: false }])], {}, {}).changed, false);
+
+  // A locked row is never seeded, even if it says ticked.
+  const locked = seedStaged([multi("m3", [{ k: "A", text: "a", ticked: true, locked: true }, { k: "B", text: "b", ticked: true }])], {}, {});
+  assert.deepEqual(locked.staged.m3.ks, ["B"]);
+  assert.equal(seedStaged([multi("m4", [{ k: "A", text: "a", ticked: true, locked: true }])], {}, {}).changed, false);
+});
+
+test("answerLines says None ticked for an empty pick on a card that started ticked, and nothing new for other cards", () => {
+  const item = { id: "m1", kind: "multi", options: [{ k: "A", text: "Colors", ticked: true }] };
+  assert.deepEqual(answerLines(item, { type: "answer", kind: "multi", ks: [] }), ["None ticked"]);
+  // A multi without starting ticks keeps its record as before, note-only picks included.
+  const plain = { id: "m2", kind: "multi", options: [{ k: "A", text: "Colors" }] };
+  assert.deepEqual(answerLines(plain, { type: "answer", kind: "multi", ks: [], text: "a note" }), []);
+  assert.deepEqual(answerLines(item, { type: "answer", kind: "multi", ks: ["A"] }), ["A · Colors"]);
+  assert.deepEqual(answerLines(item, { skipped: true, ks: [] }), ["Skipped"]);
+  assert.deepEqual(answerLines({ id: "c1", kind: "choice", options: [] }, { ks: [] }), []);
+});
+
 test("document helpers: the extension allow-list, the picker's accept, sizes, and the kind of an old entry", () => {
   assert.equal(MAX_ATTACHMENTS, 5);
   assert.equal(MAX_DOC_BYTES, 10 * 1024 * 1024);
@@ -763,6 +810,7 @@ const contrast = (a, b) => {
 
 test("every highlight color is readable in both themes", () => {
   const panel = { light: "#ffffff", dark: "#201d1a" };
+  const page = { light: "#f6f3ee", dark: "#171513" };
   // Nineteen a row in the wide Preferences dialog, two rows at most.
   assert.ok(Object.keys(ACCENTS).length >= 32 && Object.keys(ACCENTS).length <= 38);
   assert.ok(ACCENTS[DEFAULT_ACCENT], "the default must be in the list");
@@ -775,6 +823,7 @@ test("every highlight color is readable in both themes", () => {
       for (const c of a[theme]) assert.match(c, /^#[0-9a-f]{6}$/, `${id} ${theme}: ${c}`);
       assert.ok(contrast(ink, fill) >= 4.5, `${id} ${theme}: label on the fill is ${contrast(ink, fill).toFixed(2)}:1`);
       assert.ok(contrast(fill, soft) >= 4.5, `${id} ${theme}: badge text on the tint is ${contrast(fill, soft).toFixed(2)}:1`);
+      assert.ok(contrast(fill, page[theme]) >= 4.5, `${id} ${theme}: accent text on the page is ${contrast(fill, page[theme]).toFixed(2)}:1`);
       assert.ok(contrast(line, panel[theme]) >= 1.8, `${id} ${theme}: border barely shows at ${contrast(line, panel[theme]).toFixed(2)}:1`);
     }
   }
@@ -1720,6 +1769,21 @@ test("validate: a multi's pick-list fields are checked only when present, each r
   refused(notMulti, "counter:", "only a multi");
   // Every refusal carries the field done right, as the other rules do.
   for (const p of multi([opt("A", { group: "" })])) assert.match(p, /\{/);
+
+  // Starting ticks and row pills: accepted in shape, refused out of it.
+  assert.deepEqual(multi([opt("A", { ticked: true, tag: "Keep" }), opt("B", { ticked: false, tag: "Free up" }), opt("C", { tag: "T".repeat(16) })]), []);
+  assert.deepEqual(multi([opt("A", { ticked: true }), opt("B", { locked: true, ticked: false })]), []);
+  refused(multi([opt("A", { ticked: "yes" })]), "options:", 'option "A"', '"ticked"', "true or false");
+  refused(multi([opt("A", { ticked: true, locked: true })]), 'option "A"', "locked and ticked", 'Drop "ticked"');
+  refused(multi([opt("A", { tag: "" })]), 'option "A"', '"tag"', "1 to 16");
+  refused(multi([opt("A", { tag: "   " })]), 'option "A"', '"tag"');
+  refused(multi([opt("A", { tag: "T".repeat(17) })]), 'option "A"', '"tag"');
+  refused(multi([opt("A", { tag: 5 })]), 'option "A"', '"tag"');
+  for (const p of multi([opt("A", { ticked: "yes" })])) assert.match(p, /\{/);
+  const onChoice = (extra) => validate({ items: [{ id: "picks", kind: "choice", title: "Pick one", status: "open", options: [opt("A", extra), opt("B")] }] });
+  refused(onChoice({ ticked: true }), 'option "A"', '"ticked"', "only goes on a multi");
+  refused(onChoice({ tag: "Keep" }), 'option "A"', '"tag"', "only goes on a multi");
+  assert.deepEqual(onChoice({}), []);
 });
 
 test("lessons answers: a line per decision, what was left waiting, and the decisions file's JSON", () => {
@@ -1911,15 +1975,15 @@ test("meter: levels, ring, fold and tooltip wording", () => {
   );
   assert.equal(pointsFrom([{ kind: "folder-issue", id: "L1:api", name: "api", reason: "denied" }]), 0);
 
-  assert.equal(tooltipFor(1), "This session is fresh (1 point).");
+  assert.equal(tooltipFor(1), "This conversation is fresh (1 point).");
   assert.match(tooltipFor(5), /getting long \(5 points\)/);
   assert.match(tooltipFor(10), /done a lot \(10 points\)/);
   assert.deepEqual(meterView([{ kind: "launch", id: "L1", workflow: "document" }]), {
     points: 2,
     level: "green",
     fraction: 2 / 15,
-    words: "Session: fresh",
-    tooltip: "This session is fresh (2 points).",
+    words: "Conversation: fresh",
+    tooltip: "This conversation is fresh (2 points).",
     items: [{ label: "Document started", points: 2 }],
   });
 });
@@ -2849,4 +2913,27 @@ test("a refused patch leaves state.json byte for byte as it was", () => {
   } finally {
     cli(["stop", "--session", s.sid, "--force"]);
   }
+});
+
+test("whenWords writes how long ago, then the short date and time, against a fixed now", () => {
+  const now = Date.parse("2026-11-15T21:42:00Z");
+  const at = (offsetMs) => new Date(now - offsetMs).toISOString();
+  const H = 3_600_000;
+  const stamp = (ms) => new Date(now - ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  assert.equal(whenWords(at(6 * H), now), `6 h ago · ${stamp(6 * H)}`);
+  assert.equal(whenWords(at(30_000), now).split(" · ")[0], "just now");
+  assert.equal(whenWords(at(5 * 60_000), now).split(" · ")[0], "5 min ago");
+  assert.equal(whenWords(at(26 * H), now).split(" · ")[0], "1 day ago");
+  assert.equal(whenWords(at(5 * 24 * H), now).split(" · ")[0], "5 days ago");
+  assert.equal(whenWords(at(42 * 24 * H), now).split(" · ")[0], "6 weeks ago");
+  assert.equal(whenWords(at(120 * 24 * H), now).split(" · ")[0], "4 months ago");
+  assert.equal(whenWords(at(800 * 24 * H), now).split(" · ")[0], "2 years ago");
+  // A time ahead of the clock is just now, and nothing readable gives nothing.
+  assert.equal(whenWords(at(-H), now).split(" · ")[0], "just now");
+  for (const bad of ["", null, undefined, "not a date"]) assert.equal(whenWords(bad, now), "");
+  // A different year names the year, and the full stamp is the title's.
+  assert.match(whenWords(at(800 * 24 * H), now), /[0-9]{4}/);
+  assert.equal(whenTitle(at(H)), new Date(now - H).toLocaleString());
+  assert.equal(whenTitle("nope"), "");
+  assert.equal(agoWords(59 * 60_000), "59 min ago");
 });

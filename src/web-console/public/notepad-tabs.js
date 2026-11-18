@@ -7,7 +7,7 @@
 // notepad.js owns the rules for order.
 
 import { dropTab } from "./notepad.js";
-import { el } from "./render.js";
+import { el, icon } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -88,7 +88,8 @@ export function createTabs({ onSwitch, onChange }) {
     });
     // The x is a button of its own beside the name, so the tab's text stays
     // its name and a double-click or a drag on the name never reaches it.
-    const x = el("button", "notepad-tab-x", "×");
+    const x = el("button", "notepad-tab-x");
+    x.appendChild(icon("close"));
     x.type = "button";
     x.setAttribute("aria-label", "Delete " + tab.name);
     x.title = "Delete tab";
@@ -102,7 +103,7 @@ export function createTabs({ onSwitch, onChange }) {
     // says it for a screen reader.
     if (tab.sent) {
       b.setAttribute("aria-label", tab.name + ", sent");
-      const badge = el("span", "notepad-sent-badge", "sent");
+      const badge = el("span", "pill is-accent notepad-sent-badge", "sent");
       badge.setAttribute("aria-hidden", "true");
       wrap.append(badge);
     }

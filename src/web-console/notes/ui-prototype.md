@@ -10,13 +10,13 @@ Nothing yet says what to prototype: before Step 1, one `--wait` card (a Notebook
 
 ## Starting card
 
-One `--wait` batch after Step 1. A card cannot open with its boxes ticked, so the carry-over card's preset ticks every found item in one press, and a Skip on it keeps everything found (all ticked is the default); leave the card out for a project with no screens:
+One `--wait` batch after Step 1. The carry card is required and opens ticked as suggested: each found option carries `tag` ("Keep" or "Free up"), `ticked: true` when Keep, and `detail` = what was found, then ` · ` and the reason; a "none found" option has neither. Presets: `Suggested` (the ticked keys; leave it out when no row is Keep) and `Everything found` (every found key, only when it differs from Suggested). A reply of `none` means free up everything found. Leave the card out for a project with no screens:
 
 ```jsonc
-{"title":"UI prototype","headline":{"stage":"Start","cleared":0,"total":3},"items":[{"id":"carry","kind":"multi","title":"Carry over","required":false,"body":"Ticked items look the same in every variant; unticked ones are where each variant tries its own take. Skip keeps everything found; tick only what should stay the same to free the rest. Attach screenshots or images in this card's note.","options":[{"k":"1","text":"Colors","detail":"src/styles/theme.css: accent #0f766e, gray #64748b"},{"k":"2","text":"Fonts","detail":"none found"}],"presets":[{"label":"Everything found","ks":["1"]}]},{"id":"spread","kind":"choice","title":"How different","allowOther":false,"body":"How far apart should the variants be?","options":[{"text":"Subtle","detail":"Same layout, different treatment"},{"text":"Balanced","detail":"One layout difference each","recommended":true},{"text":"Radical","detail":"Different layouts"}]},{"id":"direction","kind":"text","title":"Direction","required":false,"body":"Anything every variant should stay inside.","placeholder":"Calmer colors, bigger type, room around the totals."}]}
+{"title":"UI prototype","headline":{"stage":"Start","cleared":0,"total":3},"items":[{"id":"carry","kind":"multi","title":"Carry over","body":"Ticked items look the same in every variant; unticked ones are where each variant tries its own take. Untick everything to free them all. Attach screenshots or images in this card's note.","options":[{"k":"1","text":"Colors","tag":"Keep","ticked":true,"detail":"src/styles/theme.css: accent #0f766e · a new screen in your app"},{"k":"2","text":"Layout","tag":"Free up","detail":"src/App.tsx: sidebar and header · you asked to rethink the table"},{"k":"3","text":"Fonts","detail":"none found"}],"presets":[{"label":"Suggested","ks":["1"]},{"label":"Everything found","ks":["1","2"]}]},{"id":"spread","kind":"choice","title":"How different","allowOther":false,"body":"How far apart should the variants be?","options":[{"text":"Subtle","detail":"Same layout, different treatment"},{"text":"Balanced","detail":"One layout difference each","recommended":true},{"text":"Radical","detail":"Different layouts"}]},{"id":"direction","kind":"text","title":"Direction","required":false,"body":"Anything every variant should stay inside.","placeholder":"Calmer colors, bigger type, room around the totals."}]}
 ```
 
-A "none found" option is never in the preset. Attached files arrive as `Image:` and `File:` paths in `reply`: open each, then say per image, in your next post, whether it goes in the page or is a look to match (a `notice`, or the line in the paste card's `body`).
+A "none found" option is never in a preset. Attached files arrive as `Image:` and `File:` paths in `reply`: open each, then say per image, in your next post, whether it goes in the page or is a look to match (a `notice`, or the line in the paste card's `body`).
 
 ## The page
 
@@ -28,7 +28,7 @@ A `text` item, `--wait`, `"title":"Paste your choice"`, a new id per round (`pas
 
 ## Next steps
 
-After the read-back, a `menu`, `--wait`: Save, Narrow from my pick, Fresh set, Done, each with a one-line `detail`; the read-back is its `body`. Fresh set's brief goes back up as the three starting cards with new ids (`carry-2`, `spread-2`, `direction-2`), each choice as it stood marked `recommended` or in the preset.
+After the read-back, a `menu`, `--wait`: Save, Narrow from my pick, Fresh set, Done, each with a one-line `detail`; the read-back is its `body`. Fresh set's brief goes back up as the three starting cards with new ids (`carry-2`, `spread-2`, `direction-2`), each choice as it stood: the carry card with `ticked` as last sent, the spread card marked `recommended`.
 
 ## Save questions
 

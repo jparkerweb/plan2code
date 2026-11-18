@@ -239,7 +239,7 @@ function blockInto(parent, tokens) {
       case "blockquote": {
         // A quote that opens with `[!CAUTION]` or `[!TIP]` is a colored alert box.
         const alert = alertKind(t.tokens);
-        const q = el("blockquote", alert ? `md-quote md-alert md-alert-${alert}` : "md-quote");
+        const q = el("blockquote", alert ? `md-quote md-alert md-alert-${alert} callout ${alert === "caution" ? "is-warn" : "is-info"}` : "md-quote");
         blockInto(q, t.tokens);
         parent.appendChild(q);
         break;
@@ -422,7 +422,7 @@ function selectContents(node) {
 }
 
 function copyButton(text, className, source) {
-  const b = el("button", className || "btn small", "Copy");
+  const b = el("button", className || "btn sm", "Copy");
   b.type = "button";
   b.addEventListener("click", () =>
     copyText(text, b, "Copy", () => {
@@ -466,6 +466,34 @@ export function approvalTip() {
 }
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
+
+// One symbol from the icon sheet in index.html (`ci-<name>`), drawn at the
+// size of its text. Always aria-hidden: whatever it means is said by text.
+export function icon(name, className = "mark-icon") {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", className);
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const use = document.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", "#ci-" + name);
+  svg.appendChild(use);
+  return svg;
+}
+
+// Text only assistive tech reads ("ready to send" beside a mark).
+export function hiddenText(text) {
+  return el("span", "sr-only", text);
+}
+
+// A state mark: the symbol, hidden from assistive tech, and its meaning as
+// hidden text. The title stays for the pointer.
+export function stateMark(className, name, label) {
+  const mark = el("span", className);
+  mark.title = label;
+  mark.appendChild(icon(name));
+  mark.appendChild(hiddenText(label));
+  return mark;
+}
 
 // A time of day for a chat message; empty when the stamp does not parse.
 export function shortTime(iso) {

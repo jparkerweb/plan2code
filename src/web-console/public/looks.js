@@ -33,8 +33,14 @@ export const DEFAULT_LOOKS = {
   ...soundFilePrefs(null),
   width: DEFAULT_CARD_WIDTH,
   hideUnavailable: true,
-  // Always SKIP Intro: never play the dashboard's first-open wake-up (Planny asleep), off by default.
+  // Skip the wake-up intro: never play the dashboard's first-open wake-up (Planny asleep), off by default.
   skipIntro: false,
+  // First launch: set once a skill has been launched from this machine, and
+  // never cleared (not by Back to default either). Until then the dashboard
+  // holds the optional extras (the role banner, Learning at the top).
+  skillLaunched: false,
+  // The meter's one-time "what the colors mean" line: set once it has shown.
+  meterTipSeen: false,
   // Activities: the top bar's die (hidden until someone turns on Show Activities), whether its games play sounds (under Play
   // sounds, which silences them too), the game last picked, and one best score
   // per listed game (activityBestSnake) or, for a game with courses, per
@@ -72,6 +78,8 @@ export function adoptLooks(saved) {
   if (typeof looks.hideUnavailable !== "boolean") looks.hideUnavailable = DEFAULT_LOOKS.hideUnavailable;
   looks.width = cardWidth(looks.width);
   if (typeof looks.skipIntro !== "boolean") looks.skipIntro = DEFAULT_LOOKS.skipIntro;
+  if (typeof looks.skillLaunched !== "boolean") looks.skillLaunched = DEFAULT_LOOKS.skillLaunched;
+  if (typeof looks.meterTipSeen !== "boolean") looks.meterTipSeen = DEFAULT_LOOKS.meterTipSeen;
   if (typeof looks.hideActivities !== "boolean") looks.hideActivities = DEFAULT_LOOKS.hideActivities;
   if (typeof looks.activitySounds !== "boolean") looks.activitySounds = DEFAULT_LOOKS.activitySounds;
   if (typeof looks.gameMusic !== "boolean") looks.gameMusic = DEFAULT_LOOKS.gameMusic;
@@ -184,9 +192,10 @@ const effectiveTheme = () => (looks.theme === "system" ? (systemDark() ? "dark" 
 
 export function applyLooks() {
   const root = document.documentElement;
-  // The desktop app's bar lights its buttons in the same highlight. That bar
-  // is always dark, so it gets the dark shades whatever this page's theme is.
-  tellApp("looks", { accent: ACCENTS[looks.accent].dark });
+  // The desktop app's shell wears this page's theme and highlight: the resolved
+  // theme and both shade sets, so a theme change restyles it at once. `accent`
+  // stays the dark shades for an older shell.
+  tellApp("looks", { accent: ACCENTS[looks.accent].dark, theme: effectiveTheme(), light: ACCENTS[looks.accent].light, dark: ACCENTS[looks.accent].dark });
   // The server's stand-in for the saved accent, which only has to last until
   // this runs. From here on the colors are set below, and a stale rule left
   // switched on would win over "Back to default".
@@ -293,7 +302,7 @@ export function renderSwatches() {
 }
 
 // "Back to default": every look returns to its default, but the role is
-// marked as asked, the welcome stays seen, and the Activities' best scores
+// marked as asked, the welcome stays seen, the first-launch and meter-tip flags stay, and the Activities' best scores
 // and last pick stay (only Reset best scores clears those), and so do the
 // played times and the picker's order (nothing clears those). Given `keys` (one
 // Preferences tab's, prefsResetScope() in prefs.js), only those change: the
@@ -310,5 +319,5 @@ export function resetLooks(keys) {
     kept[memoKey(a.id)] = looks[memoKey(a.id)];
     kept[playedKey(a.id)] = looks[playedKey(a.id)];
   }
-  looks = { ...DEFAULT_LOOKS, ...kept, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen };
+  looks = { ...DEFAULT_LOOKS, ...kept, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen, skillLaunched: looks.skillLaunched, meterTipSeen: looks.meterTipSeen };
 }

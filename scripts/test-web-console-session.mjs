@@ -531,7 +531,7 @@ test("the page carries the way home: the triangle, its confirm, and the wiring",
   for (const id of ["home-modal", "home-blurb", "home-warn", "home-cancel", "home-go"]) {
     assert.ok(html.includes(`id="${id}"`), `index.html must carry #${id}`);
   }
-  assert.ok(html.includes("Leave this workflow?"));
+  assert.ok(html.includes("Leave this skill?"));
   assert.match(css, /\.home-btn path\s*\{\s*fill:\s*var\(--accent\)/, "the triangle is filled with the highlight color");
 });
 
@@ -889,7 +889,7 @@ test("looks: resetLooks(keys) changes only those keys, and the role is marked as
     assert.equal(looks.role, ROLE_NOT_SET, "cleared but marked as asked");
     assert.equal(looks.sound, false, "sounds untouched by Appearance");
     assert.equal(looks.hideActivities, false);
-    assert.equal(looks.skipIntro, DEFAULT_LOOKS.skipIntro, "Appearance resets Always SKIP Intro");
+    assert.equal(looks.skipIntro, DEFAULT_LOOKS.skipIntro, "Appearance resets Skip the wake-up intro");
     resetLooks(prefsResetScope("sounds"));
     assert.equal(looks.sound, true);
     assert.equal(looks.soundQuestion, true);

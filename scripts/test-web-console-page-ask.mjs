@@ -342,6 +342,46 @@ test("the Subagents dialog shows the saved strength, explains the picked one, go
   assert.match(await textOf(help), /One step lighter everywhere/);
 });
 
+// An unsaved edit never leaves the dialog silently: Cancel, Esc or a click
+// outside ask first, in Preferences' order, with focus on Keep editing.
+test("the Subagents dialog asks before it drops an edit, in Preferences' order, and closes at once when nothing changed", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 2" } },
+  });
+  const modal = s.page.locator("#subagents-modal");
+  const ask = modal.locator("#subagents-unsaved");
+  const open = async () => {
+    await s.page.locator("#btn-subagents").click();
+    await modal.waitFor();
+  };
+
+  await open();
+  await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+  await modal.waitFor({ state: "hidden" });
+
+  await open();
+  await modal.locator('input[name="subagents-strength"][value="best"]').check();
+  await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+  await ask.waitFor();
+  assert.match(await textOf(ask), /Discard your changes?/);
+  assert.deepEqual(await ask.getByRole("button").allTextContents(), ["Keep editing", "Discard", "Save"]);
+  assert.equal(await s.page.evaluate(() => document.activeElement.id), "subagents-unsaved-keep", "focus starts on Keep editing");
+  await ask.getByRole("button", { name: "Keep editing" }).click();
+  await ask.waitFor({ state: "hidden" });
+  assert.equal(await modal.evaluate((d) => d.open), true, "Keep editing leaves the dialog open");
+  assert.equal(await modal.locator('input[name="subagents-strength"][value="best"]').isChecked(), true, "and the edit stays");
+
+  await s.page.keyboard.press("Escape");
+  await ask.waitFor();
+  await ask.getByRole("button", { name: "Discard" }).click();
+  await modal.waitFor({ state: "hidden" });
+
+  await open();
+  assert.equal(await modal.locator('input[name="subagents-strength"][value="balanced"]').isChecked(), true, "Discard dropped the edit");
+});
+
 // What a person sees break: the strength a helper ran with missing from the
 // tab, or a stray line under a helper that reported none.
 test("the Subagents tab shows a reported helper's strength line and none for a helper without one", async (t) => {
@@ -534,4 +574,28 @@ test("the Ask for suggestions chip stays away while the loop drives, even on a c
   await itemCard(s.page, "c1").getByLabel("JSON").waitFor();
   await s.page.locator("#thread-c1").waitFor();
   assert.equal(await chipOf(s).count(), 0, "no chip while the loop drives");
+});
+
+// The top bar names its tools: the gear says User Preferences, and the home and
+// Subagents buttons carry a text label beside the icon above the narrow
+// breakpoint. The Subagents button opens a dialog, so it is not a toggle.
+test("the top bar names User Preferences, Dashboard and Subagents, and Subagents opens a dialog instead of toggling", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 2" } },
+  });
+  await s.page.setViewportSize({ width: 1200, height: 800 });
+  const gear = s.page.locator("#btn-looks");
+  assert.equal(await gear.getAttribute("title"), "User Preferences");
+  assert.equal(await gear.getAttribute("aria-label"), "User Preferences");
+  const subs = s.page.locator("#btn-subagents");
+  await subs.waitFor();
+  assert.match(await textOf(subs), /^Subagents: (on|off)$/, "a text label beside the icon");
+  assert.equal(await subs.getAttribute("aria-haspopup"), "dialog");
+  assert.equal(await subs.getAttribute("aria-pressed"), null, "not a toggle");
+  assert.match((await subs.getAttribute("aria-label")) || "", /^Subagents: (on|off)$/, "the state is in the label");
+  assert.match(await textOf(s.page.locator("#btn-home")), /^Dashboard$/, "the way home is named");
+  await s.page.setViewportSize({ width: 600, height: 800 });
+  await s.page.waitForFunction(() => getComputedStyle(document.querySelector("#btn-subagents .topbar-label")).display === "none");
 });
