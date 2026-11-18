@@ -208,9 +208,9 @@ origin.
 | Screenshots | `node scripts/capture-screenshots.mjs` (needs a local Chrome or Edge, driven through `playwright-core` from `npm install`; `PLAN2CODE_TEST_BROWSER=chrome|msedge` forces one) |
 | Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only, and CodeMirror 6 (MIT) for the notebook's editor as one bundled file, `public/vendor/codemirror.esm.js`, made by the dev-only `node scripts/vendor-codemirror.mjs` from a pinned lock (about 500 KB, loaded only when the Notebook is first opened); the page's policy blocks the `<style>` element CodeMirror writes, so the editor lives in a shadow root where it adopts its rules as a constructed stylesheet (steps in the architecture doc's Notebook point) |
 
-Edit `src/` only. `skills/` is a committed build artifact: regenerate it with
-`npm run build:skills` and commit it with the source change, since `npm test`
-(via `--verify-skills`) fails when it drifts from `src/`.
+Edit `src/` only. `skills/` is gitignored build output: the installer and
+`npm test` (via `--build-skills`) regenerate it, and `npm run build:skills`
+rebuilds it by hand.
 
 ### Driving it by hand
 

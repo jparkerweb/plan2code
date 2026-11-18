@@ -54,7 +54,7 @@ One-line JSON, only what changed; the patch merges (`items`, `topics`, `docs` an
 Every item: `id` (new for each question, whole session), `kind`, `title` (2 to 4 plain words), `body` (markdown: the question and why it matters), optional `topic`, `doc`, `required:false` (adds Skip), `token` (`{"A":"approved"}`: the typed word an answer stands for).
 
 - `choice`: `{"id":"q1","kind":"choice","title":"Export format","body":"Which format?","options":[{"text":"CSV","detail":"Opens in Excel","recommended":true},{"text":"JSON","detail":"For scripts"}]}`. Back: `{k}` or `{text}`; `allowOther:false` drops the free-text row.
-- `text`: `{"id":"q2","kind":"text","title":"Who uses it","body":"Who, and for what?","placeholder":"For example: reviewers, in Excel every Monday."}`. Back: `{text}`. `pattern` plus `patternHint` checks shape (kebab-case). The placeholder is an offer, so write a whole answer. On the fresh-idea card in Pathfinder, Plan and Quick Task add `"templates":"idea"` (also when the idea came as the argument, with a one-line summary in `placeholder`; a resumed map, PLAN-DRAFT or checkpoint gets no idea card; never mention templates in the terminal); a Notebook tab fills a box marked `"fill":"note"`.
+- `text`: `{"id":"q2","kind":"text","title":"Who uses it","body":"Who, and for what?","placeholder":"For example: reviewers, in Excel every Monday."}`. Back: `{text}`. `pattern` plus `patternHint` checks shape (kebab-case). The placeholder is an offer: write a whole answer. On the fresh-idea card in Pathfinder, Plan and Quick Task add `"templates":"idea"` (also when the idea came as the argument, with a one-line summary in `placeholder`; a resumed map, PLAN-DRAFT or checkpoint gets no idea card; never mention templates in the terminal); a Notebook tab fills a box marked `"fill":"note"`.
 - `confirm`: `{"id":"q3","kind":"confirm","title":"Keep going","body":"Continue?","yesLabel":"Yes","noLabel":"Not yet"}`. Back: `{yes,text?}`.
 - `recap`: `{"id":"q4","kind":"recap","title":"What we heard","body":"Is this right?","summary":"- ..."}`. Back: `{ok,text?}`.
 - `menu`: `{"id":"q5","kind":"menu","title":"Next step","body":"What now?","options":[{"text":"Plan it"}],"command":"/plan2code-1-plan"}`. Back: `{k}`.
@@ -65,7 +65,7 @@ Every item: `id` (new for each question, whole session), `kind`, `title` (2 to 4
 | `review` | read, then approve | `doc` (required), `summary`, `verdicts:[{id,label,danger?}]`, `nothingYet` (false once the change is on disk) | `{verdict,text?}` |
 | `checklist` | steps only they can do | `steps`, `valuesLabel` | `{done?,state?,text?}` |
 | `list` | reorder or edit a breakdown | `rows:[{id,title,body}]` | `{rows}` or `{text}` |
-| `lessons` | approve noted lessons | `rows`, `opening`, `firstAsk` (from `lessons.mjs list`), `suggested` (row id to a choice: outlined, not picked) | `{decisions}` or `{firstAsk}` |
+| `lessons` | approve lessons | `rows`, `opening`, `firstAsk` (`lessons.mjs list`), `suggested` | `{decisions}` or `{firstAsk}` |
 | `notice` | read, no answer | none | none |
 
 Items show in the order sent, so send them in answering order.
