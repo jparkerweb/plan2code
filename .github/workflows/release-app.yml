@@ -10,7 +10,7 @@ name: release-app
 # plan2code-app-<version>-<os>-<arch>[.exe], plus one checksum file
 # (plan2code-app-<version>-SHA256SUMS.txt). install.js fetches the matching file and checks it
 # against that list. Linux ships the plain binary, not an AppImage: docs/desktop-app.md documents
-# its WebKitGTK 4.1 dependency instead. The first release is unsigned: docs/desktop-app.md says
+# its WebKitGTK 4.1 dependency instead. The app is not code-signed: docs/desktop-app.md says
 # how to allow it.
 
 on:
@@ -187,3 +187,18 @@ jobs:
           if [ "$state" = "true" ]; then
             gh release edit "$TAG" --draft=false
           fi
+      - name: Move the release branch to this tag
+        # The README's first install is `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release`, so new users
+        # get the newest release and never a half-finished main. Last step, after the release is
+        # public: a failure earlier leaves the branch on the previous release. Fast-forward only
+        # (no --force), so a tag that is not ahead of the branch fails loudly instead of
+        # rewinding what people install.
+        run: |
+          # The checkout is shallow, and git decides "fast-forward" locally: without the full
+          # history the branch's old tip is unknown here and the push is refused as "fetch first".
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --no-tags --unshallow origin
+          fi
+          git fetch --no-tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          sha="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          git push origin "${sha}:refs/heads/release"

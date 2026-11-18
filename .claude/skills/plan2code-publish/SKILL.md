@@ -30,7 +30,7 @@ git pull origin main
 
 Read all three files at the repo root and extract each version:
 
-- `CHANGELOG.md` — parse the first `## vX.Y.Z` heading. Strip the leading `v` → `$CHANGELOG_VERSION`. Note: plan2code CHANGELOG headings are `## vX.Y.Z` (v-prefixed, **no** date and **no** brackets) — different from a `## [x.y.z] - YYYY-MM-DD` format.
+- `CHANGELOG.md` — parse the first `## vX.Y.Z` heading. Strip the leading `v` → `$CHANGELOG_VERSION`. Note: plan2code CHANGELOG headings are `## vX.Y.Z`, optionally followed by ` (YYYY-MM-DD)` (v-prefixed, **no** brackets; older headings have no date), different from a `## [x.y.z] - YYYY-MM-DD` format. The date is not part of the version.
 - `version.json` — the `version` field → `$VERSION_JSON`. Also read its `releaseDate` field → `$RELEASE_DATE` (informational only — shown at the confirm step, never part of the sync gate; use `(none)` if absent).
 - `package.json` (root) → the `version` field → `$PACKAGE_JSON`.
 
@@ -80,7 +80,30 @@ If `$CHANGELOG_VERSION` > `$RELEASE_VERSION`, compute:
 
 - `tag = "v$CHANGELOG_VERSION"`
 - `title = "v$CHANGELOG_VERSION"` (plan2code keeps the `v` prefix in release titles)
-- `notes` = the header line `# What's New 🎉`, then one blank line, then `$SECTION` verbatim (`$SECTION` already starts with the `## vX.Y.Z` heading). Build this as a real multi-line string with **actual newlines** — the `\n\n` shorthand shown elsewhere means "a blank line," never the literal two-character sequence `\` + `n`. Getting this wrong would run the header and the first CHANGELOG heading together with a stray `\n\n` in the published body.
+- `notes` = the header line `# What's New 🎉`, one blank line, the **fixed header** below (with `$CHANGELOG_VERSION` filled in), one blank line, then the **highlights**, one blank line, then `$SECTION` verbatim (`$SECTION` already starts with the `## vX.Y.Z` heading). Build this as a real multi-line string with **actual newlines** — the `\n\n` shorthand shown elsewhere means "a blank line," never the literal two-character sequence `\` + `n`. Getting this wrong would run the header and the first CHANGELOG heading together with a stray `\n\n` in the published body.
+
+**The fixed header** (the same on every release, so a visitor to the release page finds the install and update commands and the right file without reading the changelog):
+
+````markdown
+**Install:** `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release`  
+**Update:** `plan2code update`
+
+The installer downloads the right app for your system and puts it in place for you, so you only need the files below for a manual download.
+
+| Your system | File |
+| --- | --- |
+| Windows (64-bit Intel or AMD) | `plan2code-app-$CHANGELOG_VERSION-windows-x64.exe` |
+| macOS (Apple silicon) | `plan2code-app-$CHANGELOG_VERSION-macos-arm64` |
+| macOS (Intel) | `plan2code-app-$CHANGELOG_VERSION-macos-x64` |
+| Linux (64-bit Intel or AMD) | `plan2code-app-$CHANGELOG_VERSION-linux-x64` |
+| Any system: check a download | `plan2code-app-$CHANGELOG_VERSION-SHA256SUMS.txt` |
+
+The app files are not code-signed. See [the desktop app guide](https://github.com/jparkerweb/plan2code/blob/main/docs/desktop-app.md#the-app-is-not-code-signed) for what your system may ask and how to answer.
+````
+
+Check the install command against the README's "See it" line before publishing; if it has changed, the README wins.
+
+**The highlights** (written fresh for each release, from `$SECTION`): a `### Highlights` heading and exactly three bullets, each one plain sentence about what a person can now do or no longer trips over (no file names, no internal terms). The full list follows below them. When `$SECTION` already opens with its own `### Highlights` block (the changelog format from 3.1.0 on), reuse those bullets as they are: add no second Highlights block.
 
 Present all three to the user and wait for an explicit answer before any write. Offer the optional decorative title suffix — a plain `vX.Y.Z` title is the default, but a release may append one (e.g. `v1.14.0 - 🔍 Review workflow`):
 
@@ -105,7 +128,7 @@ If the user supplies a suffix, set `title = "v$CHANGELOG_VERSION " + <suffix>` (
 
 ### Step 9 - Publish (on approval)
 
-The release is created by the `release-app` workflow, **last**, not by this skill. The workflow builds the app on four systems, attaches every file to a draft release, and only then publishes it, so the `vX.Y.Z` tag (which the app's update check watches) never exists before its binaries do. Creating the release here with `gh release create` would put the tag up first and leave users offered an upgrade with nothing to download. Do not do that.
+The release is created by the `release-app` workflow, **last**, not by this skill. The workflow builds the app on four systems, attaches every file to a draft release, and only then publishes it, so the `vX.Y.Z` tag (which the app's update check watches) never exists before its binaries do; its last step then fast-forwards the `release` branch (what the README installs from) to the new tag, and fails loudly if the tag is not ahead of the branch. Creating the release here with `gh release create` would put the tag up first and leave users offered an upgrade with nothing to download. Do not do that.
 
 On approval, write `$notes` to a temp file, never inline (multiline text on the command line is a quoting bug). `$notes` must already hold **real newlines** (per Step 8) because `printf '%s'` / `WriteAllText` write it byte-for-byte, and the file MUST be **UTF-8** because the notes contain emoji. Then start the workflow on `main`, passing the file as the `notes` input (`-F key=@file` reads the file's contents):
 

@@ -49,6 +49,11 @@ node scripts/bench-web-console.mjs [--runs 7] [--workflow dashboard]
 # PLAN2CODE_TEST_BROWSER=chrome|msedge forces which browser the page tests and these scripts use
 node scripts/capture-screenshots.mjs                   # every screen
 node scripts/capture-screenshots.mjs --only dashboard  # one screen (dashboard-utilities scrolls to the utility cards)
+# After a full capture, rebuild what the landing page derives from it (hero 1280px variants, the 1200x630
+# social card) and, until the owner has real desktop app pictures, the labeled placeholders (never overwrites a real file)
+node scripts/make-site-images.mjs
+node scripts/make-social-card.mjs
+node scripts/make-app-placeholders.mjs
 
 # Compare every element's computed style on every screen before and after a stylesheet change
 # (dev-only, not in npm test): take a baseline first, then compare after each move
@@ -137,14 +142,14 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 
 ## Non-Interactive Flags
 
-`install.js` takes no arguments for normal use, but exposes two build hooks and the non-interactive update. Any argument other than these three (when none is present) exits 1 with usage; extra arguments beside `--build-skills` or `--verify-skills` are ignored, while `--update` must be the only argument.
+`install.js` takes no arguments for normal use, but exposes two build hooks and the non-interactive update. Any argument other than these three (when none is present) exits 1 with usage; extra arguments beside `--build-skills` or `--verify-skills` are ignored, while `--update` takes only `--force` beside it.
 
 | Flag | Action |
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
-| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, app, statusline; metrics and bot only when run from a git checkout, since they run from the install folder, which npx's cache is not), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
-| `--uninstall [--yes] [--purge]` | No menu: confirm y/N (`--yes` skips it), run `uninstallAll()` (the menu's U sequence: skills, dev tools, status line, `plan2code` command, desktop app), then ask whether to also delete `~/.plan2code` (`purgeData()`; `--purge` says yes without asking, `--yes` alone keeps the data). `plan2code uninstall [--yes] [--purge]` runs it through npx |
+| `--update [--force]` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, app, statusline; metrics and bot only when run from a git checkout, since they run from the install folder, which npx's cache is not), never uninstalling; with no record, the skills and the `plan2code` command. Compact output: `Updating <old> -> <new>` from the record's version (or `Already on <new>`, which stops unless `--force`), each piece's own output held back (`captureOutput()`) and shown only for a warning or a failure, one summary with human piece names (`PIECE_LABELS`), the release notes link and the restart hint; a failed update also prints `plan2code update --tag v<old>`. A failed update, or one whose desktop app was kept because the release has no app file yet, puts the old version back on `install.json`, so the next update (the app's Update and restart included) runs instead of stopping at Already on. `plan2code update` runs it through npx, pinned to the newest `vX.Y.Z` tag the launcher finds with update-check.mjs's `git ls-remote` pick (`--main` takes the tip of `main`, `--tag <ref>` any ref, `--force` is passed on; `PLAN2CODE_LS_REMOTE_FILE` replaces the git call in tests) |
+| `--uninstall [--yes] [--purge]` | No menu: confirm y/N (`--yes` skips it), run `uninstallAll()`, then ask whether to also delete `~/.plan2code` (`purgeData()`; `--purge` says yes without asking, `--yes` alone keeps the data). `uninstallAll()` is driven by the pieces `install.json` records plus a quiet probe for strays (`UNINSTALL_STEPS`, `UNINSTALL_PROBES`), prints one line per piece actually removed, falls back to deleting the `plan2code*` folders under `~/.agents/skills` when the skills CLI is unreachable, and removes the versioned console folders and `console-dir` (`removeConsoleFolders()`, stopping a running console first). What stays in `~/.plan2code` is listed by name with its size (`listKeptData()`), and the run always ends with the Removed / Could not remove / To finish block (`printUninstallReport()`). Deleting the data also removes the app's webview data outside `~/.plan2code` (`appWebviewDirs()`, `purgeAppWebview()`), and a running app is named before anything is removed (`appRunning()`). `plan2code uninstall [--yes] [--purge]` runs it through npx |
 
 ## How the Installer Works
 

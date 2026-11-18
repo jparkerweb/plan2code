@@ -16,12 +16,28 @@
  * Supports non-interactive --build-skills and --verify-skills maintenance hooks.
  */
 
+/**
+ * The sentence for a Node.js older than 18, or null when `version` (`process.versions.node`) is
+ * new enough. Kept free of anything newer than old Node can parse, since it runs before the rest.
+ */
+function nodeVersionProblem(version) {
+  var major = parseInt(String(version).split('.')[0], 10);
+  if (major >= 18) return null;
+  return 'Plan2Code needs Node.js 18 or newer; you have v' + version + '. Get it from nodejs.org';
+}
+var NODE_PROBLEM = nodeVersionProblem(process.versions.node);
+if (NODE_PROBLEM) {
+  console.error(NODE_PROBLEM);
+  process.exit(1);
+}
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const crypto = require('crypto');
-const { execSync, execFileSync } = require('child_process');
+const { execSync, execFileSync, spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 
 // Load project version metadata
 let projectVersion = { name: 'Plan2Code', version: 'unknown' };
@@ -35,9 +51,11 @@ try {
   // Silently continue with default version if file is not found or invalid
 }
 
-// Color codes for display (ANSI escape sequences)
-// Use these in console.log() for colored output
-const COLORS = {
+// Color codes for display (ANSI escape sequences). Color only on a real terminal, and never when
+// NO_COLOR is set to anything: piped output and NO_COLOR runs get empty strings, so every
+// `${COLORS.X}` use prints plain text. Each stream asks for itself, as the launcher does:
+// COLORS is for stdout, ERR_COLORS for console.error.
+const ANSI = {
   RESET: '\x1b[0m',
   BRIGHT: '\x1b[1m',
   DIM: '\x1b[2m',
@@ -57,26 +75,29 @@ const COLORS = {
   BG_RED: '\x1b[41m',
 };
 
-// Symbols for status reporting
-const SYMBOLS = {
-  SUCCESS: '▰▰▰',        // Success
-  ACTIVE: '►►►',         // Active/In Progress
-  WARNING: '⚠ ⚠ ⚠',     // Warning
-  ERROR: '✖✖✖',          // Error
-  INFO: '◆',             // Info
-  SELECT: '◉',           // Selection marker
-  COMPLETE: '█',         // Complete
-  PENDING: '░',          // Pending
-  DIVIDER: '═',          // Divider
-  CORNER_TL: '╔',        // Box corners
-  CORNER_TR: '╗',
-  CORNER_BL: '╚',
-  CORNER_BR: '╝',
-  HORIZONTAL: '═',
-  VERTICAL: '║',
-  TEE_RIGHT: '╠',
-  TEE_LEFT: '╣',
+/** The ANSI codes when `on`, or the same keys as empty strings. */
+function colorSet(on) {
+  return Object.fromEntries(Object.entries(ANSI).map(([key, code]) => [key, on ? code : '']));
+}
+
+const COLORS = colorSet(Boolean(process.stdout.isTTY) && !process.env.NO_COLOR);
+const ERR_COLORS = colorSet(Boolean(process.stderr.isTTY) && !process.env.NO_COLOR);
+
+// What a run with no terminal prints before it exits 1 (the menu needs someone to answer it).
+const NO_TERMINAL_MESSAGE = 'Run this in a terminal, or use `--update` for an unattended install.';
+
+// One mark each for done, warning and failed, the launcher's plain look. Anything else is a
+// plain or dim line, and a step's name is a sentence-case heading, not a marked line.
+const MARKS = {
+  DONE: '✓',
+  WARN: '!',
+  FAIL: '✗',
 };
+
+// Every box is this wide (borders included), and a box is only drawn on a terminal at least
+// BOX_MIN_COLUMNS wide; anything narrower, or piped, gets plain heading lines instead.
+const BOX_WIDTH = 66;
+const BOX_MIN_COLUMNS = 80;
 
 // Plan2Code Mascot - appears during user interactions
 const MASCOT = {
@@ -648,72 +669,65 @@ function displayMascot(variant = 'full', message = '') {
   console.log('');
 }
 
+/** Whether boxes fit: a terminal at least BOX_MIN_COLUMNS wide. Piped output never gets one. */
+function boxesFit(stream = process.stdout) {
+  return Boolean(stream.isTTY) && (stream.columns || 0) >= BOX_MIN_COLUMNS;
+}
+
 /**
- * Display header
+ * The one box printer. `lines` are the rows inside it (they may carry colors); on a terminal at
+ * least BOX_MIN_COLUMNS wide they are drawn in a BOX_WIDTH box, and anywhere else printed as
+ * plain lines, so a narrow terminal or a piped run never shows a broken border.
+ */
+function printBox(lines, { color = COLORS.CYAN, fit = boxesFit() } = {}) {
+  if (!fit) {
+    for (const line of lines) console.log(line);
+    return;
+  }
+  const inner = BOX_WIDTH - 4;
+  console.log(`${color}╭${'─'.repeat(BOX_WIDTH - 2)}╮${COLORS.RESET}`);
+  for (const line of lines) {
+    console.log(`${color}│${COLORS.RESET} ${padEndVisible(line, inner)} ${color}│${COLORS.RESET}`);
+  }
+  console.log(`${color}╰${'─'.repeat(BOX_WIDTH - 2)}╯${COLORS.RESET}`);
+}
+
+/**
+ * The welcome header: Planny waving, as MASCOT.wave draws him, with the greeting beside him.
  */
 function displayHeader() {
+  const beside = {
+    1: `${COLORS.BRIGHT}Hi! I'm Planny.${COLORS.RESET}`,
+    2: 'Welcome to Plan2Code.',
+    3: `${COLORS.DIM}https://github.com/jparkerweb/plan2code${COLORS.RESET}`,
+  };
   console.log('');
-  console.log(`${COLORS.CYAN}${COLORS.BRIGHT}`);
-  console.log('╔═════════════════════════════════════════════════════════╗');
-  console.log('║              ╭───╮                                      ║');
-  console.log('║              │ ★ │╱  Hi! I\'m Planny!                    ║');
-  console.log('║             ╱│ ◡ │   Nice to meet you                   ║');
-  console.log('║              ╰┬─┬╯   Welcome to Plan2Code!              ║');
-  console.log('║                                                         ║');
-  console.log('║   G L O B A L   I N S T A L L A T I O N   S Y S T E M   ║');
-  console.log('║          https://github.com/jparkerweb/plan2code        ║');
-  console.log('║                                                         ║');
-  console.log('╚═════════════════════════════════════════════════════════╝');
-  console.log(COLORS.RESET);
+  printBox(MASCOT.wave.map((row, i) => `${COLORS.MAGENTA}${row}${COLORS.RESET}${beside[i] ? ` ${beside[i]}` : ''}`));
   console.log('');
 }
 
 /**
- * Display section header with border
+ * A section heading in sentence case: boxed when boxes fit, one bright line otherwise.
+ * `subtitle` is an optional dim line under it.
  */
-function displaySectionHeader(title, mode = '') {
-  const innerWidth = 75;
-
-  // Center the title with ═ padding
-  const titleContent = `[ ${title} ]`;
-  const titlePadTotal = innerWidth - titleContent.length;
-  const titlePadLeft = Math.floor(titlePadTotal / 2);
-  const titlePadRight = titlePadTotal - titlePadLeft;
-  const titleLine = '═'.repeat(titlePadLeft) + titleContent + '═'.repeat(titlePadRight);
-
-  console.log(`${COLORS.CYAN}${COLORS.BRIGHT}`);
-  console.log('╔═══════════════════════════════════════════════════════════════════════════╗');
-  console.log(`║${' '.repeat(innerWidth)}║`);
-  console.log(`║${titleLine}║`);
-  if (mode) {
-    // Center the mode text with space padding
-    const modePadTotal = innerWidth - mode.length;
-    const modePadLeft = Math.floor(modePadTotal / 2);
-    const modePadRight = modePadTotal - modePadLeft;
-    console.log(`║${' '.repeat(modePadLeft)}${mode}${' '.repeat(modePadRight)}║`);
+function displaySectionHeader(title, subtitle = '') {
+  console.log('');
+  if (boxesFit()) {
+    printBox([`${COLORS.BRIGHT}${title}${COLORS.RESET}`, ...(subtitle ? [`${COLORS.DIM}${subtitle}${COLORS.RESET}`] : [])]);
+  } else {
+    console.log(`${COLORS.CYAN}${COLORS.BRIGHT}${title}${COLORS.RESET}`);
+    if (subtitle) console.log(`${COLORS.DIM}${subtitle}${COLORS.RESET}`);
   }
-  console.log(`║${' '.repeat(75)}║`);
-  console.log('╚═══════════════════════════════════════════════════════════════════════════╝');
-  console.log(COLORS.RESET);
+  console.log('');
 }
 
 /**
- * Display operation status box
+ * A titled list of lines: a bright title, then the lines indented. Never boxed, so a long path
+ * in a line cannot break a border.
  */
 function displayStatusBox(title, lines) {
-  console.log(`${COLORS.BLUE}`);
-  console.log('┌─────────────────────────────────────────────────────────────────────────┐');
-  console.log(`│ ${COLORS.BRIGHT}${title}${COLORS.RESET}${COLORS.BLUE}${' '.repeat(72 - title.length)}│`);
-  console.log('├─────────────────────────────────────────────────────────────────────────┤');
-
-  lines.forEach(line => {
-    const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, ''); // Remove color codes for length calc
-    const padding = ' '.repeat(Math.max(0, 72 - cleanLine.length));
-    console.log(`│ ${line}${padding}│`);
-  });
-
-  console.log('└─────────────────────────────────────────────────────────────────────────┘');
-  console.log(COLORS.RESET);
+  console.log(`${COLORS.BRIGHT}${title}${COLORS.RESET}`);
+  for (const line of lines) console.log(line ? `  ${line}` : '');
 }
 
 /**
@@ -729,21 +743,37 @@ function displayProgress(current, total, label) {
   process.stdout.write(`\r${COLORS.CYAN}[${bar}${COLORS.CYAN}]${COLORS.RESET} ${percent}% ${label}`);
 }
 
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 /**
- * Animated spinner that works with synchronous operations
- * Shows visible progress indicator
+ * A spinner with an elapsed-seconds count for a step that runs asynchronously. On a terminal it
+ * redraws one line on a timer until `stop()`; anywhere else it prints `label` once, as a plain
+ * line, and stays silent. `stop()` clears the line it drew.
  */
-function createSpinner() {
+function createSpinner(label, { stream = process.stdout, intervalMs = 100 } = {}) {
+  const started = Date.now();
+  let timer = null;
+  let frame = 0;
+  const draw = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    stream.write(`\r  ${COLORS.CYAN}${SPINNER_FRAMES[frame++ % SPINNER_FRAMES.length]}${COLORS.RESET} ${label} ${COLORS.DIM}${seconds}s${COLORS.RESET}\x1b[K`);
+  };
   return {
-    start: function() {
-      process.stdout.write('\n  ⏳ ');
+    start() {
+      if (!stream.isTTY) {
+        console.log(`  ${label}`);
+        return this;
+      }
+      draw();
+      timer = setInterval(draw, intervalMs);
+      return this;
     },
-    tick: function() {
-      process.stdout.write('█');
+    stop() {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+      stream.write('\r\x1b[K');
     },
-    stop: function() {
-      process.stdout.write(' ✓\n');
-    }
   };
 }
 
@@ -761,7 +791,7 @@ function deleteDirectory(dirPath) {
   try {
     fs.rmSync(dirPath, { recursive: true, force: true });
   } catch (err) {
-    console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not delete directory ${dirPath}: ${err.message}`);
+    console.error(`  ${ERR_COLORS.RED}${MARKS.FAIL}${ERR_COLORS.RESET} Could not delete directory ${dirPath}: ${err.message}`);
   }
 }
 
@@ -928,8 +958,8 @@ function removeEmptyDirs(dir) {
 function buildSkills(quiet = false) {
   const { expected, errors } = computeExpectedSkills();
   const stats = { written: 0, unchanged: 0, pruned: 0, errors: errors.length };
-  for (const message of errors) console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} ${message}`);
-  if (!quiet) console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} BUILDING SKILLS${COLORS.RESET} ${COLORS.DIM}src/ -> ${SKILLS_DIR_NAME}/${COLORS.RESET}\n`);
+  for (const message of errors) console.error(`  ${ERR_COLORS.RED}${MARKS.FAIL}${ERR_COLORS.RESET} ${message}`);
+  if (!quiet) console.log(`${COLORS.BRIGHT}Building skills${COLORS.RESET} ${COLORS.DIM}src/ -> ${SKILLS_DIR_NAME}/${COLORS.RESET}\n`);
 
   const expectedSkillNames = new Set(SOURCE_PROMPTS.map(generateSkillName));
   if (fs.existsSync(SKILLS_DIR)) {
@@ -938,7 +968,7 @@ function buildSkills(quiet = false) {
       if (!fs.statSync(entryPath).isDirectory() || expectedSkillNames.has(entry) || entry === CONSOLE_SHARED_DIR) continue;
       deleteDirectory(entryPath);
       stats.pruned++;
-      if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${entry}/`);
+      if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Pruned: ${entry}/`);
     }
   }
 
@@ -951,7 +981,7 @@ function buildSkills(quiet = false) {
       if (expected.has(key)) continue;
       fs.rmSync(path.join(skillDir, relPath), { force: true });
       stats.pruned++;
-      if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${key}`);
+      if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Pruned: ${key}`);
     }
     // A folder the build no longer fills (a skill that lost all its scripts) goes too.
     removeEmptyDirs(skillDir);
@@ -976,16 +1006,16 @@ function buildSkills(quiet = false) {
       fs.mkdirSync(path.dirname(absPath), { recursive: true });
       fs.writeFileSync(absPath, content);
       stats.written++;
-      if (!quiet) console.log(`  ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${relPath}`);
+      if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} ${relPath}`);
     } catch (err) {
-      console.error(`  ${COLORS.RED}✖✖✖${COLORS.RESET} ${relPath}: ${err.message}`);
+      console.error(`  ${ERR_COLORS.RED}${MARKS.FAIL}${ERR_COLORS.RESET} ${relPath}: ${err.message}`);
       stats.errors++;
     }
   }
 
   if (!quiet) {
-    console.log(`\n  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} ${SOURCE_PROMPTS.length} skill(s): ${stats.written} written, ${stats.unchanged} unchanged, ${stats.pruned} pruned`);
-    if (stats.errors > 0) console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} ${stats.errors} error(s)`);
+    console.log(`\n  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} ${SOURCE_PROMPTS.length} skill(s): ${stats.written} written, ${stats.unchanged} unchanged, ${stats.pruned} pruned`);
+    if (stats.errors > 0) console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} ${stats.errors} error(s)`);
     console.log('');
   }
   return stats.errors === 0;
@@ -1050,11 +1080,11 @@ function installSharedConsole({ quiet = false, source: builtFrom, sweep = true }
     fs.cpSync(source, dest, { recursive: true, force: true });
     fs.writeFileSync(path.join(home, 'console-dir'), `${dest}\n`);
   } catch (err) {
-    console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not install the shared console into ${home}: ${err.message}`);
+    console.error(`  ${ERR_COLORS.RED}${MARKS.FAIL}${ERR_COLORS.RESET} Could not install the shared console into ${home}: ${err.message}`);
     return false;
   }
   if (sweep) sweepOldConsoles({ quiet, version });
-  if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Shared console ${version} installed in ${dest}`);
+  if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Shared console ${version} installed in ${dest}`);
   return true;
 }
 
@@ -1068,10 +1098,10 @@ function sweepOldConsoles({ quiet = false, version } = {}) {
     if (!entry.isDirectory() || entry.name === version || !CONSOLE_VERSION_DIR.test(entry.name)) continue;
     try {
       fs.rmSync(path.join(home, entry.name), { recursive: true, force: true });
-      if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Removed old console ${entry.name}`);
+      if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed old console ${entry.name}`);
     } catch (err) {
       // An old console still running keeps its folder; the next update removes it.
-      if (!quiet) console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Kept old console ${entry.name}: ${err.message}`);
+      if (!quiet) console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} Kept old console ${entry.name}: ${err.message}`);
     }
   }
 }
@@ -1095,10 +1125,10 @@ function cleanLegacyPaths(quiet = false) {
           fs.unlinkSync(entryPath);
         }
         stats.removed++;
-        if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} ${legacy.name}: removed ${entry}`);
+        if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} ${legacy.name}: removed ${entry}`);
       } catch (err) {
         stats.errors++;
-        if (!quiet) console.log(`  ${COLORS.RED}✖✖✖${COLORS.RESET} ${legacy.name}: could not remove ${entry} — ${err.message}`);
+        if (!quiet) console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} ${legacy.name}: could not remove ${entry} — ${err.message}`);
       }
     }
   }
@@ -1134,6 +1164,49 @@ function runSkillsCli(args) {
   return result.ok ? result.output : null;
 }
 
+/**
+ * `execSkillsCli` without blocking: the CLI runs through `spawn`, so a spinner can tick while it
+ * works. Resolves to the same `{ ok, output }` shape: the trimmed stdout on success, stdout and
+ * stderr together on a failure.
+ */
+function execSkillsCliAsync(args) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let child;
+    try {
+      child = spawn(`${SKILLS_CLI} ${args}`, {
+        shell: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, npm_config_loglevel: 'error' },
+        windowsHide: true,
+      });
+    } catch (err) {
+      resolve({ ok: false, output: err.message });
+      return;
+    }
+    child.stdin.end();
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (err) => resolve({ ok: false, output: `${stdout}\n${stderr || err.message}`.trim() }));
+    child.on('close', (code) => {
+      resolve(code === 0 ? { ok: true, output: stdout.trim() } : { ok: false, output: `${stdout}\n${stderr}`.trim() });
+    });
+  });
+}
+
+/** Run `skills add` with a spinner and elapsed seconds while it works (one plain line when piped). */
+async function addSkillsWithSpinner(args, label) {
+  const spinner = createSpinner(label).start();
+  try {
+    return await execSkillsCliAsync(args);
+  } finally {
+    spinner.stop();
+  }
+}
+
 function skillNameArgs() {
   return `-s ${SOURCE_PROMPTS.map(generateSkillName).join(' ')}`;
 }
@@ -1154,17 +1227,17 @@ function reportSkillsOutput(result) {
     return;
   }
   for (const failure of extractSkillsFailures(result.output)) {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} ${failure}`);
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} ${failure}`);
   }
 }
 
 function ensureSkillsCli() {
   const version = runSkillsCli('--version');
   if (version !== null) {
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} skills CLI ${COLORS.DIM}${version.split('\n').pop()}${COLORS.RESET}`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} skills CLI ${COLORS.DIM}${version.split('\n').pop()}${COLORS.RESET}`);
     return true;
   }
-  console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not run the ${COLORS.BRIGHT}skills${COLORS.RESET} CLI.`);
+  console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Could not run the ${COLORS.BRIGHT}skills${COLORS.RESET} CLI.`);
   console.log(`\n  ${COLORS.DIM}Plan2Code installs through skills.sh, which needs Node 18+ and network access.${COLORS.RESET}`);
   console.log(`  ${COLORS.DIM}Check that this works, then re-run the installer:${COLORS.RESET}`);
   console.log(`    ${COLORS.CYAN}${SKILLS_CLI} --version${COLORS.RESET}\n`);
@@ -1199,7 +1272,7 @@ function listInstalledSkills(scope) {
 function removeInstalledSkills(scope, { quiet = false } = {}) {
   const installed = listInstalledSkills(scope);
   if (installed.length === 0) {
-    if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No Plan2Code skills currently installed${COLORS.RESET}`);
+    if (!quiet) console.log(`  ${COLORS.DIM}No Plan2Code skills currently installed${COLORS.RESET}`);
     return 0;
   }
 
@@ -1209,11 +1282,11 @@ function removeInstalledSkills(scope, { quiet = false } = {}) {
   const names = [...new Set([...installed, ...SOURCE_PROMPTS.map(generateSkillName)])];
   const scopeFlag = scope === 'global' ? '-g ' : '';
   if (runSkillsCli(`remove ${names.join(' ')} ${scopeFlag}-y`) === null) {
-    if (!quiet) console.log(`  ${COLORS.RED}✖✖✖${COLORS.RESET} Could not remove installed skills`);
+    if (!quiet) console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Could not remove installed skills`);
     return -1;
   }
   for (const name of installed) {
-    if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Removed: ${name}`);
+    if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${name}`);
   }
   return installed.length;
 }
@@ -1227,12 +1300,15 @@ function removeInstalledSkills(scope, { quiet = false } = {}) {
  * steps; `outcome` receives `skills` and `launcher` as true or false for update's per-piece report.
  */
 async function install({ unattended = false, outcome = {} } = {}) {
-  displaySectionHeader('  INSTALLING SKILLS  ');
+  // An unattended install (plan2code update) is compact: no heading box, no summary table, no
+  // mascot and no closing banner. update() prints the one summary, and shows what is printed
+  // here only when a step goes wrong.
+  if (!unattended) displaySectionHeader('Installing skills');
   if (!buildSkills(true)) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
+    console.log(`${COLORS.RED}${MARKS.FAIL} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
     return 1;
   }
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Built ${SOURCE_PROMPTS.length} skills from src/${COLORS.RESET}`);
+  console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Built ${SOURCE_PROMPTS.length} skills from src/`);
   if (!ensureSkillsCli()) return 1;
   // The skills carry only a stub; the console they forward to goes in with them.
   if (!installSharedConsole({ quiet: true, sweep: false })) {
@@ -1240,123 +1316,204 @@ async function install({ unattended = false, outcome = {} } = {}) {
     return 1;
   }
 
-  console.log('');
-  displayStatusBox('PARAMETERS', [
-    `${COLORS.CYAN}Source:${COLORS.RESET}           ${SKILLS_DIR_NAME}/`,
-    `${COLORS.CYAN}Skills:${COLORS.RESET}           ${SOURCE_PROMPTS.length}`,
-    `${COLORS.CYAN}Scope:${COLORS.RESET}            GLOBAL ${COLORS.DIM}(skills.sh default agent set)${COLORS.RESET}`,
-    `${COLORS.CYAN}Store:${COLORS.RESET}            ${path.join(os.homedir(), '.agents', 'skills')}`,
-    `${COLORS.CYAN}Mode:${COLORS.RESET}             INSTALL`,
-  ]);
-  console.log('');
-
   // Clear previous installs before writing anything new. The CLI goes first so it can unwind
   // its own store and links properly; the legacy sweep then picks up pre-2.2 remnants.
-  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING PREVIOUS INSTALLS ${COLORS.GREEN}[please wait...]${COLORS.RESET}`);
-  const spinner1 = createSpinner();
-  spinner1.start();
   removeInstalledSkills('global', { quiet: true });
-  spinner1.tick();
   const legacy = cleanLegacyPaths(true);
-  spinner1.tick();
-  spinner1.stop();
+  console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Cleared the previous install`);
   if (legacy.removed > 0) {
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Cleaned ${legacy.removed} legacy file(s) from pre-2.2 installs`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Cleaned ${legacy.removed} legacy file(s) from pre-2.2 installs`);
   }
-  console.log('');
+  if (!unattended) console.log('');
 
-  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING VIA SKILLS.SH ${COLORS.GREEN}[please wait...]${COLORS.RESET}`);
-  console.log(`  ${COLORS.DIM}Installing ${SOURCE_PROMPTS.length} skills...${COLORS.RESET}`);
-  const spinner2 = createSpinner();
-  spinner2.start();
-  const result = execSkillsCli(`add "${SKILLS_DIR}" -g ${skillNameArgs()} -y`);
-  spinner2.tick();
-  spinner2.stop();
-  console.log('');
+  console.log(`${COLORS.BRIGHT}Installing ${SOURCE_PROMPTS.length} skills for all your agents${COLORS.RESET}`);
+  const result = await addSkillsWithSpinner(`add "${SKILLS_DIR}" -g ${skillNameArgs()} -y`, 'Running skills add...');
   reportSkillsOutput(result);
   const failed = !result.ok;
   outcome.skills = !failed;
   if (!failed) {
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Skills installed`);
     recordInstalled('skills');
     sweepOldConsoles({ quiet: true });
   }
+  console.log('');
 
   // The `plan2code` command opens the dashboard skill, so it's only worth adding once the
   // skills themselves are in place.
-  const launcherFailed = failed ? false : (await installLauncher({ quiet: true, unattended })) !== 0;
+  const launcherOutcome = {};
+  const launcherFailed = failed ? false : (await installLauncher({ quiet: true, unattended, outcome: launcherOutcome })) !== 0;
   outcome.launcher = !failed && !launcherFailed;
 
   // The desktop app comes last and is an extra: its failure leaves the install a success.
   if (!failed && !launcherFailed) await offerDesktopApp({ unattended, outcome });
+  const appState = desktopAppState(outcome);
 
   // Summary
-  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(31)}${COLORS.BRIGHT}S U M M A R Y${COLORS.RESET}${' '.repeat(31)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.GREEN}Mode:${COLORS.RESET}              INSTALL`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  const statusColor = failed ? COLORS.RED : COLORS.GREEN;
-  const statusText = failed ? 'FAILED' : 'SUCCESS';
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${statusColor}Status:${COLORS.RESET}            ${statusColor}${statusText}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  const installedNames = failed ? [] : listInstalledSkills('global');
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Skills Installed:  ${COLORS.GREEN}${installedNames.length}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  if (!failed) {
-    const commandStatus = launcherFailed ? `${COLORS.RED}FAILED (see above)` : `${COLORS.GREEN}${LAUNCHER_COMMAND}`;
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Global Command:    ${commandStatus}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
+  if (!unattended) {
+    displaySectionHeader('Summary');
+    const row = (label, value) => console.log(`  ${padEndVisible(`${label}:`, 18)}${value}`);
+    row('Status', failed ? `${COLORS.RED}${MARKS.FAIL} failed${COLORS.RESET}` : `${COLORS.GREEN}${MARKS.DONE} installed${COLORS.RESET}`);
+    const installedNames = failed ? [] : listInstalledSkills('global');
+    row('Skills', `${installedNames.length}`);
+    if (!failed) {
+      row('Command', launcherFailed ? `${COLORS.RED}failed (see above)${COLORS.RESET}` : `${LAUNCHER_COMMAND}${launcherOutcome.pathMissing ? ` ${COLORS.YELLOW}(not on PATH yet)${COLORS.RESET}` : ''}`);
+      const appColor = { installed: COLORS.GREEN, skipped: COLORS.DIM, failed: COLORS.RED }[appState];
+      row('Desktop App', `${appColor}${appState}${COLORS.RESET}`);
+    }
+    console.log('');
   }
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}\n`);
 
   if (failed) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} skills add failed. Re-run, or install by hand:${COLORS.RESET}`);
+    console.log(`${COLORS.RED}${MARKS.FAIL} skills add failed. Re-run, or install by hand:${COLORS.RESET}`);
     console.log(`    ${COLORS.CYAN}${SKILLS_CLI} add "${SKILLS_DIR}" -g ${skillNameArgs()} -y${COLORS.RESET}\n`);
     return 1;
   }
 
   // The steps come first: where to start, the ways in, and what to do without an agent.
-  if (!unattended) printGettingStarted({ commandInstalled: !launcherFailed });
-  console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}   ${COLORS.DIM}Docs:${COLORS.RESET} ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
-  console.log('');
+  if (!unattended) {
+    await printGettingStarted({
+      commandInstalled: !launcherFailed,
+      pathMissing: Boolean(launcherOutcome.pathMissing),
+      binDir: launcherOutcome.binDir,
+      appInstalled: appState === 'installed',
+    });
+  }
+  if (!unattended) {
+    console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
+    console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}`);
+    console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}`);
+    console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}   ${COLORS.DIM}Docs:${COLORS.RESET} ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
+    console.log('');
+  }
 
   return launcherFailed ? 1 : 0;
 }
 
 /**
+ * The summary's Desktop App row from an install's `outcome`: installed, failed (an attempt that
+ * did not work), or skipped (declined, not offered, no build for this system, or no file in the
+ * release yet on an unattended run).
+ */
+function desktopAppState(outcome = {}) {
+  if (outcome.app === true) return 'installed';
+  if (outcome.app === false && !outcome.appMissing) return 'failed';
+  return 'skipped';
+}
+
+/** The platform key agents.json uses for this OS: "win", "mac" or "linux". */
+function agentPlatform(platform = process.platform) {
+  return platform === 'win32' ? 'win' : platform === 'darwin' ? 'mac' : 'linux';
+}
+
+/**
+ * The line that puts `binDir` on PATH for the person's shell, and the file it goes in (null on
+ * Windows, where PowerShell writes the user PATH itself). zsh gets ~/.zshrc, any other shell ~/.bashrc.
+ */
+function pathFixLine(binDir, { platform = process.platform, shell = process.env.SHELL || '', home = os.homedir() } = {}) {
+  if (platform === 'win32') {
+    const dir = binDir.replace(/'/g, "''");
+    return {
+      file: null,
+      line: `[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';${dir}', 'User')`,
+    };
+  }
+  const rel = path.posix.relative(home.replace(/\\/g, '/'), binDir.replace(/\\/g, '/'));
+  const dir = rel && !rel.startsWith('..') && !path.posix.isAbsolute(rel) ? `$HOME/${rel}` : binDir;
+  const file = /zsh$/.test(shell) ? '~/.zshrc' : '~/.bashrc';
+  return { file, line: `echo 'export PATH="${dir}:$PATH"' >> ${file}` };
+}
+
+/** The command by its full path, for use before PATH picks it up. */
+function fullCommandPath(binDir, platform = process.platform) {
+  return platform === 'win32'
+    ? `& "${path.win32.join(binDir, `${LAUNCHER_COMMAND}.cmd`)}"`
+    : `"${path.posix.join(binDir.replace(/\\/g, '/'), LAUNCHER_COMMAND)}"`;
+}
+
+/**
+ * The agents this computer has, by the same list and lookup rule the launcher uses: the shipped
+ * agents.json and agent-lookup.mjs (the copies in ~/.plan2code/bin/, or the ones in src/ when the
+ * command was not installed), plus the person's own agents in ~/.plan2code/agents.json.
+ * Returns `{ found, builtins }`: the names found, and the built-ins for the install advice.
+ */
+async function detectAgents({ binDir = path.dirname(AGENT_LOOKUP_DEST), userAgentsFile = USER_AGENTS_FILE, env = {} } = {}) {
+  const installed = fs.existsSync(path.join(binDir, 'agent-lookup.mjs')) && fs.existsSync(path.join(binDir, 'agents.json'));
+  const lookupFile = installed ? path.join(binDir, 'agent-lookup.mjs') : AGENT_LOOKUP_SRC;
+  const listDir = installed ? binDir : path.dirname(AGENTS_SRC);
+  let lookup;
+  try {
+    lookup = await import(pathToFileURL(lookupFile).href);
+  } catch {
+    return { found: [], builtins: [] };
+  }
+  const { builtins } = lookup.loadAgentList({ dir: listDir });
+  // The person's own agents, read by the launcher's own rule (a wrong schema drops the file).
+  let custom = [];
+  try {
+    custom = require(LAUNCHER_SRC).customClis(userAgentsFile, false).map((cli) => cli.entry);
+  } catch {}
+  // Present means what the launcher can run: on PATH, or on the saved Windows PATH it adds
+  // before looking. A command only in npm's folder or an install folder off PATH is not.
+  const runnable = (entry) => {
+    const hit = lookup.findAgent(entry, env);
+    return hit.state === 'found' || hit.where === 'saved-path';
+  };
+  const found = [...builtins, ...custom].filter(runnable).map((entry) => entry.name || entry.command);
+  return { found, builtins };
+}
+
+/** An agent's install line, as the launcher prints it: the lead command for this OS, then its page. */
+function agentInstallLine(entry, platform = agentPlatform()) {
+  const lead = entry.install && Array.isArray(entry.install[platform]) && entry.install[platform][0];
+  const run = lead && typeof lead.run === 'string' ? lead.run : '';
+  if (!run) return entry.installUrl || '';
+  return entry.installUrl && entry.installUrl !== run ? `${run} (${entry.installUrl})` : run;
+}
+
+/**
  * Print what to do after installing: where to start, the ways in, and what to do when no AI
  * agent is installed. Used at the end of every install route so they all end the same way.
+ * `pathMissing` (with `binDir`) prints the PATH line for this shell and the command's full path;
+ * `appInstalled` words steps 2 and 3 for the desktop app. `agents` replaces the detection (tests).
  */
-function printGettingStarted({ commandInstalled }) {
-  const agents = ['claude', 'devin', 'codex'].filter((name) => isCommandOnPath(name));
+async function printGettingStarted({ commandInstalled, pathMissing = false, binDir = '', appInstalled = false, agents = null, platform = process.platform, shell = process.env.SHELL || '' } = {}) {
+  const detected = agents || (await detectAgents());
   const line = (text = '') => console.log(`  ${text}`);
-  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}HOW TO USE PLAN2CODE${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
-  console.log('');
+  displaySectionHeader('How to use Plan2Code');
   line(`${COLORS.BRIGHT}1. Open a terminal IN the project you want to work on${COLORS.RESET}`);
   line('   Plan2Code works on the folder you start it in.');
   line(`   ${COLORS.CYAN}cd path/to/your-project${COLORS.RESET}`);
   console.log('');
   line(`${COLORS.BRIGHT}2. Start Plan2Code${COLORS.RESET}`);
+  const app = appInstalled && commandInstalled;
   if (commandInstalled) {
-    line(`   ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET}   opens your AI agent on the Plan2Code dashboard`);
+    const opens = app ? 'opens the Plan2Code app' : 'opens your AI agent on the Plan2Code dashboard';
+    if (pathMissing && binDir) {
+      const fix = pathFixLine(binDir, { platform, shell });
+      line(`   ${binDir} is not on your PATH yet. Add it ${fix.file ? `to ${fix.file}` : 'in PowerShell'}:`);
+      line(`   ${COLORS.CYAN}${fix.line}${COLORS.RESET}`);
+      line(`   then ${COLORS.BRIGHT}open a new terminal${COLORS.RESET} and run ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET}: it ${opens}.`);
+      line(`   Until then, run it by its full path: ${COLORS.CYAN}${fullCommandPath(binDir, platform)}${COLORS.RESET}`);
+    } else {
+      line(`   ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET}   ${opens}`);
+    }
     line(`   or, inside the agent itself: ${COLORS.CYAN}/plan2code${COLORS.RESET} (Claude Code, Devin)  ${COLORS.CYAN}$plan2code${COLORS.RESET} (Codex)`);
   } else {
     line(`   Inside your AI agent, type ${COLORS.CYAN}/plan2code${COLORS.RESET} (Claude Code, Devin) or ${COLORS.CYAN}$plan2code${COLORS.RESET} (Codex)`);
   }
   console.log('');
-  line(`${COLORS.BRIGHT}3. Pick a card on the page that opens in your browser${COLORS.RESET}`);
+  line(`${COLORS.BRIGHT}3. ${app ? 'Pick a card on the dashboard: plan2code opens the Plan2Code app' : 'Pick a card on the page that opens in your browser'}${COLORS.RESET}`);
   line('   Any AI agent that reads Agent Skills can run Plan2Code the same way.');
   console.log('');
-  if (agents.length === 0) {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING} NO AI AGENT FOUND ON THIS COMPUTER${COLORS.RESET}`);
-    line('Plan2Code runs inside an AI coding agent. Install one, open a new terminal, then follow the steps above:');
-    line(`   Claude Code   ${COLORS.CYAN}npm i -g @anthropic-ai/claude-code${COLORS.RESET}`);
-    line(`   Codex         ${COLORS.CYAN}npm i -g @openai/codex${COLORS.RESET}`);
-    line('   Devin         https://devin.ai');
+  if (detected.found.length === 0) {
+    if (commandInstalled) line(`${COLORS.YELLOW}No agent yet?${COLORS.RESET} Just run ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET}: its setup page installs one with you.`);
+    else line(`${COLORS.YELLOW}No agent yet?${COLORS.RESET} Plan2Code runs inside an AI coding agent. Install one, open a new terminal, then follow the steps above.`);
+    if (detected.builtins.length) {
+      line('Or install one yourself:');
+      for (const entry of detected.builtins) line(`   ${padEndVisible(entry.name, 13)} ${COLORS.CYAN}${agentInstallLine(entry, agentPlatform(platform))}${COLORS.RESET}`);
+    }
+    if (commandInstalled) line(`Already use another agent CLI? Add it in User Preferences, Agents & models (the gear on the Plan2Code page), then run ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET} again.`);
+    else line('Already use another agent CLI? Open it in your project and type /plan2code ($plan2code in Codex).');
     console.log('');
   }
 }
@@ -1369,18 +1526,13 @@ function printGettingStarted({ commandInstalled }) {
  * Execute uninstallation
  */
 function uninstallSkills() {
-  displaySectionHeader('UNINSTALLATION', '[ REMOVING SKILLS ]');
-  console.log('');
-  displayStatusBox('PARAMETERS', [
-    `${COLORS.CYAN}Home Directory:${COLORS.RESET}   ${os.homedir()}`,
-    `${COLORS.CYAN}Scope:${COLORS.RESET}            GLOBAL`,
-    `${COLORS.CYAN}Mode:${COLORS.RESET}             UNINSTALL`,
-  ]);
+  displaySectionHeader('Uninstalling skills', 'Removing the global Plan2Code skills');
+  console.log(`  ${COLORS.DIM}Home folder: ${os.homedir()}${COLORS.RESET}`);
 
   let removed = 0;
   let errors = 0;
   if (ensureSkillsCli()) {
-    console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} REMOVING SKILLS${COLORS.RESET}\n`);
+    console.log(`\n${COLORS.BRIGHT}Removing skills${COLORS.RESET}\n`);
     const skillsRemoved = removeInstalledSkills('global');
     if (skillsRemoved < 0) errors++;
     else removed += skillsRemoved;
@@ -1389,25 +1541,18 @@ function uninstallSkills() {
   }
   if (errors === 0) forgetInstalled('skills');
 
-  console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING LEGACY PATHS${COLORS.RESET}\n`);
+  console.log(`\n${COLORS.BRIGHT}Cleaning up earlier versions${COLORS.RESET}\n`);
   const legacy = cleanLegacyPaths();
-  if (legacy.removed === 0) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Nothing left over from earlier versions${COLORS.RESET}`);
+  if (legacy.removed === 0) console.log(`  ${COLORS.DIM}Nothing left over from earlier versions${COLORS.RESET}`);
   removed += legacy.removed;
   errors += legacy.errors;
 
-  console.log(`\n${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(31)}${COLORS.BRIGHT}S U M M A R Y${COLORS.RESET}${' '.repeat(31)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.GREEN}Mode:${COLORS.RESET}              UNINSTALL`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  const statusColor = errors > 0 ? COLORS.RED : COLORS.GREEN;
-  const statusText = errors > 0 ? 'COMPLETED WITH ERRORS' : 'SUCCESS';
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${statusColor}Status:${COLORS.RESET}            ${statusColor}${statusText}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Items Removed:     ${COLORS.GREEN}${removed}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  if (errors > 0) console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Errors:            ${COLORS.RED}${errors}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}\n`);
+  displaySectionHeader('Summary');
+  const row = (label, value) => console.log(`  ${padEndVisible(`${label}:`, 18)}${value}`);
+  row('Status', errors > 0 ? `${COLORS.RED}${MARKS.FAIL} finished with errors${COLORS.RESET}` : `${COLORS.GREEN}${MARKS.DONE} uninstalled${COLORS.RESET}`);
+  row('Items removed', `${removed}`);
+  if (errors > 0) row('Errors', `${COLORS.RED}${errors}${COLORS.RESET}`);
+  console.log('');
   return errors > 0 ? 1 : 0;
 }
 
@@ -1418,20 +1563,20 @@ function uninstallSkills() {
 /**
  * Install skills into the current project instead of globally.
  */
-function installProjectSkills() {
+async function installProjectSkills() {
   const projectDir = process.cwd();
-  displaySectionHeader('PROJECT INSTALLATION', '[ CURRENT DIRECTORY ]');
+  displaySectionHeader('Installing into this project');
   if (!buildSkills(true)) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
+    console.log(`${COLORS.RED}${MARKS.FAIL} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
     return 1;
   }
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Built ${SOURCE_PROMPTS.length} skills from src/${COLORS.RESET}`);
+  console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Built ${SOURCE_PROMPTS.length} skills from src/`);
   if (!ensureSkillsCli()) return 1;
   // Project skills forward to the same shared console in the home folder.
   if (!installSharedConsole({ quiet: true, sweep: false })) return 1;
 
   console.log('');
-  displayStatusBox('OVERVIEW', [
+  displayStatusBox('Overview', [
     `Installs into ${COLORS.BRIGHT}this project${COLORS.RESET} rather than your home directory, so the`,
     `skills travel with the repo and are visible to everyone who clones it.`,
     '',
@@ -1440,21 +1585,20 @@ function installProjectSkills() {
   ]);
   console.log('');
   if (projectDir === __dirname) {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} This is the Plan2Code repo itself — installing here is rarely what you want.\n`);
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} This is the Plan2Code repo itself — installing here is rarely what you want.\n`);
   }
 
-  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING VIA SKILLS.SH${COLORS.RESET}\n`);
-  console.log(`  ${COLORS.DIM}Installing ${SOURCE_PROMPTS.length} skills...${COLORS.RESET}`);
-  const result = execSkillsCli(`add "${SKILLS_DIR}" ${skillNameArgs()} -y`);
+  console.log(`${COLORS.BRIGHT}Installing ${SOURCE_PROMPTS.length} skills for all your agents${COLORS.RESET}`);
+  const result = await addSkillsWithSpinner(`add "${SKILLS_DIR}" ${skillNameArgs()} -y`, 'Running skills add...');
   reportSkillsOutput(result);
   console.log('');
   if (!result.ok) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} skills add failed. Run it by hand from your project root:${COLORS.RESET}`);
+    console.log(`${COLORS.RED}${MARKS.FAIL} skills add failed. Run it by hand from your project root:${COLORS.RESET}`);
     console.log(`    ${COLORS.CYAN}${SKILLS_CLI} add "${SKILLS_DIR}" ${skillNameArgs()} -y${COLORS.RESET}\n`);
     return 1;
   }
   sweepOldConsoles({ quiet: true });
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Installed into ${projectDir}${COLORS.RESET}\n`);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} Installed into ${projectDir}${COLORS.RESET}\n`);
   console.log(`${COLORS.DIM}  Check the new directories aren't gitignored, or your agents won't see them.${COLORS.RESET}\n`);
   return 0;
 }
@@ -1467,6 +1611,12 @@ function installProjectSkills() {
  * Run interactive menu interface
  */
 function runInteractive() {
+  // With no terminal nothing can answer the menu, and the run used to end at exit 0 having
+  // installed nothing. Say how to do it instead, and fail.
+  if (!process.stdin.isTTY) {
+    console.log(NO_TERMINAL_MESSAGE);
+    process.exit(1);
+  }
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -1478,22 +1628,20 @@ function runInteractive() {
     // Main menu display
     displayHeader();
 
-    console.log(`${COLORS.BLUE}${COLORS.BRIGHT}Version Info:${COLORS.RESET} ${projectVersion.name} ${projectVersion.version}`);
+    console.log(`${COLORS.DIM}${projectVersion.name} ${projectVersion.version}${COLORS.RESET}`);
     console.log('');
 
-    console.log(`${COLORS.CYAN}╔═════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}INSTALL PLAN2CODE${COLORS.RESET}`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(`${COLORS.CYAN}╠═════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install skills + the plan2code command`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove everything Plan2Code installed`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}A.${COLORS.RESET}  ${COLORS.BLUE}ADVANCED${COLORS.RESET}   Project install, dev tools, and more`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}QUIT${COLORS.RESET}       Exit`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(`${COLORS.CYAN}╚═════════════════════════════════════════════════════════╝${COLORS.RESET}`);
+    printBox([
+      `${COLORS.BRIGHT}Install Plan2Code${COLORS.RESET}`,
+      '',
+      `${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install skills + the plan2code command`,
+      `${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove everything Plan2Code installed`,
+      `${COLORS.BRIGHT}A.${COLORS.RESET}  ${COLORS.BLUE}ADVANCED${COLORS.RESET}   Project install, dev tools, and more`,
+      `${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}QUIT${COLORS.RESET}       Exit`,
+    ]);
     console.log('');
 
-    // Input prompt
-    console.log('');
-    const answer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (I, U, A, Q) [I]: `);
+    const answer = await question(`${COLORS.CYAN}Choose an option${COLORS.RESET} (I, U, A, Q) [I]: `);
     const input = answer.trim().toUpperCase() || 'I';
 
     // I path: skills and the plan2code command. The dev tools stay optional under Advanced.
@@ -1507,17 +1655,25 @@ function runInteractive() {
       console.log('');
       console.log(`${COLORS.RED}    ╭───╮${COLORS.RESET}`);
       console.log(`${COLORS.RED}   ╲│ ${COLORS.YELLOW}★${COLORS.RED} │╱${COLORS.RESET}  ${COLORS.YELLOW}!${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}~${COLORS.RED} │${COLORS.RESET}   ${COLORS.DIM}Are you sure? This removes everything Plan2Code installed: skills, the plan2code command and any dev tools.${COLORS.RESET}`);
+      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}~${COLORS.RED} │${COLORS.RESET}`);
       console.log(`${COLORS.RED}    ╰┬─┬╯${COLORS.RESET}`);
       console.log('');
-      const confirmAnswer = await question(`${COLORS.RED}${SYMBOLS.SELECT} CONFIRM UNINSTALL${COLORS.RESET} (Y/N) [N]: `);
+      console.log(`${COLORS.DIM}Are you sure? This removes everything Plan2Code installed: skills, the plan2code command and any dev tools.${COLORS.RESET}`);
+      console.log('');
+      const confirmAnswer = await question(`${COLORS.RED}Remove everything Plan2Code installed?${COLORS.RESET} (Y/N) [N]: `);
       const confirmInput = confirmAnswer.trim().toUpperCase() || 'N';
 
       if (confirmInput === 'Y') {
         rl.close();
-        process.exit(uninstallAll());
+        console.log(`${COLORS.BRIGHT}Removing Plan2Code${COLORS.RESET}`);
+        const report = newUninstallReport();
+        const code = uninstallAll({ report });
+        console.log('');
+        printKeptData();
+        printUninstallReport(report);
+        process.exit(code);
       } else {
-        console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
+        console.log(`\n${COLORS.YELLOW}${MARKS.WARN} CANCELED${COLORS.RESET}\n`);
         rl.close();
         process.exit(0);
       }
@@ -1526,19 +1682,19 @@ function runInteractive() {
     // A path: ADVANCED sub-menu
     if (input === 'A') {
       console.log('');
-      console.log(`${COLORS.CYAN}╔════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}ADVANCED OPTIONS${COLORS.RESET}`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(`${COLORS.CYAN}╠════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Install skills into the current project only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}D.${COLORS.RESET}  ${COLORS.GREEN}P2C CMD${COLORS.RESET}    Install the plan2code command only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}E.${COLORS.RESET}  ${COLORS.MAGENTA}EVERYTHING${COLORS.RESET} Install Plan2Code + all dev tools`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
+      printBox([
+        `${COLORS.BRIGHT}Advanced options${COLORS.RESET}`,
+        '',
+        `${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Install skills into the current project only`,
+        `${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`,
+        `${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`,
+        `${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`,
+        `${COLORS.BRIGHT}D.${COLORS.RESET}  ${COLORS.GREEN}COMMAND${COLORS.RESET}    Install the plan2code command only`,
+        `${COLORS.BRIGHT}E.${COLORS.RESET}  ${COLORS.MAGENTA}EVERYTHING${COLORS.RESET} Install Plan2Code + all dev tools`,
+        `${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`,
+      ]);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, M, S, B, D, E, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}Choose an option${COLORS.RESET} (L, M, S, B, D, E, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
       // A > E: install everything (skills + bot + metrics + Claude status line)
@@ -1558,7 +1714,7 @@ function runInteractive() {
       // A > L: install skills into the current project
       if (customInput === 'L') {
         rl.close();
-        process.exit(installProjectSkills());
+        process.exit(await installProjectSkills());
       }
 
       // A > M: install metrics CLI only
@@ -1594,18 +1750,18 @@ function runInteractive() {
 
     // Q — exit
     if (input === 'Q') {
-      console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
+      console.log('\nNothing was changed.\n');
       rl.close();
       process.exit(0);
     }
 
     // Invalid input — loop back
-    console.log(`\n${COLORS.RED}${SYMBOLS.ERROR} Invalid option. Please choose I, U, A, or Q.${COLORS.RESET}\n`);
+    console.log(`\n${COLORS.RED}${MARKS.FAIL} Invalid option. Please choose I, U, A, or Q.${COLORS.RESET}\n`);
     return main();
   }
 
   main().catch(err => {
-    console.error(`${COLORS.RED}${SYMBOLS.ERROR} ERROR:${COLORS.RESET}`, err.message);
+    console.error(`${ERR_COLORS.RED}${MARKS.FAIL} ERROR:${ERR_COLORS.RESET}`, err.message);
     rl.close();
     process.exit(1);
   });
@@ -1643,10 +1799,10 @@ function removeLegacyLoopShims() {
     try {
       fs.lstatSync(artifact.path);
       fs.rmSync(artifact.path, { force: true, recursive: true });
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${artifact.name}`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${artifact.name}`);
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${artifact.name}: ${err.message}`);
+        console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${artifact.name}: ${err.message}`);
       }
     }
   }
@@ -1663,11 +1819,11 @@ function buildPlan2CodeMetrics() {
   const metricsDir = path.join(__dirname, 'plan2code-metrics');
 
   if (!fs.existsSync(metricsDir)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-metrics directory not found`);
+    console.log(`${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} plan2code-metrics directory not found`);
     return false;
   }
 
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Building plan2code-metrics...${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}Building plan2code-metrics${COLORS.RESET}`);
 
   try {
     console.log(`  ${COLORS.DIM}Installing dependencies...${COLORS.RESET}`);
@@ -1676,10 +1832,10 @@ function buildPlan2CodeMetrics() {
     console.log(`  ${COLORS.DIM}Running build...${COLORS.RESET}`);
     execSync('npm run build', { cwd: metricsDir, stdio: 'pipe' });
 
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Build complete`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Build complete`);
     return true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Build failed: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Build failed: ${error.message}`);
     return false;
   }
 }
@@ -1759,11 +1915,11 @@ function createMetricsGlobalSymlink() {
   const distBin = path.join(metricsDir, 'dist', 'bin', 'plan2code-metrics.js');
 
   if (!fs.existsSync(distBin)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-metrics binary not found. Run build first.`);
+    console.log(`${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} plan2code-metrics binary not found. Run build first.`);
     return false;
   }
 
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Creating global symlink...${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}Creating the global command${COLORS.RESET}`);
 
   cleanupExistingMetricsSymlinks();
 
@@ -1775,27 +1931,27 @@ function createMetricsGlobalSymlink() {
 
       const batchContent = `@echo off\r\nnode "${distBin}" %*\r\n`;
       fs.writeFileSync(symlinkCmd, batchContent);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-metrics.cmd`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: plan2code-metrics.cmd`);
 
       const ps1Content = `#!/usr/bin/env pwsh\r\nnode "${distBin}" $args\r\n`;
       fs.writeFileSync(symlinkPs1, ps1Content);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-metrics.ps1`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: plan2code-metrics.ps1`);
 
       console.log(`  ${COLORS.DIM}Run 'plan2code-metrics' from any directory${COLORS.RESET}`);
       return true;
     } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
       return false;
     }
   }
 
   try {
     execSync('npm link', { cwd: metricsDir, stdio: 'pipe' });
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Global symlink created`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Global symlink created`);
     console.log(`  ${COLORS.DIM}Run 'plan2code-metrics' from any directory${COLORS.RESET}`);
     return true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Symlink failed: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Symlink failed: ${error.message}`);
     return false;
   }
 }
@@ -1804,7 +1960,7 @@ function createMetricsGlobalSymlink() {
  * Remove global symlink for plan2code-metrics
  */
 function removeMetricsGlobalSymlink() {
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Removing global symlink...${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}Removing the global command${COLORS.RESET}`);
 
   let removedCount = 0;
 
@@ -1824,22 +1980,22 @@ function removeMetricsGlobalSymlink() {
       try {
         fs.lstatSync(file.path);
         fs.rmSync(file.path, { force: true, recursive: true });
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${file.name}`);
         removedCount++;
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
+          console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
         }
       }
     }
 
     if (removedCount === 0) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No files found to remove${COLORS.RESET}`);
+      console.log(`  ${COLORS.DIM}No files found to remove${COLORS.RESET}`);
     }
 
     return true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Uninstall failed: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Uninstall failed: ${error.message}`);
     return false;
   }
 }
@@ -1848,7 +2004,7 @@ function removeMetricsGlobalSymlink() {
  * Install plan2code-metrics (build + symlink)
  */
 function installPlan2CodeMetrics() {
-  displaySectionHeader('PLAN2CODE-METRICS', '[ BUILD & INSTALL ]');
+  displaySectionHeader('Installing plan2code-metrics');
 
   const buildSuccess = buildPlan2CodeMetrics();
   if (!buildSuccess) {
@@ -1862,7 +2018,7 @@ function installPlan2CodeMetrics() {
 
   console.log('');
   recordInstalled('metrics');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics installed successfully!${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} plan2code-metrics installed successfully!${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
   console.log(`  ${COLORS.BRIGHT}plan2code-metrics${COLORS.RESET}       Start the interactive metrics CLI`);
@@ -1875,13 +2031,13 @@ function installPlan2CodeMetrics() {
  * Uninstall plan2code-metrics
  */
 function uninstallPlan2CodeMetrics() {
-  displaySectionHeader('PLAN2CODE-METRICS', '[ UNINSTALL ]');
+  displaySectionHeader('Uninstalling plan2code-metrics');
 
   removeMetricsGlobalSymlink();
   forgetInstalled('metrics');
 
   console.log('');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics uninstalled${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} plan2code-metrics uninstalled${COLORS.RESET}`);
   console.log('');
 
   return 0;
@@ -1907,14 +2063,14 @@ function getStatusLineSrcDir() {
  */
 async function installStatusLine({ quiet = false, unattended = false } = {}) {
   if (!quiet) {
-    displaySectionHeader('CLAUDE STATUS LINE', '[ INSTALL ]');
+    displaySectionHeader('Installing the Claude status line');
   } else {
-    console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} INSTALLING${COLORS.RESET} Claude Status Line...`);
+    console.log(`${COLORS.BRIGHT}Installing the Claude status line${COLORS.RESET}`);
   }
 
   const srcDir = getStatusLineSrcDir();
   if (!fs.existsSync(srcDir)) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} src/statusline-claude directory not found`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} src/statusline-claude directory not found`);
     return 1;
   }
 
@@ -1924,7 +2080,7 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
   try {
     fs.mkdirSync(claudeDir, { recursive: true });
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Cannot create ~/.claude/: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Cannot create ~/.claude/: ${error.message}`);
     return 1;
   }
 
@@ -1934,9 +2090,9 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
 
   try {
     fs.copyFileSync(path.join(srcDir, 'statusline.js'), statuslineDest);
-    if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ~/.claude/plan2code-statusline.js`);
+    if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Installed: ~/.claude/plan2code-statusline.js`);
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy script: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to copy script: ${error.message}`);
     return 1;
   }
 
@@ -1944,13 +2100,13 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
   if (!fs.existsSync(configDest)) {
     try {
       fs.copyFileSync(path.join(srcDir, 'statusline-config.json'), configDest);
-      if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: ~/.claude/statusline-config.json`);
+      if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: ~/.claude/statusline-config.json`);
     } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy config: ${error.message}`);
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to copy config: ${error.message}`);
       return 1;
     }
   } else {
-    if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved existing: ~/.claude/statusline-config.json${COLORS.RESET}`);
+    if (!quiet) console.log(`  ${COLORS.DIM}Preserved existing: ~/.claude/statusline-config.json${COLORS.RESET}`);
   }
 
   // Make executable on non-Windows
@@ -1978,12 +2134,12 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
 
       if (!isPlan2Code) {
         // Custom statusLine detected — prompt before overwriting
-        console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Existing statusLine detected in settings.json:`);
+        console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} Existing statusLine detected in settings.json:`);
         console.log(`  ${COLORS.DIM}  ${existingCmd}${COLORS.RESET}`);
 
         // The person chose that status line when they last installed; an update keeps it.
         if (unattended) {
-          console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Kept it: scripts updated, settings.json unchanged${COLORS.RESET}`);
+          console.log(`  ${COLORS.DIM}Kept it: scripts updated, settings.json unchanged${COLORS.RESET}`);
           recordInstalled('statusline');
           return 0;
         }
@@ -1995,7 +2151,7 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
         rl2.close();
 
         if (answer.trim().toLowerCase() === 'n') {
-          console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Skipped — scripts installed but settings.json unchanged${COLORS.RESET}`);
+          console.log(`  ${COLORS.DIM}Skipped — scripts installed but settings.json unchanged${COLORS.RESET}`);
           console.log('');
           recordInstalled('statusline');
           return 0;
@@ -2004,7 +2160,7 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
         // Backup existing config before replacing
         const backupPath = path.join(claudeDir, 'statusline-previous.json');
         fs.writeFileSync(backupPath, JSON.stringify({ statusLine: settings.statusLine }, null, 2));
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Backed up existing config: ~/.claude/statusline-previous.json`);
+        console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Backed up existing config: ~/.claude/statusline-previous.json`);
       }
     }
 
@@ -2017,10 +2173,10 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
     const tmpSettings = settingsPath + '.tmp';
     fs.writeFileSync(tmpSettings, JSON.stringify(settings, null, 2));
     fs.renameSync(tmpSettings, settingsPath);
-    if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Configured: ~/.claude/settings.json (statusLine)`);
+    if (!quiet) console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Configured: ~/.claude/settings.json (statusLine)`);
     settingsOk = true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to update settings.json: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to update settings.json: ${error.message}`);
   }
 
   // Clean up legacy filenames from previous installs
@@ -2029,7 +2185,7 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
     try {
       if (fs.existsSync(legacyPath)) {
         fs.unlinkSync(legacyPath);
-        if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Removed legacy: ${legacy}${COLORS.RESET}`);
+        if (!quiet) console.log(`  ${COLORS.DIM}Removed legacy: ${legacy}${COLORS.RESET}`);
       }
     } catch {}
   }
@@ -2038,18 +2194,18 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
     recordInstalled('statusline');
     if (!quiet) {
       console.log('');
-      console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Claude Status Line installed successfully!${COLORS.RESET}`);
+      console.log(`${COLORS.GREEN}${MARKS.DONE} Claude Status Line installed successfully!${COLORS.RESET}`);
       console.log('');
       console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
       console.log(`  ${COLORS.DIM}Restart Claude Code to see the status bar${COLORS.RESET}`);
       console.log(`  ${COLORS.DIM}Config: ~/.claude/statusline-config.json${COLORS.RESET}`);
       console.log('');
     } else {
-      console.log(`    ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Claude Status Line → ${COLORS.DIM}~/.claude/plan2code-statusline.js${COLORS.RESET}`);
+      console.log(`    ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Claude Status Line → ${COLORS.DIM}~/.claude/plan2code-statusline.js${COLORS.RESET}`);
     }
   } else {
     console.log('');
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Scripts installed but settings.json not updated.`);
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} Scripts installed but settings.json not updated.`);
     console.log(`  ${COLORS.DIM}Add statusLine config to ~/.claude/settings.json manually.${COLORS.RESET}`);
     console.log('');
   }
@@ -2061,7 +2217,7 @@ async function installStatusLine({ quiet = false, unattended = false } = {}) {
  * Uninstall status line
  */
 function uninstallStatusLine() {
-  displaySectionHeader('CLAUDE STATUS LINE', '[ UNINSTALL ]');
+  displaySectionHeader('Uninstalling the Claude status line');
 
   const homeDir = os.homedir();
   const claudeDir = path.join(homeDir, '.claude');
@@ -2078,17 +2234,17 @@ function uninstallStatusLine() {
           const tmpSettings = settingsPath + '.tmp';
           fs.writeFileSync(tmpSettings, JSON.stringify(settings, null, 2));
           fs.renameSync(tmpSettings, settingsPath);
-          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed statusLine from settings.json`);
+          console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed statusLine from settings.json`);
         } else {
-          console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved non-plan2code statusLine in settings.json${COLORS.RESET}`);
+          console.log(`  ${COLORS.DIM}Preserved non-plan2code statusLine in settings.json${COLORS.RESET}`);
           console.log(`  ${COLORS.DIM}  ${existingCmd}${COLORS.RESET}`);
         }
       } else {
-        console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No statusLine config in settings.json${COLORS.RESET}`);
+        console.log(`  ${COLORS.DIM}No statusLine config in settings.json${COLORS.RESET}`);
       }
     }
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to update settings.json: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to update settings.json: ${error.message}`);
   }
 
   // Remove script files (preserve config)
@@ -2105,22 +2261,24 @@ function uninstallStatusLine() {
     try {
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${file.name}`);
         removedCount++;
       }
     } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${error.message}`);
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${file.name}: ${error.message}`);
     }
   }
 
   if (removedCount === 0) {
-    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No status line files found${COLORS.RESET}`);
+    console.log(`  ${COLORS.DIM}No status line files found${COLORS.RESET}`);
   }
 
   forgetInstalled('statusline');
-  console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved: statusline-config.json${COLORS.RESET}`);
+  if (fs.existsSync(path.join(claudeDir, 'statusline-config.json'))) {
+    console.log(`  ${COLORS.DIM}Preserved: statusline-config.json${COLORS.RESET}`);
+  }
   console.log('');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Status line uninstalled${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} Status line uninstalled${COLORS.RESET}`);
   console.log('');
 
   return 0;
@@ -2137,11 +2295,11 @@ function buildPlan2CodeBot() {
   const botDir = path.join(__dirname, 'plan2code-bot');
 
   if (!fs.existsSync(botDir)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-bot directory not found`);
+    console.log(`${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} plan2code-bot directory not found`);
     return false;
   }
 
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Building plan2code-bot...${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}Building plan2code-bot${COLORS.RESET}`);
 
   try {
     console.log(`  ${COLORS.DIM}Installing dependencies...${COLORS.RESET}`);
@@ -2150,10 +2308,10 @@ function buildPlan2CodeBot() {
     console.log(`  ${COLORS.DIM}Running build...${COLORS.RESET}`);
     execSync('npm run build', { cwd: botDir, stdio: 'pipe' });
 
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Build complete`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Build complete`);
     return true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Build failed: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Build failed: ${error.message}`);
     return false;
   }
 }
@@ -2233,11 +2391,11 @@ function createBotGlobalSymlink() {
   const distBin = path.join(botDir, 'dist', 'bin', 'plan2code-bot.js');
 
   if (!fs.existsSync(distBin)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-bot binary not found. Run build first.`);
+    console.log(`${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} plan2code-bot binary not found. Run build first.`);
     return false;
   }
 
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Creating global symlink...${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}Creating the global command${COLORS.RESET}`);
 
   cleanupExistingBotSymlinks();
 
@@ -2249,27 +2407,27 @@ function createBotGlobalSymlink() {
 
       const batchContent = `@echo off\r\nnode "${distBin}" %*\r\n`;
       fs.writeFileSync(symlinkCmd, batchContent);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-bot.cmd`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: plan2code-bot.cmd`);
 
       const ps1Content = `#!/usr/bin/env pwsh\r\nnode "${distBin}" $args\r\n`;
       fs.writeFileSync(symlinkPs1, ps1Content);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-bot.ps1`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: plan2code-bot.ps1`);
 
       console.log(`  ${COLORS.DIM}Run 'plan2code-bot' from any directory${COLORS.RESET}`);
       return true;
     } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
       return false;
     }
   }
 
   try {
     execSync('npm link', { cwd: botDir, stdio: 'pipe' });
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Global symlink created`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Global symlink created`);
     console.log(`  ${COLORS.DIM}Run 'plan2code-bot' from any directory${COLORS.RESET}`);
     return true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Symlink failed: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Symlink failed: ${error.message}`);
     return false;
   }
 }
@@ -2278,7 +2436,7 @@ function createBotGlobalSymlink() {
  * Remove global symlink for plan2code-bot
  */
 function removeBotGlobalSymlink() {
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Removing global symlink...${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}Removing the global command${COLORS.RESET}`);
 
   let removedCount = 0;
 
@@ -2298,22 +2456,22 @@ function removeBotGlobalSymlink() {
       try {
         fs.lstatSync(file.path);
         fs.rmSync(file.path, { force: true, recursive: true });
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${file.name}`);
         removedCount++;
       } catch (err) {
         if (err.code !== 'ENOENT') {
-          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
+          console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
         }
       }
     }
 
     if (removedCount === 0) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No files found to remove${COLORS.RESET}`);
+      console.log(`  ${COLORS.DIM}No files found to remove${COLORS.RESET}`);
     }
 
     return true;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Uninstall failed: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Uninstall failed: ${error.message}`);
     return false;
   }
 }
@@ -2322,7 +2480,7 @@ function removeBotGlobalSymlink() {
  * Install plan2code-bot (build + symlink)
  */
 function installPlan2CodeBot() {
-  displaySectionHeader('PLAN2CODE-BOT', '[ BUILD & INSTALL ]');
+  displaySectionHeader('Installing plan2code-bot');
 
   const buildSuccess = buildPlan2CodeBot();
   if (!buildSuccess) {
@@ -2336,7 +2494,7 @@ function installPlan2CodeBot() {
 
   console.log('');
   recordInstalled('bot');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot installed successfully!${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} plan2code-bot installed successfully!${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
   console.log(`  ${COLORS.BRIGHT}plan2code-bot${COLORS.RESET}           Run autonomous workflow test`);
@@ -2349,13 +2507,13 @@ function installPlan2CodeBot() {
  * Uninstall plan2code-bot
  */
 function uninstallPlan2CodeBot() {
-  displaySectionHeader('PLAN2CODE-BOT', '[ UNINSTALL ]');
+  displaySectionHeader('Uninstalling plan2code-bot');
 
   removeBotGlobalSymlink();
   forgetInstalled('bot');
 
   console.log('');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot uninstalled${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} plan2code-bot uninstalled${COLORS.RESET}`);
   console.log('');
 
   return 0;
@@ -2390,6 +2548,8 @@ const AGENTS_SRC = path.join(__dirname, 'src', 'launcher', 'agents.json');
 const AGENTS_DEST = path.join(path.dirname(LAUNCHER_DEST), 'agents.json');
 const AGENT_LOOKUP_SRC = path.join(__dirname, 'src', 'web-console', 'agent-lookup.mjs');
 const AGENT_LOOKUP_DEST = path.join(path.dirname(LAUNCHER_DEST), 'agent-lookup.mjs');
+// The person's own agent CLIs, written by User Preferences, Agents & models (read, never written, here).
+const USER_AGENTS_FILE = path.join(os.homedir(), '.plan2code', 'agents.json');
 const LAUNCHER_VERSION_DEST = path.join(path.dirname(LAUNCHER_DEST), 'version.json');
 // What a global install put on this machine, so `plan2code update` reinstalls exactly that.
 const INSTALL_RECORD = path.join(os.homedir(), '.plan2code', 'install.json');
@@ -2410,9 +2570,9 @@ function readInstallRecord() {
 }
 
 /** Temp file, then rename, so a crash never leaves a half-written record. A failure only skips the record. */
-function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skipped || []) {
+function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skipped || [], version = projectVersion.version) {
   const record = {
-    version: projectVersion.version,
+    version,
     scope: 'global',
     pieces: [...new Set(pieces)].filter((piece) => INSTALL_PIECES.includes(piece)).sort(),
   };
@@ -2428,6 +2588,16 @@ function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skippe
       fs.rmSync(tmp, { force: true });
     } catch {}
   }
+}
+
+/**
+ * Put `version` back in the record (null when none was known) without touching its pieces: every
+ * recordInstalled() stamps the version being installed, so an update that failed uses this to
+ * stay behind, and the next `plan2code update` does not answer "Already on".
+ */
+function setRecordVersion(version) {
+  const record = readInstallRecord();
+  if (record) writeInstallRecord(record.pieces, record.skipped || [], version);
 }
 
 /** Add a piece after a successful global install. */
@@ -2555,6 +2725,24 @@ function getLauncherShims(binDir, nodePath = process.execPath) {
   return shims;
 }
 
+/**
+ * Write one launcher shim. A file already there that lacks the launcher marker is someone
+ * else's `plan2code`: it is renamed to `<file>.bak` first (replacing an older .bak), never
+ * deleted. Returns `{ backup }`, the .bak path when one was made, else null.
+ */
+function writeLauncherShim(shim) {
+  let backup = null;
+  if (fs.existsSync(shim.file) && !isOurLauncherShim(shim.file)) {
+    backup = `${shim.file}.bak`;
+    fs.rmSync(backup, { force: true });
+    fs.renameSync(shim.file, backup);
+  }
+  fs.rmSync(shim.file, { force: true });
+  fs.writeFileSync(shim.file, shim.content);
+  if (!shim.file.endsWith('.cmd') && !shim.file.endsWith('.ps1')) fs.chmodSync(shim.file, 0o755);
+  return { backup };
+}
+
 function isOurLauncherShim(file) {
   try {
     return fs.readFileSync(file, 'utf8').includes(LAUNCHER_MARKER);
@@ -2563,14 +2751,6 @@ function isOurLauncherShim(file) {
   }
 }
 
-function isCommandOnPath(command) {
-  try {
-    execSync(process.platform === 'win32' ? `where ${command}` : `command -v ${command}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function runPowerShell(script, env = {}) {
   return execFileSync(
@@ -2640,7 +2820,7 @@ function installDesktopShortcut(binDir, file) {
   try {
     if (!fs.statSync(path.dirname(file)).isDirectory()) throw new Error('not a folder');
   } catch {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} No desktop folder found at ${path.dirname(file)} — skipped the shortcut`);
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} No desktop folder found at ${path.dirname(file)} — skipped the shortcut`);
     return 1;
   }
 
@@ -2701,10 +2881,10 @@ function installDesktopShortcut(binDir, file) {
         execFileSync('gio', ['set', file, 'metadata::trusted', 'true'], { stdio: 'ignore' });
       } catch {}
     }
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: ${file}`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: ${file}`);
     return 0;
   } catch (error) {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Failed to create the desktop shortcut: ${error.message}`);
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} Failed to create the desktop shortcut: ${error.message}`);
     return 1;
   }
 }
@@ -2731,16 +2911,17 @@ async function offerDesktopShortcut(binDir) {
  * Install the global `plan2code` command, then offer the desktop shortcut. `quiet` prints
  * compact lines for use inside the skills install instead of a section of its own;
  * `unattended` (plan2code update) skips the shortcut offer and leaves any shortcut as it is.
+ * `outcome` receives `binDir` and `pathMissing` (that folder is not on PATH) for the next steps.
  */
-async function installLauncher({ quiet = false, unattended = false } = {}) {
+async function installLauncher({ quiet = false, unattended = false, outcome = {} } = {}) {
   if (quiet) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING THE ${LAUNCHER_COMMAND.toUpperCase()} COMMAND${COLORS.RESET}`);
+    console.log(`${COLORS.BRIGHT}Installing the ${LAUNCHER_COMMAND} command${COLORS.RESET}`);
   } else {
-    displaySectionHeader('PLAN2CODE COMMAND', '[ INSTALL ]');
+    displaySectionHeader('Installing the plan2code command');
   }
 
   if (!fs.existsSync(LAUNCHER_SRC)) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} src/launcher/plan2code.js not found`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} src/launcher/plan2code.js not found`);
     return 1;
   }
 
@@ -2755,9 +2936,9 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
     fs.copyFileSync(AGENT_LOOKUP_SRC, AGENT_LOOKUP_DEST);
     fs.writeFileSync(LAUNCHER_VERSION_DEST, JSON.stringify(projectVersion, null, 2) + '\n');
     if (process.platform !== 'win32') fs.chmodSync(LAUNCHER_DEST, 0o755);
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy launcher: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to copy launcher: ${error.message}`);
     return 1;
   }
 
@@ -2765,34 +2946,37 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
   const binDir =
     candidates.find((dir) => isDirWritable(dir) && isDirOnPath(dir)) || candidates.find((dir) => isDirWritable(dir));
   if (!binDir) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} No writable bin directory found (tried: ${candidates.join(', ') || 'none'})`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} No writable bin directory found (tried: ${candidates.join(', ') || 'none'})`);
     console.log(`  ${COLORS.DIM}Link it by hand:${COLORS.RESET} ${COLORS.CYAN}sudo ln -sf "${LAUNCHER_DEST}" /usr/local/bin/${LAUNCHER_COMMAND}${COLORS.RESET}`);
     return 1;
   }
 
   try {
     for (const shim of getLauncherShims(binDir)) {
-      const replacingForeign = fs.existsSync(shim.file) && !isOurLauncherShim(shim.file);
-      fs.rmSync(shim.file, { force: true });
-      fs.writeFileSync(shim.file, shim.content);
-      if (!shim.file.endsWith('.cmd') && !shim.file.endsWith('.ps1')) fs.chmodSync(shim.file, 0o755);
-      const note = replacingForeign ? ` ${COLORS.DIM}(replaced an existing command)${COLORS.RESET}` : '';
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: ${shim.file}${note}`);
+      const { backup } = writeLauncherShim(shim);
+      if (backup) console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} ${shim.file} was not Plan2Code's, so it was saved as ${backup}`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Created: ${shim.file}`);
     }
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create the ${LAUNCHER_COMMAND} command: ${error.message}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to create the ${LAUNCHER_COMMAND} command: ${error.message}`);
     return 1;
   }
 
-  if (!isDirOnPath(binDir)) {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} ${binDir} is not on your PATH — add it to use ${COLORS.BRIGHT}${LAUNCHER_COMMAND}${COLORS.RESET} from any directory`);
+  outcome.binDir = binDir;
+  outcome.pathMissing = !isDirOnPath(binDir);
+  if (outcome.pathMissing && unattended) {
+    // No next steps follow an unattended run, so the fix goes on this line.
+    const fix = pathFixLine(binDir);
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} ${binDir} is not on your PATH. Add it ${fix.file ? `to ${fix.file}` : 'in PowerShell'}: ${fix.line}`);
+  } else if (outcome.pathMissing) {
+    console.log(`  ${COLORS.YELLOW}${MARKS.WARN}${COLORS.RESET} ${binDir} is not on your PATH yet: the steps below say how to add it`);
   }
   recordInstalled('launcher');
   // The shortcut is a convenience on top of the command, so a failure here only warns.
   if (!unattended) await offerDesktopShortcut(binDir);
   console.log('');
   // Inside install() the final summary prints the steps once, after everything else.
-  if (!quiet) printGettingStarted({ commandInstalled: true });
+  if (!quiet) await printGettingStarted({ commandInstalled: true, pathMissing: outcome.pathMissing, binDir });
 
   return 0;
 }
@@ -2802,16 +2986,16 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
  * touched, so a `plan2code` bin from anything else is left alone.
  */
 function uninstallLauncher() {
-  displaySectionHeader('PLAN2CODE COMMAND', '[ UNINSTALL ]');
+  displaySectionHeader('Uninstalling the plan2code command');
 
   let removedCount = 0;
   const remove = (file) => {
     try {
       fs.rmSync(file, { force: true });
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file}`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${file}`);
       removedCount++;
     } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
     }
   };
 
@@ -2831,7 +3015,7 @@ function uninstallLauncher() {
   } catch {}
 
   if (removedCount === 0) {
-    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No ${LAUNCHER_COMMAND} command found${COLORS.RESET}`);
+    console.log(`  ${COLORS.DIM}No ${LAUNCHER_COMMAND} command found${COLORS.RESET}`);
   }
   console.log('');
 
@@ -2877,15 +3061,59 @@ function checksumFor(list, name) {
   return null;
 }
 
-/** The bytes at `url`; an HTTP error is thrown with its `status`. */
-async function download(url) {
+// The app guide's section on allowing the not code-signed app, and the one line for this OS.
+const APP_GUIDE_URL = 'https://github.com/jparkerweb/plan2code/blob/main/docs/desktop-app.md#the-app-is-not-code-signed';
+
+function appAllowLine(platform = process.platform) {
+  if (platform === 'win32') return 'If SmartScreen stops it, press More info, then Run anyway.';
+  if (platform === 'darwin') return 'If macOS stops it, open System Settings, Privacy & Security, and press Open Anyway.';
+  return 'Nothing to allow on Linux.';
+}
+
+/** A byte count for people: "512 KB", "12.3 MB". */
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/**
+ * The bytes at `url`; an HTTP error is thrown with its `status`. With `progress` (a label), the
+ * body is streamed and shown: the size when the server sends it, a percentage redrawn on one
+ * line on a terminal, or one plain line when piped.
+ */
+async function download(url, { progress = '', stream = process.stdout } = {}) {
   const response = await fetch(url, { signal: AbortSignal.timeout(APP_DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status} from ${url}`);
     error.status = response.status;
     throw error;
   }
-  return Buffer.from(await response.arrayBuffer());
+  if (!progress || !response.body) return Buffer.from(await response.arrayBuffer());
+  const total = Number(response.headers.get('content-length')) || 0;
+  const size = total ? ` (${formatBytes(total)})` : '';
+  const tty = Boolean(stream.isTTY);
+  if (!tty) console.log(`  Downloading ${progress}${size}...`);
+  const chunks = [];
+  let received = 0;
+  let shown = -1;
+  const draw = () => {
+    const percent = total ? Math.min(100, Math.floor((received / total) * 100)) : null;
+    const now = percent === null ? Math.floor(received / (256 * 1024)) : percent;
+    if (now === shown) return;
+    shown = now;
+    const where = percent === null ? formatBytes(received) : `${percent}%`;
+    stream.write(`\r  Downloading ${progress}${size}... ${where}\x1b[K`);
+  };
+  try {
+    for await (const chunk of response.body) {
+      chunks.push(Buffer.from(chunk));
+      received += chunk.length;
+      if (tty) draw();
+    }
+  } finally {
+    if (tty) stream.write('\r\x1b[K');
+  }
+  return Buffer.concat(chunks);
 }
 
 /**
@@ -2934,15 +3162,15 @@ function placeApp(bytes, dest) {
  */
 async function installDesktopApp({ quiet = false, unattended = false, outcome = {} } = {}) {
   if (quiet) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING THE DESKTOP APP${COLORS.RESET}`);
+    console.log(`${COLORS.BRIGHT}Installing the desktop app${COLORS.RESET}`);
   } else {
-    displaySectionHeader('DESKTOP APP', '[ INSTALL ]');
+    displaySectionHeader('Installing the desktop app');
   }
   const version = projectVersion.version;
   const name = appAssetName(version);
   const base = releaseBase(version);
   const fail = (reason) => {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} The desktop app was not installed: ${reason}`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} The desktop app was not installed: ${reason}`);
     console.log(`  ${COLORS.DIM}The skills and the plan2code command are installed and work as before; run ${COLORS.CYAN}plan2code --classic${COLORS.DIM} to stay in your terminal, or install again later.${COLORS.RESET}`);
     console.log('');
     outcome.app = false;
@@ -2955,7 +3183,7 @@ async function installDesktopApp({ quiet = false, unattended = false, outcome = 
     if (!unattended) return fail(reason);
     outcome.app = false;
     outcome.appMissing = reason;
-    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app update: ${reason}${COLORS.RESET}`);
+    console.log(`  ${COLORS.DIM}No desktop app update: ${reason}${COLORS.RESET}`);
     console.log('');
     return 0;
   };
@@ -2966,7 +3194,7 @@ async function installDesktopApp({ quiet = false, unattended = false, outcome = 
     const list = (await download(`${base}/plan2code-app-${version}-SHA256SUMS.txt`)).toString('utf8');
     const expected = checksumFor(list, name);
     if (!expected) return fail(`the release's checksum list has no entry for ${name}.`);
-    bytes = await download(`${base}/${name}`);
+    bytes = await download(`${base}/${name}`, { progress: 'the desktop app' });
     const actual = crypto.createHash('sha256').update(bytes).digest('hex');
     if (actual !== expected) {
       return fail(`${name} does not match its checksum (expected ${expected.slice(0, 12)}..., got ${actual.slice(0, 12)}...), so it was thrown away.`);
@@ -2982,7 +3210,10 @@ async function installDesktopApp({ quiet = false, unattended = false, outcome = 
     return fail(`the file was verified but could not be put in ${APP_DIR} (${error.message}); close the app and try again.`);
   }
   recordInstalled('app');
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} The app is unsigned; if needed, see docs/desktop-app.md for how to allow it.`);
+  outcome.appSize = bytes.length;
+  console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Installed: ${APP_DEST}`);
+  console.log(`  The app is not code-signed. ${appAllowLine()}`);
+  console.log(`  ${COLORS.DIM}App guide: ${APP_GUIDE_URL}${COLORS.RESET}`);
   console.log('');
   outcome.app = true;
   return 0;
@@ -2997,7 +3228,7 @@ async function offerDesktopApp({ unattended = false, outcome = {} } = {}) {
   const record = readInstallRecord();
   // A system the app is not built for is never asked about, or retried on every update.
   if (!appAssetName(projectVersion.version)) {
-    if (!unattended) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app is built for ${process.platform}-${process.arch}; skipping it.${COLORS.RESET}`);
+    if (!unattended) console.log(`  ${COLORS.DIM}No desktop app is built for ${process.platform}-${process.arch}; skipping it.${COLORS.RESET}`);
     return;
   }
   if (unattended) {
@@ -3020,23 +3251,23 @@ async function offerDesktopApp({ unattended = false, outcome = {} } = {}) {
 
 /** Remove the desktop app and what the installer left beside it. */
 function uninstallDesktopApp() {
-  displaySectionHeader('DESKTOP APP', '[ UNINSTALL ]');
+  displaySectionHeader('Uninstalling the desktop app');
   let removed = false;
   for (const file of [APP_DEST, `${APP_DEST}.old`]) {
     if (!fs.existsSync(file)) continue;
     try {
       fs.rmSync(file, { force: true });
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file}`);
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${file}`);
       removed = true;
     } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
     }
   }
   forgetInstalled('app');
   try {
     fs.rmdirSync(APP_DIR);
   } catch {}
-  if (!removed) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app found${COLORS.RESET}`);
+  if (!removed) console.log(`  ${COLORS.DIM}No desktop app found${COLORS.RESET}`);
   console.log('');
   return 0;
 }
@@ -3045,20 +3276,264 @@ function uninstallDesktopApp() {
 // UNINSTALL ALL (`plan2code uninstall` runs the npx install with --uninstall)
 // ============================================================================
 
+/** What an uninstall did, for the closing block: names removed, what could not go, and what is left to do. */
+function newUninstallReport() {
+  return { removed: [], failed: [], finish: [] };
+}
+
+/** `fn` run with console output held back, so a piece's own headings and file lines stay out of the summary. */
+function captureSync(fn) {
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => lines.push(stripAnsi(args.join(' ')));
+  try {
+    return { value: fn(), lines };
+  } catch (error) {
+    return { error, lines };
+  } finally {
+    console.log = log;
+  }
+}
+
+/** `{ removed, failed }` from what captured uninstall steps printed: their "Removed" and failure lines. */
+function tallyCaptured(...runs) {
+  const tally = { removed: 0, failed: [] };
+  for (const run of runs) {
+    if (run.error) tally.failed.push(run.error.message);
+    for (const line of run.lines) {
+      const text = line.trim();
+      if (text.startsWith(`${MARKS.DONE} Removed`)) tally.removed++;
+      else if (text.startsWith(MARKS.FAIL)) tally.failed.push(text.slice(MARKS.FAIL.length).trim());
+    }
+  }
+  return tally;
+}
+
 /**
- * Everything Plan2Code installed, in the order the menu's U option has always removed it.
- * Your own data under ~/.plan2code (notebooks, handoffs, console settings) stays; see
- * purgeData(). Returns the first non-zero exit code, else 0.
+ * Delete the plan2code skill folders under ~/.agents/skills directly, for when the skills CLI
+ * cannot be reached. Returns `{ removed, failed }` (folder names; failures with the reason).
  */
-function uninstallAll() {
-  const uninstallResult = uninstallSkills();
-  removeLegacyLoopShims();
-  const metricsResult = uninstallPlan2CodeMetrics();
-  const botResult = uninstallPlan2CodeBot();
-  const statusLineResult = uninstallStatusLine();
-  const launcherResult = uninstallLauncher();
-  uninstallDesktopApp();
-  return uninstallResult !== 0 ? uninstallResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
+function removeSkillsDirectly(store = path.join(os.homedir(), '.agents', 'skills')) {
+  const result = { removed: [], failed: [] };
+  let names = [];
+  try {
+    names = fs.readdirSync(store);
+  } catch {
+    return result;
+  }
+  for (const name of names) {
+    if (name !== 'plan2code' && !name.startsWith('plan2code-')) continue;
+    try {
+      fs.rmSync(path.join(store, name), { recursive: true, force: true });
+      result.removed.push(name);
+    } catch (error) {
+      result.failed.push(`${name}: ${error.message}`);
+    }
+  }
+  return result;
+}
+
+/**
+ * Remove the skills. The skills CLI goes first so it can unlink every agent; when it cannot be
+ * reached (offline, no npx), the folders are deleted directly and the closing block says agent
+ * links may remain. `cli` is replaceable in tests. Returns `{ removed, failed, detail }`.
+ */
+function uninstallSkillsPiece(report, { cli = { ensure: ensureSkillsCli, remove: removeInstalledSkills } } = {}) {
+  const failed = [];
+  let removed = 0;
+  if (listInstalledSkills('global').length > 0) {
+    const run = captureSync(() => (cli.ensure() ? cli.remove('global', { quiet: true }) : -1));
+    if (run.error || run.value < 0) {
+      const direct = removeSkillsDirectly();
+      removed = direct.removed.length;
+      failed.push(...direct.failed);
+      report.finish.push('The skills CLI could not be reached, so the skill folders were removed directly. Links in your agents own skills folders (for example ~/.claude/skills) may remain: delete any plan2code entries there.');
+    } else {
+      removed = run.value;
+    }
+  }
+  const legacy = cleanLegacyPaths(true);
+  removed += legacy.removed;
+  if (legacy.errors > 0) failed.push(`${legacy.errors} file(s) from earlier versions`);
+  if (failed.length === 0) forgetInstalled('skills');
+  return { removed, failed, detail: removed > 0 ? String(removed) : '' };
+}
+
+/** Stop the console servers this folder's project has running; the count stopped. Best effort, never throws. */
+function stopConsoleServers(home) {
+  try {
+    const current = fs.readFileSync(path.join(home, 'console-dir'), 'utf8').trim();
+    const script = current ? path.join(current, 'console.mjs') : '';
+    if (!script || !fs.existsSync(script)) return 0;
+    const run = require('child_process').spawnSync(process.execPath, [script, 'stop', '--all'], { encoding: 'utf8', timeout: 20000, windowsHide: true });
+    return Number(JSON.parse(String(run.stdout || '{}')).stopped) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Remove the versioned console folders under the console home and its console-dir pointer (the
+ * sweepOldConsoles() pattern, for every version). Sessions, settings and notebooks stay. A
+ * console server still running holds its files open, so it is stopped first and the line says so.
+ */
+function removeConsoleFolders(report, { stop = stopConsoleServers } = {}) {
+  const home = consoleHomeDir();
+  let entries = [];
+  try {
+    entries = fs.readdirSync(home, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const versions = entries.filter((entry) => entry.isDirectory() && CONSOLE_VERSION_DIR.test(entry.name));
+  const pointer = path.join(home, 'console-dir');
+  if (versions.length === 0 && !fs.existsSync(pointer)) return;
+  const stopped = stop(home);
+  if (stopped > 0) {
+    console.log(`  ${COLORS.DIM}Stopped ${stopped} running Plan2Code console${stopped === 1 ? '' : 's'} first, so ${stopped === 1 ? 'its' : 'their'} files could be removed.${COLORS.RESET}`);
+  }
+  let removed = 0;
+  for (const entry of versions) {
+    try {
+      fs.rmSync(path.join(home, entry.name), { recursive: true, force: true });
+      removed++;
+    } catch (error) {
+      report.failed.push(`Console files ${entry.name}: ${error.message}`);
+      const hint = 'Close any open Plan2Code console or app, then run plan2code uninstall again.';
+      if (!report.finish.includes(hint)) report.finish.push(hint);
+    }
+  }
+  try {
+    fs.rmSync(pointer, { force: true });
+  } catch {}
+  if (removed > 0) {
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed Console files`);
+    report.removed.push('Console files');
+  }
+}
+
+/** Each piece's uninstall, quiet: it returns `{ removed, failed, detail? }` and the caller prints one line. */
+const UNINSTALL_STEPS = {
+  skills: (report) => uninstallSkillsPiece(report),
+  launcher: () => tallyCaptured(captureSync(removeLegacyLoopShims), captureSync(uninstallLauncher)),
+  app: () => tallyCaptured(captureSync(uninstallDesktopApp)),
+  statusline: () => tallyCaptured(captureSync(uninstallStatusLine)),
+  metrics: () => tallyCaptured(captureSync(uninstallPlan2CodeMetrics)),
+  bot: () => tallyCaptured(captureSync(uninstallPlan2CodeBot)),
+};
+
+/**
+ * A quiet look for a piece that install.json does not list but is on disk (a record lost or
+ * written by an older install). The dev tools (metrics, bot) are only ever recorded.
+ */
+const UNINSTALL_PROBES = {
+  skills: () => listInstalledSkills('global').length > 0,
+  launcher: () =>
+    fs.existsSync(LAUNCHER_DEST) ||
+    getLauncherBinCandidates().some((dir) => getLauncherShims(dir).some(({ file }) => isOurLauncherShim(file))),
+  app: () => fs.existsSync(APP_DEST) || fs.existsSync(`${APP_DEST}.old`),
+  statusline: () => fs.existsSync(path.join(os.homedir(), '.claude', 'plan2code-statusline.js')),
+};
+
+/**
+ * Everything Plan2Code installed. Driven by the pieces ~/.plan2code/install.json records plus a
+ * quiet probe for strays: one line per piece actually removed, and nothing for a piece that was
+ * never installed. Your own data under ~/.plan2code (notebooks, handoffs, console settings) stays;
+ * see purgeData(). `report` collects the closing block's lists. `steps`, `probes` and
+ * `removeConsole` are replaceable in tests. Returns 0, or 1 when something could not be removed.
+ */
+function uninstallAll({ report = newUninstallReport(), steps = UNINSTALL_STEPS, probes = UNINSTALL_PROBES, removeConsole = removeConsoleFolders } = {}) {
+  const recorded = (readInstallRecord() || {}).pieces || [];
+  let code = 0;
+  for (const piece of INSTALL_PIECES) {
+    if (!recorded.includes(piece) && !(probes[piece] && probes[piece]())) continue;
+    let result;
+    try {
+      result = steps[piece](report);
+    } catch (error) {
+      result = { removed: 0, failed: [error.message] };
+    }
+    const label = PIECE_LABELS[piece];
+    if (result.removed > 0) {
+      const named = result.detail ? `${label} (${result.detail})` : label;
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed ${named}`);
+      report.removed.push(named);
+    }
+    for (const message of result.failed) {
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} ${label}: ${message}`);
+      report.failed.push(`${label}: ${message}`);
+      code = 1;
+    }
+  }
+  removeConsole(report);
+  return code || (report.failed.length > 0 ? 1 : 0);
+}
+
+/** What the uninstall leaves in the data folder: a name for each entry and its size. */
+const DATA_LABELS = {
+  notepads: 'Notebooks',
+  handoffs: 'Handoffs',
+  console: 'Console settings and sessions',
+  learning: 'Learning pauses',
+  prototypes: 'Prototypes',
+  'models.json': 'Models you added',
+  'agents.json': 'Agents you added',
+  'app.json': 'Desktop app settings',
+  'launcher.json': 'plan2code command settings',
+};
+
+/** Bytes under `target`, never following a link. */
+function pathBytes(target) {
+  let stat;
+  try {
+    stat = fs.lstatSync(target);
+  } catch {
+    return 0;
+  }
+  if (!stat.isDirectory()) return stat.size;
+  let total = 0;
+  try {
+    for (const name of fs.readdirSync(target)) total += pathBytes(path.join(target, name));
+  } catch {}
+  return total;
+}
+
+/** `[{ name, label, bytes }]` for what is left in the data folder, largest first. */
+function listKeptData(home = PLAN2CODE_HOME) {
+  let names = [];
+  try {
+    names = fs.readdirSync(home);
+  } catch {
+    return [];
+  }
+  return names
+    .map((name) => ({ name, label: DATA_LABELS[name] || name, bytes: pathBytes(path.join(home, name)) }))
+    .sort((x, y) => y.bytes - x.bytes || x.name.localeCompare(y.name));
+}
+
+/** What stays in the data folder after an uninstall, by name with its size. */
+function printKeptData() {
+  console.log(`${COLORS.DIM}Your data in ${PLAN2CODE_HOME} was kept. Delete the folder to remove it.${COLORS.RESET}`);
+  for (const item of listKeptData()) console.log(`${COLORS.DIM}  ${item.label}: ${formatBytes(item.bytes)}${COLORS.RESET}`);
+  console.log('');
+}
+
+/** The closing block, always printed: what was removed, what could not be, and what is left for the person to do. */
+function printUninstallReport(report) {
+  console.log(`${COLORS.BRIGHT}Removed:${COLORS.RESET} ${report.removed.length > 0 ? report.removed.join(', ') : 'nothing'}`);
+  if (report.failed.length === 0) {
+    console.log(`${COLORS.BRIGHT}Could not remove:${COLORS.RESET} nothing`);
+  } else {
+    console.log(`${COLORS.RED}${COLORS.BRIGHT}Could not remove:${COLORS.RESET}`);
+    for (const item of report.failed) console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} ${item}`);
+  }
+  if (report.finish.length === 0) {
+    console.log(`${COLORS.BRIGHT}To finish:${COLORS.RESET} nothing, you are done`);
+  } else {
+    console.log(`${COLORS.BRIGHT}To finish:${COLORS.RESET}`);
+    for (const item of report.finish) console.log(`  ${item}`);
+  }
+  console.log('');
 }
 
 /** The folder purgeData() empties: Plan2Code's own home, which holds the data uninstallAll() keeps. */
@@ -3069,18 +3544,84 @@ const PLAN2CODE_HOME = path.join(os.homedir(), '.plan2code');
  * the installed console). Returns 0 when it is gone, 1 when something could not be removed.
  */
 function purgeData(home = PLAN2CODE_HOME) {
-  displaySectionHeader('PLAN2CODE DATA', '[ DELETE ]');
+  displaySectionHeader('Deleting your Plan2Code data');
   if (!fs.existsSync(home)) {
-    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No ${home} folder found${COLORS.RESET}\n`);
+    console.log(`  ${COLORS.DIM}No ${home} folder found${COLORS.RESET}\n`);
     return 0;
   }
   try {
     fs.rmSync(home, { recursive: true, force: true });
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${home}\n`);
+    console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${home}\n`);
     return 0;
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${home}: ${error.message}\n`);
+    console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${home}: ${error.message}\n`);
     return 1;
+  }
+}
+
+/** The desktop app's identifier (tauri.conf.json), which names its webview data folders. */
+const APP_IDENTIFIER = 'com.plan2code.desktop';
+
+/**
+ * The folders the desktop app's webview keeps its data in, per OS. Windows and Linux: Tauri
+ * points the webview at the app's local data folder (`app_local_data_dir()`, seen on a real
+ * Windows run as %LOCALAPPDATA%\com.plan2code.desktop\EBWebView). macOS keeps WebKit's own
+ * default store, under the bundle identifier or, for the unbundled binary install.js lays down,
+ * the program's name; every candidate is listed and only those that exist are removed. Each OS
+ * also lists the app's config folder (`app_config_dir()`), where the window-state plugin saves
+ * the window's size and place.
+ */
+function appWebviewDirs({ platform = process.platform, home = os.homedir(), env = process.env } = {}) {
+  if (platform === 'win32') {
+    return [
+      path.join(env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), APP_IDENTIFIER),
+      path.join(env.APPDATA || path.join(home, 'AppData', 'Roaming'), APP_IDENTIFIER),
+    ];
+  }
+  if (platform === 'darwin') {
+    const names = [APP_IDENTIFIER, 'plan2code-app'];
+    return [
+      ...['WebKit', 'Caches'].flatMap((dir) => names.map((name) => path.join(home, 'Library', dir, name))),
+      path.join(home, 'Library', 'Application Support', APP_IDENTIFIER),
+    ];
+  }
+  return [
+    path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), APP_IDENTIFIER),
+    path.join(env.XDG_CACHE_HOME || path.join(home, '.cache'), APP_IDENTIFIER),
+    path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), APP_IDENTIFIER),
+  ];
+}
+
+/** Remove the app's webview data folders that exist. Returns 0, or 1 when one could not go. */
+function purgeAppWebview(dirs = appWebviewDirs()) {
+  let code = 0;
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      console.log(`  ${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Removed: ${dir}\n`);
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${MARKS.FAIL}${COLORS.RESET} Failed to remove ${dir}: ${error.message}\n`);
+      code = 1;
+    }
+  }
+  return code;
+}
+
+/**
+ * Whether the desktop app is running, by its program name (`tasklist` on Windows, `pgrep`
+ * elsewhere). `run` is spawnSync's shape, replaced in tests. Unknown counts as not running.
+ */
+function appRunning({ platform = process.platform, run = require('child_process').spawnSync } = {}) {
+  try {
+    if (platform === 'win32') {
+      const r = run('tasklist', ['/FI', 'IMAGENAME eq plan2code-app.exe', '/NH'], { encoding: 'utf8', windowsHide: true });
+      return r.status === 0 && /plan2code-app\.exe/i.test(String(r.stdout || ''));
+    }
+    const r = run('pgrep', ['-x', 'plan2code-app'], { encoding: 'utf8' });
+    return r.status === 0;
+  } catch {
+    return false;
   }
 }
 
@@ -3098,22 +3639,42 @@ async function askYesNo(prompt, { input = process.stdin, output = process.stdout
  * `yes` skips the confirmation (the data stays unless `purge` is set); `purge` deletes the
  * data without asking. `ask` is the y/N prompt, replaced in tests. Returns the exit code.
  */
-async function uninstall({ yes = false, purge = false, ask = askYesNo, remove = uninstallAll, purgeIt = purgeData } = {}) {
-  displaySectionHeader('  UNINSTALLING PLAN2CODE  ');
+async function uninstall({ yes = false, purge = false, ask = askYesNo, remove = (report) => uninstallAll({ report }), purgeIt = purgeData, purgeWebview = purgeAppWebview, running = appRunning } = {}) {
+  displaySectionHeader('Uninstalling Plan2Code');
   console.log(`${COLORS.DIM}This removes the skills, the plan2code command, the desktop app and any dev tools.${COLORS.RESET}\n`);
   if (!yes && !process.stdin.isTTY && ask === askYesNo) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING} Not a terminal, so nothing can answer the questions. Run plan2code uninstall --yes (add --purge to delete your data too).${COLORS.RESET}\n`);
+    console.log(`${COLORS.YELLOW}${MARKS.WARN} Not a terminal, so nothing can answer the questions. Run plan2code uninstall --yes (add --purge to delete your data too).${COLORS.RESET}\n`);
     return 1;
   }
-  if (!yes && !(await ask(`${COLORS.RED}${SYMBOLS.SELECT} CONFIRM UNINSTALL${COLORS.RESET} (y/N): `))) {
-    console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
+  if (running()) {
+    console.log(`${COLORS.YELLOW}${MARKS.WARN} Plan2Code is running: close it first, or its program file may not be removed.${COLORS.RESET}\n`);
+  }
+  if (!yes && !(await ask(`${COLORS.RED}Remove everything Plan2Code installed?${COLORS.RESET} (y/N): `))) {
+    console.log(`\n${COLORS.YELLOW}${MARKS.WARN} CANCELED${COLORS.RESET}\n`);
     return 0;
   }
-  let code = remove();
+  const report = newUninstallReport();
+  let code = await remove(report);
   const wipe = purge || (!yes && (await ask(`${COLORS.CYAN}Also delete your Plan2Code data (notebooks, handoffs, settings) in ${PLAN2CODE_HOME}?${COLORS.RESET} (y/N): `)));
-  if (wipe) code = purgeIt() || code;
-  else console.log(`${COLORS.DIM}${SYMBOLS.INFO} Your data in ${PLAN2CODE_HOME} was kept. Delete the folder to remove it.${COLORS.RESET}\n`);
-  if (code === 0) console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Plan2Code is uninstalled${COLORS.RESET}\n`);
+  console.log('');
+  if (wipe) {
+    // The data folder first, then the app's webview data outside it; both run even when the first fails.
+    const dataFailed = purgeIt() !== 0;
+    // The app's webview data sits outside ~/.plan2code, in the OS's own app data folders.
+    const webviewFailed = purgeWebview() !== 0;
+    if (dataFailed || webviewFailed) {
+      code = 1;
+      report.failed.push('Your Plan2Code data');
+    } else {
+      report.removed.push('Your Plan2Code data');
+    }
+  } else {
+    printKeptData();
+  }
+  if (code !== 0 && report.failed.length === 0) report.failed.push('One or more pieces (see the messages above)');
+  printUninstallReport(report);
+  if (code === 0 && report.failed.length > 0) code = 1;
+  if (code === 0) console.log(`${COLORS.GREEN}${MARKS.DONE} Plan2Code is uninstalled${COLORS.RESET}\n`);
   return code;
 }
 
@@ -3135,43 +3696,84 @@ const UPDATE_STEPS = {
   bot: installPlan2CodeBot,
 };
 
+/** The name of each installed piece as the update and uninstall summaries print it. */
+const PIECE_LABELS = { skills: 'Skills', launcher: 'plan2code command', app: 'Desktop app', statusline: 'Status line', metrics: 'Metrics', bot: 'Bot' };
+
 /**
- * Reinstall whatever ~/.plan2code/install.json lists, without the menu or any prompt. Returns
- * the exit code: 0 when every piece updated, 1 naming the pieces that failed.
+ * Run `fn` (sync or async) with console.log captured, so a step that prints its own headings and
+ * progress can run inside a compact summary. Resolves `{ value, lines }` (colors stripped), or
+ * `{ error, lines }` when `fn` threw.
  */
-async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims } = {}) {
-  displaySectionHeader('  UPDATING PLAN2CODE  ');
-  console.log(`${COLORS.BLUE}${COLORS.BRIGHT}Installing:${COLORS.RESET} ${projectVersion.name} ${projectVersion.version}`);
-  console.log('');
-
-  const record = readInstallRecord();
-  const pieces = record ? record.pieces : ['skills', 'launcher'];
-  if (!record) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} No install record found (installed before v${projectVersion.version}); updating the skills and the plan2code command.`);
-    console.log('');
+async function captureOutput(fn) {
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => lines.push(stripAnsi(args.join(' ')));
+  try {
+    return { value: await fn(), lines };
+  } catch (error) {
+    return { error, lines };
+  } finally {
+    console.log = log;
   }
+}
 
-  cleanShims();
+/** Where a release's notes are. */
+function releaseNotesUrl(version) {
+  return `https://github.com/jparkerweb/plan2code/releases/tag/v${version}`;
+}
+
+/**
+ * Reinstall whatever ~/.plan2code/install.json lists, without the menu or any prompt, and print
+ * one compact summary: `Updating <old> -> <new>` (or `Already on <new>`, which stops early unless
+ * `force`), one line per piece by its human name, then the release notes link and the restart
+ * hint. Each piece's own output is held back and shown only when that piece warns or fails.
+ * Returns the exit code: 0 when every piece updated, 1 naming the pieces that failed.
+ */
+async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims, force = false } = {}) {
+  const record = readInstallRecord();
+  const version = projectVersion.version;
+  const before = record && typeof record.version === 'string' ? record.version : null;
+  if (before === version && !force) {
+    console.log(`${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Already on ${version}`);
+    console.log(`${COLORS.DIM}Run plan2code update --force to install it again.${COLORS.RESET}`);
+    return 0;
+  }
+  console.log(`${COLORS.BRIGHT}${before ? `Updating ${before} -> ${version}` : `Updating to ${version}`}${COLORS.RESET}`);
+  const pieces = record ? record.pieces : ['skills', 'launcher'];
+  if (!record) console.log(`${COLORS.DIM}No install record found; updating the skills and the plan2code command.${COLORS.RESET}`);
+
+  await captureOutput(async () => cleanShims());
 
   const results = {};
+  const details = {};
+  // What a piece printed that the person should still see: everything when it failed, only the
+  // warnings, failures (the desktop app is an extra, so its failure inside the skills step leaves
+  // that step at 0) and the app's code-signing note when it worked.
+  const surface = (lines, failed) => {
+    for (const line of lines) {
+      const text = line.trim();
+      if (!text) continue;
+      if (failed || text.startsWith(MARKS.WARN) || text.startsWith(MARKS.FAIL) || text.includes('not code-signed')) console.log(`  ${text}`);
+    }
+  };
   for (const piece of INSTALL_PIECES) {
     if (!pieces.includes(piece) || piece in results) continue;
     // The metrics and bot commands run from this folder: from npx's cache (which the launcher
     // note above calls free to delete) they would break once it is cleared, so only a checkout updates them.
     if ((piece === 'metrics' || piece === 'bot') && !fs.existsSync(path.join(__dirname, '.git'))) {
       results[piece] = 'kept (update it from a git checkout: node install.js)';
-      console.log('');
       continue;
     }
     const outcome = {};
-    try {
-      const code = await steps[piece]({ quiet: true, unattended: true, outcome });
-      results[piece] = code === 0 ? 'updated' : 'failed: see the messages above';
+    const run = await captureOutput(() => steps[piece]({ quiet: true, unattended: true, outcome }));
+    if (run.error) {
+      results[piece] = `failed: ${run.error.message}`;
+    } else {
+      results[piece] = run.value === 0 ? 'updated' : 'failed: see the messages above';
       // The release has no app file yet: the installed one stays, and the update does not fail.
-      if (piece === 'app' && code === 0 && outcome.appMissing) results[piece] = 'kept (no new desktop app file yet)';
-    } catch (error) {
-      results[piece] = `failed: ${error.message}`;
+      if (piece === 'app' && run.value === 0 && outcome.appMissing) results[piece] = 'kept (no new desktop app file yet)';
     }
+    if (outcome.appSize) details.app = formatBytes(outcome.appSize);
     // install() returns 1 when only the command failed, so its outcome says how the skills
     // themselves went; a command it put in place has updated the launcher too, and one it
     // could not is retried on its own as the next piece.
@@ -3181,22 +3783,37 @@ async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims
     if (piece === 'skills' && outcome.launcher === true) results.launcher = 'updated';
     // The same for the app, when install() brought it in for the first time.
     if (piece === 'skills' && outcome.app === true) results.app = 'updated';
-    console.log('');
+    surface(run.lines, Boolean(run.error) || run.value !== 0);
   }
 
-  console.log(`${COLORS.BRIGHT}UPDATE SUMMARY${COLORS.RESET}`);
+  console.log('');
+  console.log(`${COLORS.BRIGHT}Update summary${COLORS.RESET}`);
   const failed = [];
   for (const piece of INSTALL_PIECES.filter((p) => p in results)) {
     const ok = results[piece] === 'updated' || results[piece].startsWith('kept');
-    if (!ok) failed.push(piece);
-    console.log(`  ${ok ? COLORS.GREEN + SYMBOLS.SUCCESS : COLORS.RED + SYMBOLS.ERROR}${COLORS.RESET} ${piece}: ${results[piece]}`);
+    if (!ok) failed.push(PIECE_LABELS[piece]);
+    const more = ok && details[piece] ? ` (${details[piece]})` : '';
+    console.log(`  ${ok ? COLORS.GREEN + MARKS.DONE : COLORS.RED + MARKS.FAIL}${COLORS.RESET} ${PIECE_LABELS[piece]}: ${results[piece]}${more}`);
   }
   console.log('');
   if (failed.length > 0) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Update failed for: ${failed.join(', ')}${COLORS.RESET}\n`);
+    console.log(`${COLORS.RED}${MARKS.FAIL} Update failed for: ${failed.join(', ')}${COLORS.RESET}`);
+    // The pieces that did install stamped the new version on the record: take it back, so running
+    // plan2code update again retries instead of stopping at "Already on".
+    setRecordVersion(before);
+    console.log(`To try again, run: ${COLORS.CYAN}plan2code update${COLORS.RESET}`);
+    console.log(`To go back to a release, run: ${COLORS.CYAN}plan2code update --tag v${before || '<version>'}${COLORS.RESET}`);
+    console.log('');
     return 1;
   }
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Plan2Code is up to date (v${projectVersion.version})${COLORS.RESET}\n`);
+  // The release had no desktop app file yet, so the installed app is still the old one: keep the
+  // old version on the record, or the next update (the app's Update and restart among them) stops
+  // at "Already on" and never fetches the app once the file is attached.
+  if (before && typeof results.app === 'string' && results.app.startsWith('kept')) setRecordVersion(before);
+  console.log(`${COLORS.GREEN}${MARKS.DONE} Plan2Code is up to date (v${version})${COLORS.RESET}`);
+  console.log(`What's new: ${releaseNotesUrl(version)}`);
+  console.log('Close any open Plan2Code console or app and start `plan2code` again.');
+  console.log('');
   return 0;
 }
 
@@ -3213,13 +3830,13 @@ if (require.main === module) {
     process.exit(buildSkills() ? 0 : 1);
   } else if (argv.includes('--verify-skills')) {
     process.exit(verifySkillsSync() ? 0 : 1);
-  } else if (argv.length === 1 && argv[0] === '--update') {
-    update().then((code) => process.exit(code));
+  } else if (argv[0] === '--update' && argv.slice(1).every((a) => a === '--force')) {
+    update({ force: argv.includes('--force') }).then((code) => process.exit(code));
   } else if (argv[0] === '--uninstall' && argv.slice(1).every((a) => a === '--yes' || a === '--purge')) {
     uninstall({ yes: argv.includes('--yes'), purge: argv.includes('--purge') }).then((code) => process.exit(code));
   } else if (argv.length > 0) {
     console.error(`Unknown option(s): ${argv.join(' ')}`);
-    console.error('Usage: node install.js [--build-skills | --verify-skills | --update | --uninstall [--yes] [--purge]]');
+    console.error('Usage: node install.js [--build-skills | --verify-skills | --update [--force] | --uninstall [--yes] [--purge]]');
     console.error('Run with no options for the interactive installer.');
     process.exit(1);
   } else {
@@ -3227,4 +3844,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { uninstall, uninstallAll, purgeData, installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };
+module.exports = { printKeptData, uninstallSkillsPiece, removeSkillsDirectly, removeConsoleFolders, uninstallStatusLine, listKeptData, newUninstallReport, printUninstallReport, UNINSTALL_STEPS, UNINSTALL_PROBES, PIECE_LABELS, createSpinner, printGettingStarted, pathFixLine, fullCommandPath, desktopAppState, detectAgents, agentInstallLine, writeLauncherShim, isOurLauncherShim, LAUNCHER_MARKER, NO_TERMINAL_MESSAGE, appAllowLine, APP_GUIDE_URL, formatBytes, nodeVersionProblem, appWebviewDirs, purgeAppWebview, appRunning, uninstall, uninstallAll, purgeData, installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

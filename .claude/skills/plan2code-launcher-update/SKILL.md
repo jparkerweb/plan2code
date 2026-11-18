@@ -21,7 +21,7 @@ Run from the repo root (the folder holding `install.js` and `src/launcher/`). Ru
 
 ### Step 2 — Read the current files
 
-Read `src/launcher/models.json`. It has five keys: `_note` (a string), `claude`, `devin` and `codex` (each an array of `{ "id", "label" }`) and `strengths` (an object, see Step 4c). Keep the `_note` text exactly as read — Step 9 writes it back verbatim and the Validation rules check it.
+Read `src/launcher/models.json`. It has five keys: `_note` (a string), `claude`, `devin` and `codex` (each an array of `{ "id", "label" }`) and `strengths` (an object, see Step 4c). A `label` is the description only, never the id or a name ahead of a gloss: `{ "id": "sonnet", "label": "latest Sonnet" }`, not `"Sonnet, latest Sonnet"` or `"sonnet (latest Sonnet)"`. The launcher's model menu prints the id in a padded column with the label beside it, and the console and the desktop app show the id next to it too, so a label that repeats the name shows it twice. Devin's and Codex's labels are the display name the vendor uses (`Claude Opus 5.5 Low`), which is their description. Keep the `_note` text exactly as read — Step 9 writes it back verbatim and the Validation rules check it.
 
 Read `src/launcher/agents.json`. It has `schema` (currently `1`) and `agents`, a list of entries. Each entry carries `id`, `name`, `kind` (`builtin` or `template`), `command`, `prompt`, `args`, `bypassArgs`, `modelArgs`, and optional `note`. A `builtin` entry also carries `installUrl`, `install` (lists under `win`, `mac` and `linux`, each `{ label, run, note? }`) and `installDirs` (the same OS keys). Keep the file's shape and order exactly as read.
 
@@ -80,7 +80,7 @@ For `models.json`, compare the discovered list with the current one by `id` and 
 
 - **added:** offered by the CLI, not in the file.
 - **gone:** in the file, no longer offered.
-- **relabeled:** same `id`, a better or changed label. Propose a label in the file's existing style.
+- **relabeled:** same `id`, a better or changed label. Propose a label in the file's existing style: the description only (see Step 2), never repeating the id.
 
 For `agents.json`, show one table with one row per changed field:
 
@@ -137,7 +137,7 @@ Check every rule before `npm test` (Step 10). They mirror the shipped-file tests
 - `_note` is present and unchanged from what Step 2 read.
 - `claude` and `devin` are both non-empty arrays; `codex` is an array (empty is allowed).
 - `devin` has at most 30 entries.
-- Every entry in `claude`, `devin` and `codex` has a non-empty string `id` and a non-empty string `label`.
+- Every entry in `claude`, `devin` and `codex` has a non-empty string `id` and a non-empty string `label`, and no label is a name followed by a gloss (`Sonnet, latest Sonnet`); `scripts/test-launcher.mjs` checks this too.
 - Ids are unique within each list, and labels are unique within each list.
 - No Devin id ends in `xhigh`, `max`, `fast` or `priority`.
 - Every `strengths` row names a `model` that is in that agent's list in the same file, uses only the words `thrifty`, `balanced` and `best`, and no agent other than the ones already under `strengths` gains a mapping.

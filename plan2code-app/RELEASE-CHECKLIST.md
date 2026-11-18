@@ -46,6 +46,11 @@ file directly after checking it against the release's checksum list.
       `docs/desktop-app.md` describes what you saw
 - [ ] `plan2code update` updates the skills, the command and the app, including while the app is
       running (Windows replaces the file by renaming the old one aside)
+- [ ] **Update and restart** (bar, with a newer release out): the bar shows the installer's progress,
+      the app reopens on the same project, and says **Updated to vX** once; with an agent running it
+      asks first, and Stay leaves the app up with **Restart Plan2Code** offered; a failed update
+      (try it offline) leaves the old app running with a readable reason; **What's new** opens the
+      release page in the default browser
 
 ## The window (each system)
 
@@ -64,14 +69,24 @@ file directly after checking it against the release's checksum list.
       only) and permission mode (checks off is ticked by default, matching the plain `plan2code`
       launcher; untick it for an agent that keeps its normal approval prompts); a CLI it could
       not find is named, not just disabled
-- [ ] **Dock the terminal to the right**: the splitter becomes vertical, the toolbar stacks, and the
-      dashboard keeps the rest of the width; dock it back to the bottom
-- [ ] **Collapse** the terminal to a thin strip (either dock) and **View Agent Terminal** brings it
+- [ ] **Dock the terminal to the right**: the splitter becomes vertical, and the
+      dashboard keeps the rest of the width; dock it back to the bottom (the dock button is an icon with a tooltip and a label)
+- [ ] **Collapse** the terminal to a thin strip (either dock) and its expand button (**Show the terminal**) brings it
       back; its size from before collapsing is remembered
-- [ ] Docked right, collapsed: the **View Agent Terminal** label reads top-to-bottom and fits inside the strip,
-      not sideways text running off the edge
+- [ ] Docked right, collapsed: the strip holds only the expand button (and the pill, reading top-to-bottom),
+      with nothing running off the edge
 - [ ] Collapse the terminal (or shrink it small), let the agent go quiet for a while mid-answer: the
-      "agent may need you" badge appears on the strip; expanding it clears the badge
+      **Agent may need you** pill appears on the strip; pressing it expands the terminal and focuses it, and the pill clears
+- [ ] The splitter takes the keyboard (Tab to it, arrows step it 2%, Home and End go to the ends)
+      and a double-click returns it to the default width; Ctrl or Cmd with plus, minus and 0 change the
+      terminal's text size, and it is the same size after a relaunch
+- [ ] Switch the theme (and the highlight) in User Preferences: the bar, the terminal frame, the terminal's
+      colors and the OS title bar all follow at once, and a relaunch opens in that theme with no flash of
+      the other one (check WebView2 on Windows, and WebKit on macOS and Linux: scrollbars, fonts, title bar)
+- [ ] The window appears already painted (no white or blank frame), says "Starting Plan2Code" until the
+      first screen, remembers its size and position, and opens maximized only on the very first launch
+- [ ] Narrow the window: the model text leaves the top bar first, then the status line (both then sit in
+      the agent menu), and the bar never scrolls; **+N more** opens a list of the other steps
 - [ ] The top bar's project and agent menus open under their name, close on a click elsewhere (the
       console frame and the terminal included) or Escape, and are not cut off by the bar
 - [ ] **Change project** in the top bar's project menu, with an agent running: it asks first, then the folder

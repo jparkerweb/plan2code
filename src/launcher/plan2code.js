@@ -15,8 +15,8 @@
  * `--cli claude` / `--cli devin` / `--cli codex` skips the question. Before starting it asks
  * which model to run, from the curated list in models.json (shipped with every install) plus
  * any models the user added in User Preferences; Enter runs the model the launcher last passed
- * that agent (marked `(last used)`), or keeps the agent's own last-used model when none is
- * recorded, and `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
+ * that agent (marked `(last used)`), or passes no model when none is recorded (the prompt reads
+ * `[agent default]`: the agent picks), and `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
  * flag for skipping permission prompts (every built-in does; a custom agent only with bypassArgs),
  * it asks at a keyboard, on every launch, whether to turn them off, Yes by default and nothing
  * remembered (Codex's question also names its sandbox, which the flag turns off too).
@@ -70,6 +70,21 @@
  * defaults and errors (paint). Color is on only on a TTY (stdout and stderr each checked on
  * its own) with NO_COLOR unset; piped runs print plain text and no banner.
  */
+
+/**
+ * The sentence for a Node.js older than 18, or null when `version` (`process.versions.node`) is
+ * new enough. Kept free of anything newer than old Node can parse, since it runs before the rest.
+ */
+function nodeVersionProblem(version) {
+  var major = parseInt(String(version).split('.')[0], 10);
+  if (major >= 18) return null;
+  return 'Plan2Code needs Node.js 18 or newer; you have v' + version + '. Get it from nodejs.org';
+}
+var NODE_PROBLEM = nodeVersionProblem(process.versions.node);
+if (NODE_PROBLEM) {
+  console.error(NODE_PROBLEM);
+  process.exit(1);
+}
 
 const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
@@ -254,7 +269,8 @@ function printNoAgentGuidance(missing = [], builtins = CLIS) {
   console.error(ce.bright('Install one:'));
   for (const cli of builtins) console.error(`  ${ce.cyan(cli.label)}: ${installLine(cli)}`);
   console.error('');
-  console.error('Already use another agent CLI? Add it by editing `~/.plan2code/agents.json`, then run `plan2code` again.');
+  // Worded as install.js's no-agent advice: the same lead commands above, the same pointer here.
+  console.error('Already use another agent CLI? Add it in User Preferences, Agents & models (the gear on the Plan2Code page), then run `plan2code` again.');
   for (const cli of missing) console.error(ce.yellow(`Custom agent ${cli.label}: ${cli.entry.command} not found`));
   console.error('');
   console.error('After installing, open a new terminal, cd into the project you want to work on and run `plan2code`.');
@@ -724,7 +740,7 @@ function isDirectory(dir) {
   }
 }
 
-/** `~/.plan2code/launcher.json`: `{ lastFolder, recentFolders, lastCli, lastModels }`, any key possibly missing. */
+/** `~/.plan2code/launcher.json`: `{ lastFolder, recentFolders, lastCli, lastModels, agentTipSeen }`, any key possibly missing. */
 function readState() {
   try {
     const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -1174,8 +1190,13 @@ async function chooseCli(requested, { fromShortcut } = {}) {
   installed.forEach((cli, i) =>
     console.log(`  ${c.cyan(`${i + 1})`)} ${cli.label}${cli.id === lastCli ? ` ${c.dim('(last used)')}` : ''}`)
   );
-  console.log(c.dim('You can also skip this launcher and run `/plan2code` (`$plan2code` in Codex) straight from your agent.'));
-  console.log(c.dim('That runs outside the desktop app, without its session management or Implementation Loops.'));
+  // The tip shows on the first menu only (agentTipSeen in launcher.json); its second line
+  // only when there is a desktop app to run outside of.
+  if (!readState().agentTipSeen) {
+    console.log(c.dim('You can also skip this launcher and run `/plan2code` (`$plan2code` in Codex) straight from your agent.'));
+    if (findApp()) console.log(c.dim('That runs outside the desktop app, without its session management or Implementation Loops.'));
+    saveState({ agentTipSeen: true });
+  }
   for (;;) {
     const answer = (await ask(`Choice ${c.green(`[${defaultIndex + 1}]`)}: `)).trim().toLowerCase();
     if (!answer) return { cli: installed[defaultIndex] };
@@ -1287,8 +1308,6 @@ function listModels(cli) {
  */
 async function chooseModel(cli, extraArgs) {
   if (cli.custom && !listModels(cli).length) return;
-  // A custom agent has no last-used model to keep: left alone it starts on its own default.
-  const keep = cli.custom ? 'its own default model' : 'the last-used model';
   if (!process.stdin.isTTY) {
     if (cli.custom) {
       console.log(`${cli.label} will start with its own default model. To pick one, run \`plan2code --model <id>\`.`);
@@ -1323,14 +1342,18 @@ async function chooseModel(cli, extraArgs) {
       console.log(left.replace(`${i + 1})`, c.cyan(`${i + 1})`)).replace(' (last used)', c.dim(' (last used)')) + right);
     }
   } else {
-    models.forEach((model, i) =>
-      console.log(
-        (!model.label ? `  ${c.cyan(`${i + 1})`)} ${model.id}` : `  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`) +
-          c.dim(tag(model))
-      )
-    );
+    // The ids in a padded column, each description beside its id (models.json labels are the
+    // description only). Padded before coloring, as above.
+    const numberWidth = String(models.length).length + 1;
+    const idWidth = Math.max(...models.map((model) => model.id.length));
+    models.forEach((model, i) => {
+      const number = c.cyan(`${i + 1})`.padEnd(numberWidth));
+      const row = model.label ? `${model.id.padEnd(idWidth)}  ${model.label}` : model.id;
+      console.log(`  ${number} ${row}${c.dim(tag(model))}`);
+    });
   }
-  const prompt = cli.custom ? '[default]' : lastIndex >= 0 ? `[${lastIndex + 1}]` : '[keep last used]';
+  // With no model recorded (a first run, or a custom agent) Enter passes none: the agent picks.
+  const prompt = !cli.custom && lastIndex >= 0 ? `[${lastIndex + 1}]` : '[agent default]';
   for (;;) {
     const answer = (await ask(`Choice ${c.green(prompt)}: `)).trim().toLowerCase();
     if (!answer) {
@@ -1348,7 +1371,7 @@ async function chooseModel(cli, extraArgs) {
     }
     console.log(
       c.yellow(
-        `Type a number from 1 to ${models.length}, a model name, or press Enter ${lastIndex >= 0 ? `for ${models[lastIndex].id}` : `to keep ${keep}`}.`
+        `Type a number from 1 to ${models.length}, a model id or description, or press Enter ${lastIndex >= 0 ? `for ${models[lastIndex].id}` : "for the agent's default"}.`
       )
     );
   }
@@ -1390,10 +1413,12 @@ function modelFrom(args, cliId) {
  * its own. Resolves true once it has started, false (after one line saying why) when it could
  * not, so the caller can carry on with today's terminal flow.
  */
-function startApp(app, { cwd, cliId, model }) {
+function startApp(app, { cwd, cliId, model, dropped = [] }) {
   // No cliId (a run with no agent at all) opens the app on its launch card, where its own
   // Set up an agent button takes over from there.
   const args = ['--project', cwd, ...(cliId ? ['--agent', cliId] : []), ...(model ? ['--model', model] : [])];
+  // Said before the start: a fallback to the terminal flow below still forwards them.
+  if (dropped.length > 0) console.log(c.dim(`The app opens with the folder, agent and model only, so these are not passed on: ${dropped.join(' ')}`));
   return new Promise((resolve) => {
     let child;
     try {
@@ -1496,7 +1521,7 @@ function looksLikeProject(dir) {
 
 /**
  * True to proceed with `cwd`: it already looks like a project, or the person confirmed it when
- * asked. Without a terminal to ask there is nobody to confirm, so it refuses rather than risk
+ * asked (Enter means yes for an empty folder, no otherwise; a no says what to do instead). Without a terminal to ask there is nobody to confirm, so it refuses rather than risk
  * opening the app (or the terminal flow) on the wrong folder.
  */
 async function confirmProject(cwd) {
@@ -1507,12 +1532,31 @@ async function confirmProject(cwd) {
     );
     return false;
   }
+  // An empty folder is most likely a new project being started, so Enter opens it there; a
+  // folder with files in it that still fails the check is more likely the wrong one.
+  const empty = isEmptyFolder(cwd);
   const answer = (
-    await ask(`${c.yellow(cwd)} doesn't look like a project (no git repo, AGENTS.md or specs folder). Open Plan2Code there anyway? [y/N]: `)
+    await ask(
+      `${c.yellow(cwd)} doesn't look like a project (no git repo, AGENTS.md or specs folder). Open Plan2Code there anyway? ${empty ? '[Y/n]' : '[y/N]'}: `
+    )
   )
     .trim()
     .toLowerCase();
-  return answer === 'y' || answer === 'yes';
+  const yes = answer === 'y' || answer === 'yes' || (empty && answer === '');
+  if (!yes) console.log('Nothing opened. cd into your project (or run `git init` here) and run `plan2code` again.');
+  return yes;
+}
+
+// Files an OS drops into a folder on its own, which leave it as empty as it was.
+const OS_LITTER = new Set(['.ds_store', 'thumbs.db', 'desktop.ini']);
+
+/** True when `dir` holds nothing (OS litter such as .DS_Store aside); false when it cannot be read. */
+function isEmptyFolder(dir) {
+  try {
+    return fs.readdirSync(dir).every((name) => OS_LITTER.has(name.toLowerCase()));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1630,27 +1674,67 @@ function spawnCommand(file, args, options) {
 }
 
 /**
- * `plan2code update`: the npx install with --update, passing npx's exit code through. No agent
- * starts. That one install updates the skills, this launcher and the desktop app (when it is
- * installed) together, so the three never drift apart.
+ * `plan2code update [--main] [--tag <ref>] [--force]`: the npx install with --update, passing
+ * npx's exit code through. No agent starts. That one install updates the skills, this launcher
+ * and the desktop app (when it is installed) together, so the three never drift apart.
+ *
+ * It installs the newest `vX.Y.Z` release tag, found with the same `git ls-remote --tags` rule
+ * the console's release check uses (update-check.mjs, copied beside this file), so a person is
+ * never moved onto work a published release does not have yet. `--main` is the old behavior (the
+ * tip of `main`); `--tag <ref>` installs that tag or branch (the desktop app's Update skills
+ * button pins the app's own tag this way, and it is how to go back to an earlier release);
+ * `--force` reinstalls even when the version is already current. `--main`, and a `--tag` naming a
+ * branch rather than a vX.Y.Z release, always reinstall: unreleased work keeps the last release's
+ * version, so the installer's "Already on" check would otherwise install nothing.
  */
-/** `tag` pins the install to that release (the desktop app's own Update skills button, so it
- * never pulls in work a published release does not have yet); omitted, `plan2code update` keeps
- * pulling the latest off `main` as it always has. */
-function runUpdate(tag) {
-  console.log('Updating Plan2Code...');
+async function runUpdate({ tag, main, force } = {}) {
+  let ref = tag;
+  if (ref === undefined && !main) {
+    const latest = await newestReleaseTag();
+    if (!latest) {
+      console.error(`${ce.red('plan2code:')} could not find the newest Plan2Code release (git ls-remote did not answer).`);
+      console.error('Check your network, then run plan2code update again, or use --main (the newest work, not a release) or --tag <release> (for example --tag v3.0.2).');
+      return process.exit(1);
+    }
+    ref = `v${latest}`;
+  }
+  console.log(ref === undefined ? 'Updating Plan2Code to the newest work on main...' : `Updating Plan2Code to ${ref}...`);
   console.log(c.dim('One update covers the skills, the plan2code command and the desktop app (when installed).'));
-  return runInstaller(['--update'], tag);
+  const unreleased = main || (tag !== undefined && !/^v\d+\.\d+\.\d+$/.test(tag));
+  return runInstaller(['--update', ...(force || unreleased ? ['--force'] : [])], ref);
+}
+
+/**
+ * The newest release's version (X.Y.Z), or null when it cannot be found. The tag list comes from
+ * update-check.mjs's own `git ls-remote --tags` run and its own pick, beside this file once
+ * installed (or in the repository's web-console folder when run from a checkout).
+ * PLAN2CODE_LS_REMOTE_FILE names a file holding `git ls-remote --tags` output to use instead of
+ * asking git: the tests' stand-in for the network.
+ */
+async function newestReleaseTag() {
+  try {
+    const checker = [path.join(__dirname, 'update-check.mjs'), path.join(__dirname, '..', 'web-console', 'update-check.mjs')].find((file) => fs.existsSync(file));
+    if (!checker) return null;
+    const mod = await import(require('url').pathToFileURL(checker).href);
+    const stub = process.env.PLAN2CODE_LS_REMOTE_FILE;
+    const text = stub ? fs.readFileSync(stub, 'utf8') : await mod.runLsRemote();
+    return mod.latestTag(text);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * `plan2code uninstall [--yes] [--purge]`: the npx install with --uninstall, which asks before
  * it removes anything (--yes skips that) and then whether your data in ~/.plan2code goes too
- * (--purge says yes). The prompts run on this terminal, so stdio is inherited.
+ * (--purge says yes). The prompts run on this terminal, so stdio is inherited. It runs the newest
+ * release's installer, as update does, and falls back to main only when that release cannot be
+ * found, so removing Plan2Code never waits on the network more than installing it did.
  */
-function runUninstall(flags) {
+async function runUninstall(flags) {
   console.log('Uninstalling Plan2Code...');
-  return runInstaller(['--uninstall', ...flags]);
+  const latest = await newestReleaseTag();
+  return runInstaller(['--uninstall', ...flags], latest ? `v${latest}` : undefined);
 }
 
 /** Run install.js through npx with the given flags, passing npx's exit code through. */
@@ -1714,11 +1798,97 @@ async function releaseNotice() {
   } catch {}
 }
 
+/** `{ tag, main, force }` from the words after `update`, or `{ error }` naming what is wrong. */
+function parseUpdateArgs(args) {
+  const out = { main: false, force: false };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--main') out.main = true;
+    else if (arg === '--force') out.force = true;
+    else if (arg === '--tag') {
+      const ref = args[i + 1];
+      if (!ref || ref.startsWith('--')) return { error: '--tag needs a release or branch, for example --tag v3.0.2' };
+      out.tag = ref;
+      i++;
+    } else return { error: `unknown option for update: ${arg}` };
+  }
+  if (out.main && out.tag !== undefined) return { error: 'use --main or --tag, not both' };
+  return out;
+}
+
+/** The usage block `plan2code --help` prints. */
+function usageText() {
+  return [
+    'Usage: plan2code [options] [-- agent arguments]',
+    '',
+    'Opens the Plan2Code dashboard in your AI agent, in the current folder.',
+    '',
+    'Commands:',
+    '  plan2code update [--main] [--force]    Update to the newest release (--main: the newest work, --force: reinstall)',
+    '  plan2code update --tag <ref>           Go back to a release: plan2code update --tag v3.0.2',
+    '  plan2code uninstall [--yes] [--purge]  Remove Plan2Code (--purge also removes your data)',
+    '',
+    'Options:',
+    '  --cli <id>              Start this agent without asking (claude, devin, codex or your own)',
+    '  --model <id>            Start the agent on this model without asking',
+    "  --keep-permissions      Keep the agent's permission prompts on without asking",
+    "  --bypass-permissions    Turn the agent's permission prompts off without asking",
+    '  --classic               Stay in this terminal even when the desktop app is installed',
+    '  --pick-folder           Ask for the project folder first (the desktop shortcut uses it)',
+    '  -h, --help, help        Show this help',
+    '  -v, --version           Show the installed Plan2Code version',
+    '',
+    "Anything after -- goes to the agent as it is, in this terminal: plan2code -- --help shows your agent's own help.",
+  ].join('\n');
+}
+
+/** The installed version, from the version.json install.js puts beside this file, or null. */
+function installedVersion() {
+  const data = readJsonFile(path.join(__dirname, 'version.json'));
+  return data && typeof data.version === 'string' ? data.version : null;
+}
+
+/**
+ * The arguments the desktop app is not given: it takes only the folder, the agent and the model,
+ * so every other forwarded argument (the model flag's own forms aside) is dropped when it opens.
+ */
+function droppedForApp(args, cliId) {
+  const dropped = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--model' || (cliId === 'codex' && arg === '-m')) {
+      i++;
+      continue;
+    }
+    if (arg.startsWith('--model=') || (cliId === 'codex' && arg.startsWith('-m'))) continue;
+    dropped.push(arg);
+  }
+  return dropped;
+}
+
 async function launch() {
-  const argv = process.argv.slice(2);
+  const all = process.argv.slice(2);
+  // Everything after a bare `--` belongs to the agent: the launcher reads only what comes before.
+  const split = all.indexOf('--');
+  const argv = split >= 0 ? all.slice(0, split) : all;
+  const passThrough = split >= 0 ? all.slice(split + 1) : [];
+  if (argv[0] === 'help' || argv.includes('--help') || argv.includes('-h')) {
+    console.log(usageText());
+    return process.exit(0);
+  }
+  if (argv.includes('--version') || argv.includes('-v')) {
+    const version = installedVersion();
+    console.log(version ? `Plan2Code v${version}` : 'Plan2Code (version unknown: no version.json beside this file)');
+    return process.exit(0);
+  }
   if (argv[0] === UPDATE_COMMAND) {
-    const tagAt = argv.indexOf('--tag');
-    return runUpdate(tagAt >= 0 ? argv[tagAt + 1] : undefined);
+    const parsed = parseUpdateArgs(argv.slice(1));
+    if (parsed.error) {
+      console.error(`${ce.red('plan2code:')} ${parsed.error}`);
+      console.error('Usage: plan2code update [--main] [--force] [--tag <ref>]');
+      return process.exit(2);
+    }
+    return runUpdate(parsed);
   }
   if (argv[0] === UNINSTALL_COMMAND) {
     const flags = argv.slice(1);
@@ -1737,7 +1907,8 @@ async function launch() {
     bypass: argv.includes(BYPASS_PERMISSIONS_FLAG),
   };
   const ownFlags = new Set([PICK_FOLDER_FLAG, CLASSIC_FLAG, KEEP_PERMISSIONS_FLAG, BYPASS_PERMISSIONS_FLAG]);
-  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(argv.filter((arg) => !ownFlags.has(arg)));
+  const { cli: requestedCli, rest } = takeCliFlag(argv.filter((arg) => !ownFlags.has(arg)));
+  const extraArgs = [...rest, ...passThrough];
 
   printIntro();
   await releaseNotice();
@@ -1764,7 +1935,7 @@ async function launch() {
       if (picked.exit !== undefined) return exitWith(picked.exit, fromShortcut);
       cwd = picked.cwd;
       cwdSettled = true;
-      if (app && (await startApp(app, { cwd }))) {
+      if (app && (await startApp(app, { cwd, dropped: extraArgs }))) {
         console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
         return process.exit(0);
       }
@@ -1786,7 +1957,9 @@ async function launch() {
   // The app has its own permission tick on its launch card, so the question is only for the
   // terminal flow (asked late if the app fails to start). An agent the setup page started runs
   // in this terminal even with the app installed: the waiting setup tab is owed the hand-over.
-  const app = !setup && !classic && hasDisplay() ? findApp() : null;
+  // Arguments after a bare `--` are for the agent itself, which the app cannot pass on, so
+  // such a run stays in this terminal too.
+  const app = !setup && !classic && passThrough.length === 0 && hasDisplay() ? findApp() : null;
   let bypass = app ? null : await chooseBypass(cli, permissions);
 
   if (!cwdSettled) {
@@ -1806,7 +1979,7 @@ async function launch() {
   }
 
   // The app takes over from here when it is installed, a window can open and --classic is absent.
-  if (app && (await startApp(app, { cwd, cliId: cli.id, model: modelFrom(extraArgs, cli.id) }))) {
+  if (app && (await startApp(app, { cwd, cliId: cli.id, model: modelFrom(extraArgs, cli.id), dropped: droppedForApp(extraArgs, cli.id) }))) {
     console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
     return process.exit(0);
   }
@@ -1847,4 +2020,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { bypassQuestion, normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd, sameFolder, readRecent, pushRecent, listRecent, recordFolder, folderMenuRows, folderMenuPick };
+module.exports = { nodeVersionProblem, usageText, droppedForApp, bypassQuestion, normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd, sameFolder, readRecent, pushRecent, listRecent, recordFolder, folderMenuRows, folderMenuPick, isEmptyFolder };

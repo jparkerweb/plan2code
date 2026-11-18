@@ -19,11 +19,12 @@ function read(file) {
 // or the end of its container (HTML).
 function blockOf(file) {
   const text = read(file);
-  const start = text.search(/^#{2,3} Before you start$|<h3>Before you start<\/h3>/m);
+  const start = text.search(/^#{2,3} Before you start$|<h3>Before you start<\/h3>|<summary>Before you start<\/summary>/m);
   assert.ok(start >= 0, `${file} has no "Before you start" block`);
   const rest = text.slice(start);
   const body = rest.indexOf('\n') + 1;
-  const next = file.endsWith('.html') ? rest.indexOf('</div>') : rest.slice(body).search(/^#{1,3} /m);
+  const closers = ['</details>', '</div>'].map((tag) => rest.indexOf(tag)).filter((i) => i > 0);
+  const next = file.endsWith('.html') ? Math.min(...closers) : rest.slice(body).search(/^#{1,3} /m);
   const end = file.endsWith('.html') ? next : next < 0 ? -1 : body + next;
   return end > 0 ? rest.slice(0, end) : rest;
 }
@@ -40,11 +41,30 @@ for (const file of DOCS) {
   });
 
   if (!WITH_INSTALL.has(file)) continue;
-  test(`${file} puts the guidance before the install command`, () => {
+  // The command leads (README's "See it" picture, the site's hero); the guidance follows in a
+  // block of its own, and the line beside the command names the two requirements.
+  test(`${file} leads with the install command and names what it needs`, () => {
     const text = read(file);
-    const guide = text.indexOf('Before you start');
     const install = text.indexOf('npx --allow-git');
-    assert.ok(guide >= 0 && install >= 0 && guide < install, `${file}: "Before you start" must come before the npx line`);
+    assert.ok(install >= 0 && text.includes('Before you start'), `${file} is missing the install command or "Before you start"`);
+    if (file === 'README.md') {
+      const first = text.split('\n').slice(0, 60).join('\n');
+      assert.ok(first.includes('**Plan it. Approve it. Let it build.**'), 'README.md: the tagline must open it');
+      assert.ok(first.includes('npx --allow-git'), 'README.md: the install command must be in its first 60 lines, under "See it"');
+      assert.ok(first.indexOf('## See it') >= 0 && first.indexOf('## See it') < first.indexOf('npx --allow-git'), 'README.md: the install command must sit under "See it"');
+      assert.ok(first.includes('Needs Node.js 18+ and Git'), 'README.md: the first lines must name Node.js and Git');
+    }
+    if (file === 'docs/index.html') {
+      assert.ok(install < text.indexOf('id="install"'), 'docs/index.html: the command must also be in the hero, before #install');
+      assert.ok(text.includes('Needs Node 18+ and Git'), 'docs/index.html: #install must say what it needs in one line');
+    }
+  });
+
+  test(`${file} installs from the release branch, never from main`, () => {
+    const text = read(file);
+    const commands = text.match(/npx --allow-git=all git\+https:\/\/github\.com\/jparkerweb\/plan2code\.git\S*/g) || [];
+    assert.ok(commands.length > 0, `${file} has no install command`);
+    for (const command of commands) assert.match(command, /\.git#release(?![\w.-])/, `${file}: ${command} must end in #release`);
   });
 
   test(`${file} says what a silent install means and how to see why`, () => {

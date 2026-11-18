@@ -97,10 +97,14 @@ Read the current `CHANGELOG.md` on the branch. Look for:
 
 ### Step 5 — Draft or fix the CHANGELOG entry
 
-**If no entry exists**, draft a new one based on the commits and changed files. Match this repo's house format exactly — a bare `## vX.Y.Z` heading with **no date**, emoji `###` headings from the Step 2 table, and a blank line between bullets:
+**If no entry exists**, draft a new one based on the commits and changed files. Match this repo's house format exactly: a `## vX.Y.Z (YYYY-MM-DD)` heading with the release date (take it from `version.json`'s `releaseDate`, or today's date for an entry not yet released; older headings have no date and stay as they are), emoji `###` headings from the Step 2 table in the order Added, Changed, Fixed, and a blank line between bullets. The format going forward:
+
+- A minor release opens with a `### Highlights` block of exactly three plain-language bullets, before Added.
+- Game changes sit under one `Activities` line.
+- Tooling and test lines go under a `**For contributors**` bullet group at the end of the section.
 
 ```markdown
-## {computed-version-with-v-prefix}
+## {computed-version-with-v-prefix} ({release-date})
 
 ### ✨ Added
 
@@ -142,7 +146,7 @@ This keeps `package.json`, `version.json`, and `CHANGELOG.md` in lockstep so `np
 
 - Never create a version entry without checking main first — the whole point is to derive the version from main's current state
 - Always present changes before writing — the user should see and approve the CHANGELOG entry
-- Match the existing file's format — `## vX.Y.Z` with no date, emoji `###` headings. Do not introduce Keep a Changelog's `## [x.y.z] - date` style
+- Match the file's format: `## vX.Y.Z (YYYY-MM-DD)` (older headings carry no date; do not backfill them), emoji `###` headings. Do not introduce Keep a Changelog's `## [x.y.z] - date` style
 - Write for someone reading the release notes, not for someone reading the diff — say what the change lets them do
 - If multiple change types exist (Added + Changed), use multiple headings under the same version
 - `version.json`'s `releaseDate` is today's date, i.e. when the release is being prepared, not when the work started

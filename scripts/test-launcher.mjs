@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LAUNCHER = path.join(ROOT, "src", "launcher", "plan2code.js");
 const IS_WINDOWS = process.platform === "win32";
 const NOTICE = "will use the model you last used in it";
+// The no-agent pointer to custom agents, word for word as install.js prints it (Task 2.10/2.11).
+const NO_AGENT_POINTER =
+  "Already use another agent CLI? Add it in User Preferences, Agents & models (the gear on the Plan2Code page), then run `plan2code` again.";
 
 /**
  * A temp home and a bin dir holding stand-ins for `clis`; each writes its args to <bin>/<cli>.json.
@@ -86,9 +89,12 @@ function sandbox(clis, { installed, project = true, lookup = true, agents } = {}
     fs.writeFileSync(crashFile, "#!/bin/sh\nexit 3\n");
     fs.chmodSync(crashFile, 0o755);
   }
+  const envFor = (env = {}) => ({ ...process.env, PATH: bin, PLAN2CODE_NO_SAVED_PATH: "1", HOME: home, USERPROFILE: home, PLAN2CODE_CONSOLE_HOME: consoleHome, ...env });
   return {
     dir,
     home,
+    launcher,
+    envFor,
     appFile,
     crashFile,
     stateFile: path.join(home, ".plan2code", "launcher.json"),
@@ -98,7 +104,7 @@ function sandbox(clis, { installed, project = true, lookup = true, agents } = {}
         cwd: dir,
         input: "",
         encoding: "utf8",
-        env: { ...process.env, PATH: bin, PLAN2CODE_NO_SAVED_PATH: "1", HOME: home, USERPROFILE: home, PLAN2CODE_CONSOLE_HOME: consoleHome, ...env },
+        env: envFor(env),
       }),
     argsOf: (cli) => {
       const file = path.join(bin, `${cli}.json`);
@@ -255,7 +261,12 @@ test("launcher: the shipped models.json lists every CLI, and every entry has an 
   const shipped = JSON.parse(fs.readFileSync(path.join(path.dirname(LAUNCHER), "models.json"), "utf8"));
   for (const cli of ["claude", "devin", "codex"]) {
     assert.ok(Array.isArray(shipped[cli]), cli);
-    for (const { id, label } of shipped[cli]) assert.ok(id && label, cli);
+    for (const { id, label } of shipped[cli]) {
+      assert.ok(id && label, cli);
+      // A label is the description only: the launcher prints the id beside it, so no label
+      // repeats a name ahead of a gloss ("Sonnet, latest Sonnet" or the same with a dash).
+      assert.doesNotMatch(label, /\u2014|^[^\s,]+, /, `${cli} ${id}: ${label}`);
+    }
   }
 });
 
@@ -446,8 +457,9 @@ test("launcher: with no CLI installed it exits 127 and explains how to get one a
   ]) {
     assert.ok(result.stderr.includes(part), part);
   }
-  assert.ok(result.stderr.includes("Add it by editing `~/.plan2code/agents.json`, then run `plan2code` again."));
-  assert.doesNotMatch(result.stderr, /User Preferences/);
+  // The same pointer install.js prints for custom agents; no hand-editing of agents.json.
+  assert.ok(result.stderr.includes(NO_AGENT_POINTER));
+  assert.doesNotMatch(result.stderr, /editing/);
   assert.ok(result.stderr.includes("type /plan2code ($plan2code in Codex)"));
   assert.match(result.stderr, /cd into the project/);
 });
@@ -468,42 +480,136 @@ test("launcher: the CLI's non-zero exit code is passed through", (t) => {
   assert.equal(result.status, 7, result.stderr);
   assert.notEqual(box.argsOf("claude"), null);
 });
-test("launcher: update runs the npx install and starts no agent", (t) => {
+/** A `git ls-remote --tags` answer for `tags`, written to a file the launcher reads in git's place. */
+function lsRemoteStub(box, tags) {
+  const file = path.join(box.dir, "ls-remote.txt");
+  const lines = tags.map((tag, i) => `${String(i + 1).repeat(40).slice(0, 40)}\trefs/tags/${tag}`);
+  fs.writeFileSync(file, lines.join("\n") + "\n");
+  return { PLAN2CODE_LS_REMOTE_FILE: file };
+}
+
+const REPO = "git+https://github.com/jparkerweb/plan2code.git";
+
+test("launcher: update installs the newest release tag, by version and not by name or order", (t) => {
   const box = sandbox(["npx", "claude"]);
   t.after(box.cleanup);
-  const result = box.run(["update"]);
+  // v3.10.0 beats v3.9.0 numerically; a pre-release, a peeled line and a non-release tag never count.
+  const env = lsRemoteStub(box, ["v3.9.0", "v3.10.0", "v3.10.1-rc1", "v3.10.0^{}", "nightly", "v3.2.0"]);
+  const result = box.run(["update"], env);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Updating Plan2Code\.\.\./);
+  assert.match(result.stdout, /Updating Plan2Code to v3\.10\.0\.\.\./);
   const args = box.argsOf("npx");
   assert.ok(args, "npx was not run");
   assert.ok(args.includes("--update"), args.join(" "));
-  assert.ok(args.includes("git+https://github.com/jparkerweb/plan2code.git"), args.join(" "));
+  assert.ok(args.includes(`${REPO}#v3.10.0`), args.join(" "));
+  assert.ok(!args.includes("--force"), args.join(" "));
   assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher: update --main installs the tip of main, as it always did", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  const result = box.run(["update", "--main"], lsRemoteStub(box, ["v9.9.9"]));
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Updating Plan2Code to the newest work on main\.\.\./);
+  const args = box.argsOf("npx");
+  assert.ok(args.includes(REPO), args.join(" "));
+  assert.ok(!args.some((arg) => arg.includes("#")), args.join(" "));
+  // Unreleased work on main carries the last release's version, so the installer's "Already on"
+  // check would stop it: --main always reinstalls.
+  assert.ok(args.includes("--force"), args.join(" "));
+});
+
+test("launcher: update --tag reinstalls for a branch, and not for a release tag", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  assert.equal(box.run(["update", "--tag", "release"]).status, 0);
+  let args = box.argsOf("npx");
+  assert.ok(args.includes(`${REPO}#release`) && args.includes("--force"), args.join(" "));
+  assert.equal(box.run(["update", "--tag", "v3.0.2"]).status, 0);
+  args = box.argsOf("npx");
+  assert.ok(args.includes(`${REPO}#v3.0.2`) && !args.includes("--force"), args.join(" "));
+});
+
+test("launcher: update --tag installs that ref without asking for the release list", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  // No tag list is available at all: --tag must not need one.
+  const result = box.run(["update", "--tag", "v3.0.2"], { PLAN2CODE_LS_REMOTE_FILE: path.join(box.dir, "missing.txt") });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Updating Plan2Code to v3\.0\.2\.\.\./);
+  assert.ok(box.argsOf("npx").includes(`${REPO}#v3.0.2`), box.argsOf("npx").join(" "));
+});
+
+test("launcher: update --force reaches the installer", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  assert.equal(box.run(["update", "--force"], lsRemoteStub(box, ["v3.1.0"])).status, 0);
+  const args = box.argsOf("npx");
+  assert.ok(args.includes("--update") && args.includes("--force"), args.join(" "));
+  assert.ok(args.includes(`${REPO}#v3.1.0`), args.join(" "));
+});
+
+test("launcher: update with no release list says so and installs nothing", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  const result = box.run(["update"], lsRemoteStub(box, ["nightly", "v1.0"]));
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /could not find the newest Plan2Code release/);
+  assert.match(result.stderr, /--main/);
+  assert.match(result.stderr, /--tag v3\.0\.2/);
+  assert.equal(box.argsOf("npx"), null);
+});
+
+test("launcher: update refuses a --tag with no value, both --main and --tag, and an unknown option", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  for (const [args, message] of [
+    [["update", "--tag"], /--tag needs a release or branch/],
+    [["update", "--main", "--tag", "v3.0.2"], /use --main or --tag, not both/],
+    [["update", "--nope"], /unknown option for update: --nope/],
+  ]) {
+    const result = box.run(args);
+    assert.equal(result.status, 2, args.join(" "));
+    assert.match(result.stderr, message);
+    assert.equal(box.argsOf("npx"), null);
+  }
 });
 
 test("launcher: update passes npx's exit code through", (t) => {
   const box = sandbox(["npx"]);
   t.after(box.cleanup);
-  assert.equal(box.run(["update"], { P2C_TEST_EXIT: "3" }).status, 3);
+  assert.equal(box.run(["update", "--main"], { P2C_TEST_EXIT: "3" }).status, 3);
 });
 
 test("launcher: uninstall runs the npx install with --uninstall and starts no agent", (t) => {
   const box = sandbox(["npx", "claude"]);
   t.after(box.cleanup);
-  const result = box.run(["uninstall", "--yes", "--purge"]);
+  const result = box.run(["uninstall", "--yes", "--purge"], lsRemoteStub(box, ["v3.1.0", "v3.0.2"]));
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Uninstalling Plan2Code\.\.\./);
   const args = box.argsOf("npx");
   assert.ok(args, "npx was not run");
   assert.ok(args.includes("--uninstall") && args.includes("--yes") && args.includes("--purge"), args.join(" "));
   assert.ok(!args.includes("--update"), args.join(" "));
+  // The newest release's installer, never unreleased work on main.
+  assert.ok(args.includes(`${REPO}#v3.1.0`), args.join(" "));
   assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher: uninstall falls back to main when the newest release cannot be found", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  const result = box.run(["uninstall", "--yes"], lsRemoteStub(box, ["nightly"]));
+  assert.equal(result.status, 0, result.stderr);
+  const args = box.argsOf("npx");
+  assert.ok(args.includes(REPO) && !args.some((arg) => arg.includes("#")), args.join(" "));
 });
 
 test("launcher: uninstall passes npx's exit code through", (t) => {
   const box = sandbox(["npx"]);
   t.after(box.cleanup);
-  assert.equal(box.run(["uninstall"], { P2C_TEST_EXIT: "4" }).status, 4);
+  assert.equal(box.run(["uninstall"], { P2C_TEST_EXIT: "4", ...lsRemoteStub(box, ["v3.1.0"]) }).status, 4);
 });
 
 test("launcher: uninstall refuses an unknown option without running npx", (t) => {
@@ -948,7 +1054,8 @@ test("launcher agents: a custom agent whose command is not found is left out and
   const result = none.run([]);
   assert.equal(result.status, 127);
   assert.match(result.stderr, /Custom agent Ghost: ghost-cmd not found/);
-  assert.ok(result.stderr.includes("agents.json"));
+  // Custom agents are fixed where they are added: User Preferences, Agents & models.
+  assert.ok(result.stderr.includes(NO_AGENT_POINTER));
 });
 
 test("launcher agents: a malformed agents.json warns on a terminal, never crashes, and gives no agents", (t) => {
@@ -1045,8 +1152,8 @@ test("launcher list: with no agent and no terminal it prints this OS's install s
     assert.ok(result.stderr.includes(leadRun(id)), `${id}: ${leadRun(id)}`);
     assert.ok(result.stderr.includes(builtin(id).installUrl), id);
   }
-  assert.ok(result.stderr.includes("add another agent by editing `~/.plan2code/agents.json`, then run `plan2code` again") || result.stderr.includes("Add it by editing `~/.plan2code/agents.json`, then run `plan2code` again."));
-  assert.doesNotMatch(result.stderr, /User Preferences/);
+  assert.ok(result.stderr.includes(NO_AGENT_POINTER));
+  assert.doesNotMatch(result.stderr, /agents\.json/);
 });
 
 test("launcher list: --cli for a missing built-in prints its lead install line and exits 127", (t) => {
@@ -1463,4 +1570,249 @@ test("launcher folder menu: a folder that fails the project check is not recorde
   assert.match(result.stderr, /doesn't look like a project/);
   assert.equal(box.argsOf("claude"), null);
   assert.deepEqual(JSON.parse(fs.readFileSync(box.stateFile, "utf8")), state);
+});
+
+// --help, --version and the Node guard: none of them shows a prompt or starts an agent.
+const PROMPT_TEXT = /Which|\(Y\/n\)|\(y\/N\)|Choose|Pick/;
+
+for (const flag of ["--help", "-h", "help"]) {
+  test(`launcher help: ${flag} prints the usage and exits 0 with no prompt`, (t) => {
+    const box = sandbox(["claude"]);
+    t.after(box.cleanup);
+    const result = box.run([flag]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^Usage: plan2code/m);
+    for (const word of ["update", "uninstall", "--tag", "--main", "--force", "Go back to a release", "plan2code update --tag v3.0.2", "--cli", "--classic", "--keep-permissions", "--bypass-permissions", "--pick-folder"]) {
+      assert.ok(result.stdout.includes(word), `the usage names ${word}`);
+    }
+    assert.match(result.stdout, /plan2code -- --help shows your agent's own help/);
+    assert.doesNotMatch(result.stdout, PROMPT_TEXT);
+    assert.equal(box.argsOf("claude"), null, "no agent started");
+  });
+}
+
+for (const flag of ["--version", "-v"]) {
+  test(`launcher version: ${flag} prints the installed version and exits 0 with no prompt`, (t) => {
+    const box = sandbox(["claude"], { installed: "9.8.7" });
+    t.after(box.cleanup);
+    const result = box.run([flag]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "Plan2Code v9.8.7");
+    assert.equal(box.argsOf("claude"), null, "no agent started");
+  });
+}
+
+test("launcher help: --help after -- goes to the agent, without the separator", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const result = box.run(["--", "--help"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /^Usage: plan2code/m);
+  assert.deepEqual(box.argsOf("claude"), [...CLASSIC_ARGS, "--help"]);
+});
+
+test("launcher app: arguments the app does not take are named in one line", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run(["--model", "opus", "--verbose"], { PLAN2CODE_APP: box.appFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.appArgs().slice(2), ["--agent", "claude", "--model", "opus"]);
+  assert.match(result.stdout, /not passed on: --verbose$/m);
+});
+
+test("launcher app: no dropped-argument line when nothing is dropped", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run(["--model", "opus"], { PLAN2CODE_APP: box.appFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /not passed on/);
+});
+
+test("launcher: droppedForApp keeps every argument but the model flag's forms", () => {
+  const { droppedForApp } = require(LAUNCHER);
+  assert.deepEqual(droppedForApp(["--model", "x", "--verbose"], "claude"), ["--verbose"]);
+  assert.deepEqual(droppedForApp(["--model=x", "-p"], "claude"), ["-p"]);
+  assert.deepEqual(droppedForApp(["-m", "x", "-mfoo", "--y"], "codex"), ["--y"]);
+  assert.deepEqual(droppedForApp(["-m", "x"], "claude"), ["-m", "x"]);
+  assert.deepEqual(droppedForApp([], "claude"), []);
+});
+
+test("launcher: the Node guard names the version on Node older than 18", () => {
+  const { nodeVersionProblem } = require(LAUNCHER);
+  assert.equal(nodeVersionProblem("16.20.2"), "Plan2Code needs Node.js 18 or newer; you have v16.20.2. Get it from nodejs.org");
+  assert.equal(nodeVersionProblem("18.0.0"), null);
+  assert.equal(nodeVersionProblem("26.1.0"), null);
+});
+
+test("launcher: an old Node fails fast with the guard's sentence", () => {
+  // The guard runs before anything else, so a stubbed process.versions.node stops the load.
+  const code = `Object.defineProperty(process.versions, "node", { value: "16.20.2" }); require(${JSON.stringify(LAUNCHER)});`;
+  const result = spawnSync(process.execPath, ["-e", code], { encoding: "utf8" });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Plan2Code needs Node\.js 18 or newer; you have v16\.20\.2\. Get it from nodejs\.org/);
+});
+
+test("launcher app: arguments after -- keep the run in this terminal even with the app installed", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run(["--", "--help"], { PLAN2CODE_APP: box.appFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(box.appExists(), false, "the app was not started");
+  assert.deepEqual(box.argsOf("claude"), [...CLASSIC_ARGS, "--help"]);
+  assert.doesNotMatch(result.stdout, /not passed on/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Prompts at a "terminal". A preload marks stdin as a TTY, so the launcher asks its questions;
+// stdin stays a pipe. Each prompt opens its own readline, and a readline takes everything
+// waiting on the pipe, so answers piped in all at once reach the first prompt only: each
+// answer is written once its prompt shows on stdout, after a short pause.
+
+/**
+ * Run the launcher with `steps` ([{ when: RegExp, send }]) answered in order, each `when`
+ * matched against the stdout printed since the last answer. Resolves { status, stdout, stderr,
+ * sent } once it exits (killed after 20s, so a prompt nobody answers fails the test, not hangs).
+ */
+function runAtTerminal(box, args, steps, { env = {}, cwd = box.dir } = {}) {
+  const shim = path.join(box.dir, "tty-shim.cjs");
+  fs.writeFileSync(shim, 'Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });\n');
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ["-r", shim, box.launcher, ...args], { cwd, env: box.envFor(env) });
+    let stdout = "";
+    let stderr = "";
+    let from = 0;
+    let sent = 0;
+    let writing = false;
+    const next = () => {
+      if (writing || sent >= steps.length) return;
+      if (!steps[sent].when.test(stdout.slice(from))) return;
+      writing = true;
+      from = stdout.length;
+      setTimeout(() => {
+        child.stdin.write(steps[sent].send);
+        sent++;
+        writing = false;
+        next();
+      }, 80);
+    };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      next();
+    });
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    const timer = setTimeout(() => child.kill(), 20000);
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr, sent });
+    });
+  });
+}
+
+const NOT_A_PROJECT = /doesn't look like a project/;
+const NOTHING_OPENED = "Nothing opened. cd into your project (or run `git init` here) and run `plan2code` again.";
+
+test("launcher: isEmptyFolder ignores OS litter and calls an unreadable folder not empty", () => {
+  const { isEmptyFolder } = require(LAUNCHER);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-empty-"));
+  try {
+    assert.equal(isEmptyFolder(dir), true);
+    fs.writeFileSync(path.join(dir, ".DS_Store"), "");
+    fs.writeFileSync(path.join(dir, "Thumbs.db"), "");
+    assert.equal(isEmptyFolder(dir), true, "OS litter only");
+    fs.writeFileSync(path.join(dir, "notes.txt"), "");
+    assert.equal(isEmptyFolder(dir), false);
+    assert.equal(isEmptyFolder(path.join(dir, "missing")), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("launcher project check: an empty folder defaults to Yes, so Enter opens it", async (t) => {
+  const box = sandbox(["claude"], { project: false });
+  t.after(box.cleanup);
+  const empty = path.join(box.dir, "new-project");
+  fs.mkdirSync(empty);
+  const result = await runAtTerminal(box, ["--bypass-permissions", "--model", "opus"], [{ when: /anyway\? \[Y\/n\]: $/, send: "\n" }], { cwd: empty });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.sent, 1, result.stdout);
+  assert.match(result.stdout, NOT_A_PROJECT);
+  assert.ok(!result.stdout.includes(NOTHING_OPENED));
+  assert.ok(box.argsOf("claude"), "the agent started");
+});
+
+test("launcher project check: an empty folder answered n opens nothing and says what to do", async (t) => {
+  const box = sandbox(["claude"], { project: false });
+  t.after(box.cleanup);
+  const empty = path.join(box.dir, "new-project");
+  fs.mkdirSync(empty);
+  const result = await runAtTerminal(box, ["--bypass-permissions", "--model", "opus"], [{ when: /\[Y\/n\]: $/, send: "n\n" }], { cwd: empty });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes(NOTHING_OPENED), result.stdout);
+  assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher project check: a folder with files that is not a project keeps No as the default", async (t) => {
+  // The sandbox folder holds home/, bin/ and app/, and no git repo, AGENTS.md or specs/.
+  const box = sandbox(["claude"], { project: false });
+  t.after(box.cleanup);
+  const declined = await runAtTerminal(box, ["--bypass-permissions", "--model", "opus"], [{ when: /anyway\? \[y\/N\]: $/, send: "\n" }]);
+  assert.equal(declined.status, 0, declined.stderr);
+  assert.equal(declined.sent, 1, declined.stdout);
+  assert.ok(declined.stdout.includes(NOTHING_OPENED), declined.stdout);
+  assert.equal(box.argsOf("claude"), null);
+
+  const confirmed = await runAtTerminal(box, ["--bypass-permissions", "--model", "opus"], [{ when: /\[y\/N\]: $/, send: "y\n" }]);
+  assert.equal(confirmed.status, 0, confirmed.stderr);
+  assert.ok(!confirmed.stdout.includes(NOTHING_OPENED));
+  assert.ok(box.argsOf("claude"), "a typed y opens it");
+});
+
+test("launcher menus: the agent tip shows once, and the model menu prints ids in a column beside each description", async (t) => {
+  const box = sandbox(["claude", "devin"]);
+  t.after(box.cleanup);
+  // Agent menu, keyboard question, then model menu: three prompts, each answered in turn.
+  const steps = (modelAnswer) => [
+    { when: /Choice \[1\]: $/, send: "1\n" },
+    { when: /\[Y\/n\]: $/, send: "\n" },
+    { when: /Choice \[(agent default|\d+)\]: $/, send: modelAnswer },
+  ];
+  const first = await runAtTerminal(box, ["--classic"], steps("latest opus\n"));
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(first.sent, 3, first.stdout);
+  assert.match(first.stdout, /skip this launcher and run `\/plan2code`/);
+  assert.doesNotMatch(first.stdout, /That runs outside the desktop app/, "no app installed, so no line about it");
+  // ids padded to the longest (opusplan), then the description; the first run's Enter is the agent's.
+  assert.match(first.stdout, /^ {2}1\) default {3}your account setting$/m);
+  assert.match(first.stdout, /^ {2}2\) sonnet {4}latest Sonnet$/m);
+  assert.match(first.stdout, /^ {2}5\) opusplan {2}Opus in plan mode, Sonnet otherwise$/m);
+  assert.match(first.stdout, /Choice \[agent default\]: /);
+  assert.ok(box.argsOf("claude").includes("opus"), "a typed description picks its model");
+  const state = JSON.parse(fs.readFileSync(box.stateFile, "utf8"));
+  assert.equal(state.agentTipSeen, true);
+  assert.equal(state.lastModels.claude, "opus");
+
+  // Second run: no tip, and Enter runs the model marked (last used).
+  const second = await runAtTerminal(box, ["--classic"], steps("\n"));
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(second.sent, 3, second.stdout);
+  assert.doesNotMatch(second.stdout, /skip this launcher/);
+  assert.match(second.stdout, /^ {2}3\) opus {6}latest Opus \(last used\)$/m);
+  assert.match(second.stdout, /Choice \[3\]: /);
+  assert.ok(box.argsOf("claude").includes("opus"));
+});
+
+test("launcher menus: with the desktop app installed the tip also says it runs outside the app", async (t) => {
+  const box = sandbox(["claude", "devin"]);
+  t.after(box.cleanup);
+  const result = await runAtTerminal(box, ["--classic", "--bypass-permissions", "--model", "opus"], [{ when: /Choice \[1\]: $/, send: "\n" }], {
+    env: { PLAN2CODE_APP: box.appFile },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /skip this launcher[^\n]*\n[^\n]*That runs outside the desktop app/);
+  assert.equal(box.appExists(), false, "--classic kept the run in this terminal");
 });
