@@ -4,20 +4,11 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
-## v3.1.2 (2026-11-17)
-
-### ✨ Added
-
-- **desktop app**: Suggest for me, beside Set all to in the Implementation Loop's Strength per phase, asks the dashboard's agent to read each phase and pick a strength for it, with a one-line reason under each row; every pick stays yours to change.
-
-### 🐛 Fixed
-
-- **web console**: a click anywhere inside a Markdown box's border now puts the cursor in it, not only a click on the text.
-
 ## v3.1.1 (2026-11-17)
 
 ### ✨ Added
 
+- **desktop app**: Suggest for me, beside Set all to in the Implementation Loop's Strength per phase, asks the dashboard's agent to read each phase and pick a strength for it, with a one-line reason under each row; every pick stays yours to change.
 - **install**: the install command now ends in `#release`, a branch that moves to each published release, so a new install never gets unfinished work from `main`.
 - **launcher**: `plan2code update` installs the newest release and prints one short summary (`Updating <old> -> <new>`, or `Already on <new>`); `--main` takes the newest work instead, `--tag <release>` goes back to an earlier one, and `--force` reinstalls.
 - **launcher**: `plan2code uninstall` lists what it removes and what it keeps in `~/.plan2code/`, with sizes; `--purge` also removes the desktop app's own data, and `--yes` skips the questions.
@@ -41,6 +32,7 @@ All notable changes to Plan2Code will be documented in this file.
 
 ### 🐛 Fixed
 
+- **web console**: a click anywhere inside a Markdown box's border now puts the cursor in it, not only a click on the text.
 - **launcher**: `plan2code update --main` reinstalls even when the version number has not moved (unreleased work on `main` keeps the last release's number), `uninstall` runs the newest release's installer, and a failed update no longer blocks the retry with "Already on".
 - **desktop app**: on macOS Ctrl+C stays the interrupt even with text selected, `uninstall --purge` also removes the saved window state, the PATH lookup works under fish, and loop spec names may contain dots.
 
