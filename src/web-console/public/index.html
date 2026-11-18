@@ -2607,9 +2607,12 @@
       <section class="help-panel" data-tab="git">
         <h3>The git board</h3>
         <p class="help-lead">
-          The Git card opens a board for your repository: three tabs — Changes,
-          Branches and Sync — and the next step on top. Every button is a request
-          to Plan2Code, which runs the git commands and says what each one did.
+          The Git card opens a board that walks you through the usual trip:
+          save your work, share it, get it reviewed, tidy up. A path shows where
+          you are, one card holds the thing to do now, and every other action
+          waits in <strong>All branches and tools</strong>. Every button is a
+          request to Plan2Code, which runs the git commands and says what each
+          one did.
         </p>
         <h4>The header</h4>
         <ul>
@@ -2626,8 +2629,25 @@
             <strong>Last refreshed</strong> says when the remotes were last
             fetched. If a refresh fails, the line says so.
           </li>
+          <li><strong>Done with git</strong> sits at the right end of the branch line.</li>
         </ul>
-        <h4>The tabs</h4>
+        <h4>The path</h4>
+        <ul>
+          <li>
+            Four stops: <strong>Save</strong> (commit your changes, on a branch of
+            their own when you are on the default one), <strong>Share</strong>
+            (publish or push), <strong>Review</strong> (open a pull request) and
+            <strong>Tidy</strong> (clean up merged branches).
+          </li>
+          <li>The stop you are on is lit; the ones behind you are checked.</li>
+          <li>A stopped rebase or merge pauses the path (it dims) until it is sorted; a pull is part of Share.</li>
+        </ul>
+        <h4>All branches and tools</h4>
+        <p>
+          Closed until you open it. Inside are three tabs, Changes, Branches and
+          Sync, with everything the board can do. A step that needs one of them,
+          such as clean-up or a new branch, opens it for you.
+        </p>
         <ul>
           <li>
             <strong>Changes</strong> lists your uncommitted files, ready to
@@ -2652,18 +2672,18 @@
             branch or the one you pick beside it; the first time a host is
             unknown, it asks which kind it is and remembers the answer.
           </li>
-          <li>A filled badge marks the tab where the next step is.</li>
         </ul>
-        <h4>The next step</h4>
+        <h4>The task card</h4>
         <ul>
           <li>
-            The tab that holds it opens with one main button and, at most, one
-            quieter one beside it: Commit, Push, Publish, Open pull request, and
-            so on.
+            Under the path: one main button and, at most, one quieter one beside
+            it: Commit, Push, Publish, Open pull request, and so on.
           </li>
           <li>
-            On the other tabs, a line reads <strong>Next step is on
-            ‹tab›</strong>; click it to go there.
+            On the Save stop it lists your changed files with their ticks, so you
+            pick and commit in one place. On the default branch its button is
+            <strong>Start a branch and commit</strong>, with
+            <strong>Commit on ‹branch›</strong> as the quieter choice.
           </li>
           <li>
             Held-back files never count toward the next step. The board offers
@@ -2687,10 +2707,10 @@
         <h4>Moving between tabs</h4>
         <ul>
           <li>
-            Once a click of yours has landed, the board moves to the tab of the
+            Once a click of yours has landed, the tools move to the tab of the
             next step. Anything else that changes leaves you where you are.
           </li>
-          <li>Reloading the page keeps the tab you were on.</li>
+          <li>Reloading the page keeps the tools open or closed, and the tab you were on.</li>
           <li>The arrow keys move between tabs, and Home and End jump to the first and last.</li>
         </ul>
         <h4>While something is running</h4>
@@ -2699,8 +2719,8 @@
             Everything grays out except switching tabs, searching and opening
             folds, so nothing queues up behind the running command.
           </li>
-          <li>What is running shows where the next step usually sits.</li>
-          <li>Plan2Code's questions appear under the tab strip.</li>
+          <li>What is running shows in the task card.</li>
+          <li>Plan2Code's questions appear under the path.</li>
           <li>
             When it is done, a result line says what happened, with the commit
             hashes, and the board redraws from the repository as it now stands.
@@ -2708,11 +2728,11 @@
         </ul>
         <h4>Mid-rebase or merge</h4>
         <p>
-          A rebase or merge that stopped on conflicts shows one block on Sync,
-          with the files still to fix. <strong>Continue</strong> becomes the main
+          A rebase or merge that stopped on conflicts turns the task card into
+          one block, with the files still to fix. <strong>Continue</strong> becomes the main
           button once no conflict markers are left; a single <strong>Abort</strong>
-          puts everything back as it was. The other tabs wait until it is
-          finished or aborted.
+          puts everything back as it was. The tools wait until it is finished
+          or aborted.
         </p>
         <h4>Done with git</h4>
         <p>

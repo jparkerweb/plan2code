@@ -27,6 +27,12 @@
 - Why: A piped --update test run repointed the real plan2code shims at a temp folder until they were fixed by hand.
 - Noted: 2026-11-17, implement-review
 
+### Before adding a class to the git board, grep styles/git.css for it: short names like git-tools and git-path are already taken (the Branches search row, the file path cell).
+- Kind: correction
+- About: src/web-console/public/styles/git.css
+- Why: The new tools fold-out reused git-tools and the Branches row's flex rule laid it out side by side.
+- Noted: 2026-11-17, quick-task
+
 ### Each recordInstalled() in install.js stamps the version being installed into install.json, so a failed update must restore the old one with setRecordVersion(), or a retry says Already on.
 - Kind: how-it-works
 - About: install.js

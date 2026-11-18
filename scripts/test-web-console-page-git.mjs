@@ -1,6 +1,6 @@
-// Page tests for the git board: the Changes, Branches and Sync tabs drawn
-// from a real repository, each tab's content on show when it is picked. Run
-// with:
+// Page tests for the git board: the path, the task card and the Changes,
+// Branches and Sync tabs inside the "All branches and tools" fold-out, drawn
+// from a real repository. Run with:
 // node --test scripts/test-web-console-page-git.mjs
 //
 // Each test drives the real console in a real Chrome or Edge through
@@ -35,13 +35,29 @@ function gitProject() {
 // so the console snapshots the repo, and the description of what changed.
 const BOARD = { reread: true, board: { describe: "export-more" } };
 
-test("the git board shows Changes, Branches and Sync, and each tab shows its own content", async (t) => {
+// Opens the "All branches and tools" fold-out (closed on arrival) and waits for its tabs.
+async function openTools(page) {
+  const toggle = page.locator(".git-toolbox-toggle");
+  await toggle.waitFor();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  await page.getByRole("tablist").waitFor();
+}
+
+test("the git board leads with the path and one task card, and the tools hold Changes, Branches and Sync", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: gitProject(), payload: BOARD });
   const { page } = s;
   const tab = (label) => page.getByRole("tab", { name: new RegExp(`^${label}\\b`) });
   const panel = page.getByRole("tabpanel");
 
-  await page.getByRole("tablist").waitFor();
+  // On main with a changed file: the path is on Save, and the card carries the file.
+  const path = page.getByRole("list", { name: "Where you are" });
+  await path.waitFor();
+  assert.deepEqual((await path.locator(".git-stop-label").allInnerTexts()).map((x) => x.trim()), ["Save", "Share", "Review", "Tidy"]);
+  assert.match(await textOf(path.locator('[aria-current="step"]')), /Save/);
+  await page.locator(".git-step").getByText("src/app.js", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("tablist").count(), 0, "the tabs stay folded away on arrival");
+
+  await openTools(page);
   assert.deepEqual(
     (await page.getByRole("tab").allInnerTexts()).map((x) => x.trim().split(/\s/)[0]),
     ["Changes", "Branches", "Sync"]
@@ -49,14 +65,14 @@ test("the git board shows Changes, Branches and Sync, and each tab shows its own
 
   await tab("Changes").click();
   await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent.startsWith("Changes"));
-  await panel.getByText("src/app.js", { exact: true }).waitFor();
-  assert.match(await textOf(panel), /src\/app\.js/);
+  await panel.getByText(/in the Save step above/).waitFor();
+  assert.doesNotMatch(await textOf(panel), /src\/app\.js/, "the Changes tab does not list the files a second time");
 
   await tab("Branches").click();
   await panel.getByText("feature/export-csv").first().waitFor();
   const branches = await textOf(panel);
   assert.match(branches, /feature\/export-csv/);
-  assert.doesNotMatch(branches, /src\/app\.js/, "the Branches tab still shows the changed files");
+  assert.doesNotMatch(await textOf(panel), /in the Save step above/, "the Branches tab still shows the Changes tab");
 
   await tab("Sync").click();
   await panel.getByText(/nothing to sync/).waitFor();
@@ -68,12 +84,12 @@ test("the git board shows Changes, Branches and Sync, and each tab shows its own
 test("each git tab keeps its own scroll place, across a tab switch and an agent post", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: gitProject(), payload: BOARD });
   const { page } = s;
-  await page.getByRole("tablist").waitFor();
+  await openTools(page);
   await page.setViewportSize({ width: 1280, height: 260 });
   const tab = (label) => page.getByRole("tab", { name: new RegExp(`^${label}\\b`) });
   const column = () => page.locator("#main").evaluate((el) => el.scrollTop);
   await tab("Changes").click();
-  await page.getByRole("tabpanel").getByText("src/app.js", { exact: true }).waitFor();
+  await page.getByRole("tabpanel").getByText(/in the Save step above/).waitFor();
   await scrollCard(page.locator("#main"), 120);
   const changesAt = await column();
   assert.ok(changesAt > 0, "the board's column scrolls");
@@ -82,7 +98,7 @@ test("each git tab keeps its own scroll place, across a tab switch and an agent 
   await page.getByRole("tabpanel").getByText("feature/export-csv").first().waitFor();
   assert.equal(await column(), 0, "Branches opened at the place Changes was left");
   await tab("Changes").click();
-  await page.getByRole("tabpanel").getByText("src/app.js", { exact: true }).waitFor();
+  await page.getByRole("tabpanel").getByText(/in the Save step above/).waitFor();
   assert.equal(await column(), changesAt, "Changes lost its place across the switch");
   // An agent post redraws the board: still the same place.
   s.post({ title: "Git, take two" });
@@ -121,15 +137,16 @@ const tabButton = (page, label) => page.getByRole("tab", { name: new RegExp(`^${
 const tickBox = (page, file) => page.getByLabel(`Commit ${file}`);
 // The Branches tab's Switch button, for the one other branch.
 const switchButton = (page) => page.getByRole("tabpanel").getByRole("button", { name: "Switch" });
-// The board's step button, in the strip above the tab's content.
+// The task card's button, under the path.
 const stepButton = (page, name) => page.locator(".git-step-actions").getByRole("button", { name });
 
-// Whether the board's own controls (not its tabs or the pointer to another
-// tab) are all off, or at least one is on. Whatever tab the board has moved to,
-// a locked board has every one of them disabled.
-const boardControls = (page) => page.locator(".git-panel-tab").locator("button, input[type=checkbox], select");
+// Whether the board's own controls (not its tabs, the tools toggle or Done
+// with git, nor the agent's own cards in the card slot) are all off, or at least one is on. A locked board has every one
+// of them disabled, in the card and in the tools alike.
+const boardControls = (page) =>
+  page.locator(".git-board > :not(.git-cards)").locator("button:not(.git-tab):not(.git-toolbox-toggle):not(.git-done), input[type=checkbox], select");
 const usable = async (page) => {
-  const off = await boardControls(page).evaluateAll((all) => all.filter((x) => !x.classList.contains("git-hint")).map((x) => x.disabled));
+  const off = await boardControls(page).evaluateAll((all) => all.map((x) => x.disabled));
   return off.some((x) => !x);
 };
 // The board redraws a moment after its cause, so each check gets time to settle.
@@ -140,10 +157,9 @@ const titled = (page, text) => page.waitForFunction((x) => document.getElementBy
 test("the next step's Commit sends the files ticked in the table as one __git action, with its reply sentence", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "feature/x" }), payload: READY });
   const { page } = s;
-  await page.getByRole("tablist").waitFor();
   await stepButton(page, "Commit 2 files").waitFor();
   await tickBox(page, "notes.md").uncheck();
-  // The table is already on show below, so the step's button commits rather than opening it.
+  // The table is in the card, so the card's button commits rather than opening it.
   await stepButton(page, "Commit 1 file").click();
   const got = s.wait(10);
   assert.equal(got.code, 0, "the agent collected the click");
@@ -154,6 +170,7 @@ test("the next step's Commit sends the files ticked in the table as one __git ac
 test("a board click is exactly one __git action", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: gitProject(), payload: READY });
   const { page } = s;
+  await openTools(page);
   await tabButton(page, "Branches").click();
   await switchButton(page).click();
   const got = s.wait(10);
@@ -168,6 +185,7 @@ test("a board click is exactly one __git action", async (t) => {
 test("the board stays locked from a click until the agent's next post, not just until it is collected", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: gitProject(), payload: READY });
   const { page } = s;
+  await openTools(page);
   await tabButton(page, "Branches").click();
   assert.ok(await settlesUsable(page, true), "the board is the person's before any click");
   await switchButton(page).click();
@@ -212,7 +230,6 @@ test("the commit table keeps the person's ticks across an agent post, and a clic
   const dir = changesProject({ branch: "feature/x" });
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: dir, payload: READY });
   const { page } = s;
-  await tabButton(page, "Changes").click();
   await tickBox(page, "notes.md").uncheck();
   // An agent post redraws the board: the person's tick stays off.
   s.post({ title: "Still looking", agent: { status: "waiting" } });
@@ -228,7 +245,6 @@ test("the commit table keeps the person's ticks across an agent post, and a clic
   fs.writeFileSync(path.join(dir, "later.md"), "Later.\n");
   s.post({ reread: true, title: "Committed", agent: { status: "waiting" } });
   await titled(page, "Committed");
-  await tabButton(page, "Changes").click();
   await tickBox(page, "later.md").waitFor();
   assert.equal(await tickBox(page, "notes.md").isChecked(), true, "the click dropped the old picks, so the table was seeded afresh");
 });
@@ -236,10 +252,10 @@ test("the commit table keeps the person's ticks across an agent post, and a clic
 test("starting a branch for the changes carries the files ticked in the commit table", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject(), payload: READY });
   const { page } = s;
-  await tabButton(page, "Changes").click();
   await tickBox(page, "notes.md").uncheck();
-  await stepButton(page, /^Start a branch for/).click();
-  const panel = page.locator(".git-panel");
+  await stepButton(page, "Start a branch and commit").click();
+  // The new-branch prompt opens in the card, where the files were ticked.
+  const panel = page.locator(".git-step .git-panel");
   await panel.getByRole("heading", { name: "New branch for this commit" }).waitFor();
   const create = panel.getByRole("button", { name: "Create", exact: true });
   assert.ok(await settles(create, true), "a free name is composed from the description");
@@ -256,10 +272,11 @@ test("starting a branch for the changes carries the files ticked in the commit t
 test("a commit with no branch to land on carries the ticked files into the new branch", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "detached" }), payload: READY });
   const { page } = s;
+  // Not a Save step that commits (it makes a branch first), so the table stays on the Changes tab.
+  await openTools(page);
   await tabButton(page, "Changes").click();
   await tickBox(page, "notes.md").uncheck();
-  // The step is on the Branches tab, and its Commit button finds no branch to commit on.
-  await tabButton(page, "Branches").click();
+  // The card's quieter Commit finds no branch to commit on.
   await stepButton(page, "Commit 1 file").click();
   const panel = page.locator(".git-panel");
   await panel.getByRole("heading", { name: "New branch for this commit" }).waitFor();
@@ -277,6 +294,7 @@ test("Publish names a remote only when there is exactly one", async (t) => {
   const browser = await suite.browser();
   const published = async (remotes) => {
     const s = await openSession(browser, { t, workflow: "git", project: changesProject({ branch: "feature/x", remotes }), payload: READY });
+    await openTools(s.page);
     await tabButton(s.page, "Sync").click();
     await s.page.locator(".git-sync-actions").getByRole("button", { name: "Publish" }).click();
     const got = s.wait(10);
@@ -313,13 +331,13 @@ test("over the git board a note box grows with its text, and the no-repo note on
 });
 
 // The three W25 leftovers, checked against the current build.
-test("the Changes tab offers one Commit N files, Send is gone with nothing to send, and Done with git sits outside the tablist", async (t) => {
+test("the board offers one Commit N files, Send is gone with nothing to send, and Done with git sits in the header", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "feature/x" }), payload: READY });
   const { page } = s;
-  await page.getByRole("tablist").waitFor();
   await stepButton(page, "Commit 2 files").waitFor();
-  // One Commit N files across the whole board, not one in the step and one in the table.
-  assert.equal(await page.getByRole("button", { name: /^Commit \d+ files?$/ }).count(), 1, "one commit button on the Changes tab");
+  await openTools(page);
+  // One Commit N files across the whole board, tools open, not one in the card and one in the table.
+  assert.equal(await page.getByRole("button", { name: /^Commit \d+ files?$/ }).count(), 1, "one commit button on the board");
   assert.equal(await page.locator(".git-panel-actions").getByRole("button", { name: /^Commit \d+ files?$/ }).count(), 0, "the table carries no second one");
   // Unticking a file moves the one button's count.
   await tickBox(page, "notes.md").uncheck();
@@ -329,11 +347,12 @@ test("the Changes tab offers one Commit N files, Send is gone with nothing to se
   assert.equal(await page.locator("#btn-send").isHidden(), true, "no Send button on a board with nothing to send");
   assert.match((await page.locator("#footer-summary").innerText()).trim(), /Nothing to send yet/, "the status words stay");
 
-  // Done with git is beside the tablist, not one of its tabs, and at the right end of the row.
+  // Done with git is in the header, at the right end of the branch row, never inside the tools.
   const done = page.getByRole("button", { name: "Done with git" });
-  assert.equal(await page.getByRole("tablist").getByRole("button", { name: "Done with git" }).count(), 0, "not inside the tablist");
-  const [tabs, btn] = await Promise.all([page.getByRole("tablist").boundingBox(), done.boundingBox()]);
-  assert.ok(btn.x >= tabs.x + tabs.width - 1, "to the right of the tabs");
+  assert.equal(await page.locator(".git-head").getByRole("button", { name: "Done with git" }).count(), 1, "in the header");
+  assert.equal(await page.locator(".git-toolbox").getByRole("button", { name: "Done with git" }).count(), 0, "not inside the tools");
+  const [row, btn] = await Promise.all([page.locator(".git-head-row").boundingBox(), done.boundingBox()]);
+  assert.ok(btn.x + btn.width >= row.x + row.width - 2, "at the right end of the row");
 });
 
 test("a card open on the board brings the Send button back", async (t) => {

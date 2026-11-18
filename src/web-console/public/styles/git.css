@@ -38,11 +38,11 @@
 }
 /* Narrow layout keys off the board's width, not the window's. */
 .git-board { container-type: inline-size; container-name: git-board; }
-/* Plan2Code's card, between the tab strip and the tab's content. */
+/* Plan2Code's card, between the path and the task card. */
 .git-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .git-cards:empty { display: none; }
 
-/* The tab strip: three tabs, Done with git on the right. */
+/* The tab strip inside the tools fold-out: three tabs. */
 .git-tab-bar {
   display: flex;
   align-items: flex-end;
@@ -80,10 +80,77 @@
 }
 .git-tab-badge.is-dot { min-width: 0; font-weight: 700; }
 .git-tab-badge.is-warn { color: var(--warn); background: var(--warn-soft); border-color: var(--warn); }
-.git-tab-badge.is-next { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
-.git-tab-badge.is-warn.is-next { color: var(--accent-ink); background: var(--warn); border-color: var(--warn); }
-.git-done { margin: 0 0 6px auto; }
+/* Done with git sits at the right end of the header's branch row. */
+.git-done { margin-left: auto; align-self: center; }
 .git-done:not(:disabled) { border-color: var(--accent); }
+
+/* The path: Save, Share, Review, Tidy. Marks, not buttons; the current stop
+   is lit, finished ones get a check. */
+.git-route {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.git-stop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--ink-3);
+}
+.git-stop-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--rule-2);
+  border-radius: 50%;
+  background: var(--panel);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.git-stop-words { display: grid; min-width: 0; }
+.git-stop-label { font-size: var(--fs-md); font-weight: 600; }
+.git-stop-hint { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.git-stop.is-done { color: var(--ink-2); }
+.git-stop.is-done .git-stop-mark { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.git-stop.is-now { color: var(--ink); background: var(--panel); border-color: var(--accent); box-shadow: var(--shadow-1); }
+.git-stop.is-now .git-stop-mark { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+.git-route.is-paused { opacity: 0.55; }
+
+/* Every other action, folded away until asked for. */
+.git-toolbox { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px dashed var(--rule-2); border-radius: var(--radius); }
+.git-toolbox.is-open { border-style: solid; background: var(--panel-2); }
+.git-toolbox-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+}
+.git-toolbox-toggle:hover { color: var(--ink); }
+.git-toolbox-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
+.git-toolbox-chev { display: inline-block; transition: rotate 0.15s; }
+.git-toolbox.is-open .git-toolbox-chev { rotate: 90deg; }
+.git-toolbox-label { font-weight: 600; }
+.git-toolbox-sub { font-size: var(--fs-sm); color: var(--ink-3); }
+.git-toolbox-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); padding: 0 var(--sp-4) var(--sp-4); }
+@media (prefers-reduced-motion: reduce) { .git-toolbox-chev { transition: none; } }
 
 /* The next step: one primary button, at most one quieter one. */
 .git-step { display: grid; gap: 6px; padding: 14px 18px; }
@@ -101,7 +168,8 @@
 .git-step-why, .git-step-label { margin: 0; font-size: var(--fs-md); color: var(--ink-2); }
 .git-step-label { font-weight: 600; color: var(--ink); }
 .git-step-actions, .git-sync-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.git-hint { justify-self: start; border-style: dashed; font-weight: 400; }
+/* The file table inside the task card, on a Save stop. */
+.git-step .git-files, .git-left .git-files { margin: var(--sp-1) 0; }
 .git-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: var(--fs-md); color: var(--stage); }
 .git-held { font-size: var(--fs-md); color: var(--ink-2); }
 .git-held .md-p { margin: 0; }
@@ -218,7 +286,7 @@
   .git-duo { grid-template-columns: 1fr; }
   .git-tab-bar { flex-wrap: wrap; }
   .git-tabs { flex-wrap: wrap; }
-  .git-done { margin: 0 0 6px; }
+  .git-route { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .git-head-meta { flex-direction: column; align-items: flex-start; }
   .git-step-actions, .git-sync-actions, .git-op-actions, .git-panel-actions { flex-wrap: wrap; }
   .git-step-actions .btn, .git-op-actions .btn { flex: 1 1 auto; }

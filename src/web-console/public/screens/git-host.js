@@ -1,7 +1,7 @@
 // Plan2Code Web Console - hosts the git board: tabs, panels and what each click sends.
 
 import { hooks, page, saveNow, redraw } from "../state.js";
-import { GIT_TABS, busyMode, gitReply, pickTab, nextStep, tabBadges, createSources, BRANCH_TYPES, commitTicks, cleanupGroups } from "../git-board.js";
+import { GIT_TABS, busyMode, cardShowsFiles, gitReply, pickTab, nextStep, tabBadges, createSources, BRANCH_TYPES, commitTicks, cleanupGroups } from "../git-board.js";
 import { finish, agentWorking, agentAdrift, gitAwaiting, myTurn, byId, activity } from "../selectors.js";
 import { drawGitBoard, activeTab } from "../git-board-view.js";
 import { el, md, copyButton } from "../render.js";
@@ -25,11 +25,13 @@ const $ = (id) => document.getElementById(id);
 //   sweep     the cleanup list's ticked branches
 //   base      the pull-request base the picker chose
 //   settled   cards the agent settled since the last click on the board
-//   tab       the tab on show: "changes", "branches" or "sync", or null before the first draw
+//   tools     whether the "All branches and tools" fold-out is open (closed by default)
+//   tab       the tab on show inside it: "changes", "branches" or "sync", or null before the first draw
 //   scroll    how far the column was scrolled on each tab, put back after each redraw
 //   repickAt  when their last board click went out (ms): the first agent post
 //             after it moves the board to the new next step's tab
 export const board = {
+  tools: false,
   tab: null,
   scroll: { changes: 0, branches: 0, sync: 0 },
   repickAt: null,
@@ -50,6 +52,7 @@ export const board = {
 // are harmless: the next send re-checks every path against the snapshot. The
 // restore waits for the first draw: load() has not run when this module does.
 const boardBlank = {
+  tools: false,
   tab: null,
   scroll: { changes: 0, branches: 0, sync: 0 },
   repickAt: null,
@@ -80,6 +83,7 @@ const hydrateBoard = () => {
   if (!g) return;
   boardReloaded = true;
   Object.assign(board, boardBlank, {
+    tools: g.tools === true,
     tab: GIT_TABS.some((t) => t.id === g.tab) ? g.tab : null,
     scroll: { changes: 0, branches: 0, sync: 0, ...(g.scroll || {}) },
     repickAt: typeof g.repickAt === "number" ? g.repickAt : null,
@@ -97,6 +101,7 @@ const hydrateBoard = () => {
 
 const persistBoard = () => {
   page.local.gitBoard = {
+    tools: board.tools,
     tab: board.tab,
     scroll: { ...board.scroll },
     repickAt: board.repickAt,
@@ -180,6 +185,12 @@ const gitOn = {
   redraw: () => redraw(),
   pickTab: (id) => {
     board.tab = id;
+    board.tools = true;
+    persistBoard();
+    redraw();
+  },
+  toggleTools: () => {
+    board.tools = !board.tools;
     persistBoard();
     redraw();
   },
@@ -222,7 +233,7 @@ export function renderGitBoard(main, card = null, pager = null) {
     mode: gitMode(),
     offlineReason: page.gone ? "gone" : page.pendingResult ? "pending" : null,
     step,
-    badges: tabBadges(git, { stepTab: step.tab }),
+    badges: tabBadges(git),
     notice: result && result.kind === "notice" ? result : null,
     activity: activity(),
     hasCard: Boolean(card),
@@ -280,14 +291,19 @@ async function pickPrHost(host, kind) {
   sendGit("pr-host", { host, kind });
 }
 
-// Opening a panel moves to the tab that draws it, so a panel is never open
-// on a hidden tab. `opts.ticks` / `opts.ignore` set the commit panel's picks
-// (the held-back .gitignore offer opens it with nothing ticked).
+// Opening a panel moves to the tab that draws it, and opens the tools when
+// that tab lives there, so a panel is never open out of sight. The commit
+// table and its new-branch prompt sit in the task card on a Save stop, so
+// those leave the tools as they are. `opts.ticks` / `opts.ignore` set the
+// commit panel's picks (the held-back .gitignore offer opens it with nothing
+// ticked).
 function openPanel(name, opts = {}) {
   if (gitLocked()) return;
   const git = page.S.git;
+  const inCard = cardShowsFiles(git, nextStep(git));
   if (name === "commit") {
     board.tab = "changes";
+    if (!inCard) board.tools = true;
     if (opts.ticks) board.ticks = new Set(opts.ticks);
     if (opts.ignore) board.ignore = new Set(opts.ignore);
     if (board.panel !== "commit") return openCommit(git);
@@ -296,12 +312,14 @@ function openPanel(name, opts = {}) {
   }
   if (name === "create") {
     board.tab = opts.commit ? "changes" : "branches";
+    if (!(opts.commit && inCard)) board.tools = true;
     // A branch for the commit takes what the commit table has ticked, not a fresh default.
     if (opts.commit && !opts.files) return openCreate(git, { ...opts, ...tablePicks(git) });
     return openCreate(git, opts);
   }
   if (name === "cleanup") {
     board.tab = "branches";
+    board.tools = true;
     return openCleanup(git);
   }
 }

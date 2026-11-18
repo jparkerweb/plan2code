@@ -507,7 +507,12 @@ function matches(git) {
   // 4. Uncommitted changes, held-back files left out.
   if (count > 0) {
     if (onDefault) {
-      out.push({ op: "create-commit", label: `Start a branch for ${files(count)}`, why: `You're on ${head.branch}. Work usually goes on its own branch.` });
+      out.push({
+        op: "create-commit",
+        label: `Start a branch for ${files(count)}`,
+        action: "Start a branch and commit",
+        why: `You're on ${head.branch}. Work usually goes on its own branch, so ${head.branch} stays clean; your changes come along.`,
+      });
       out.push({ op: "commit", label: `Commit on ${head.branch}`, why: "Commit straight to the default branch.", forced: true });
     } else {
       out.push({ op: "commit", label: `Commit ${files(count)}`, why: `${files(count)} changed on ${head.branch || "this commit"}.` });
@@ -589,11 +594,11 @@ export function nextStep(git, { now = Date.now() } = {}) {
 /**
  * What each tab has waiting: `{ changes, branches, sync }`, each null or
  * `{ kind, text, label, next }` (kind "count", "dot" or "warn"; `label` is
- * for the tab's accessible name). `next` marks the tab owning the next step
- * when there is a primary; that tab always carries a badge. Mid-operation
- * only Sync is badged, with a warning.
+ * for the tab's accessible name). `next` is always false: the task card above
+ * the tools carries the next step, so no tab points at it. Mid-operation only
+ * Sync is badged, with a warning.
  */
-export function tabBadges(git, { now = Date.now(), stepTab = null } = {}) {
+export function tabBadges(git, { now = Date.now() } = {}) {
   const g = git || {};
   const head = g.head || {};
   const out = { changes: null, branches: null, sync: null };
@@ -621,13 +626,67 @@ export function tabBadges(git, { now = Date.now(), stepTab = null } = {}) {
       out.sync = { kind: "count", text: "?", label: "not checked lately", next: false };
     }
   }
-  const step = nextStep(g, { now });
-  const owner = TAB_IDS.has(stepTab) ? stepTab : step.tab;
-  if (step.primary && TAB_IDS.has(owner)) {
-    const b = out[owner] || { kind: "dot", text: "·", label: "" };
-    out[owner] = { ...b, next: true, label: b.label ? `${b.label}, next step` : "next step" };
-  }
   return out;
+}
+
+/* ---------------------------------------------------------------- path */
+
+/**
+ * The usual trip through git, as the board walks it: save the work (a branch
+ * first when on the default one), share it, get it reviewed, tidy up after
+ * the merge. A pull belongs to Share; only an operation stopped part-way
+ * (conflicts) pauses the path.
+ */
+export const PATH_STOPS = Object.freeze([
+  Object.freeze({ id: "save", label: "Save", hint: "Commit your changes" }),
+  Object.freeze({ id: "share", label: "Share", hint: "Publish or push" }),
+  Object.freeze({ id: "review", label: "Review", hint: "Open a pull request" }),
+  Object.freeze({ id: "tidy", label: "Tidy", hint: "Clean up merged branches" }),
+]);
+
+// The stop each suggested step belongs to. Pull sits on Share: it is what
+// stands between the work and pushing it.
+const STOP_OF = Object.freeze({
+  commit: "save",
+  "create-commit": "save",
+  create: "save",
+  ignore: "save",
+  pull: "share",
+  push: "share",
+  publish: "share",
+  pr: "review",
+  cleanup: "tidy",
+});
+
+/**
+ * Where the board stands on the path: `{ current, paused, stops }`, each stop
+ * a PATH_STOPS entry plus `state` ("done", "now" or "todo"). `current` is the
+ * stop of the step's primary; with no primary every stop is done. An
+ * operation stopped part-way pauses the path: no current stop, all to do.
+ */
+export function boardPath(git, step) {
+  const paused = Boolean(git && git.inProgress);
+  const primary = step && step.primary;
+  const current = paused || !primary ? null : STOP_OF[primary.op] || null;
+  const at = PATH_STOPS.findIndex((s) => s.id === current);
+  const stops = PATH_STOPS.map((s, i) => ({
+    ...s,
+    state: paused ? "todo" : current === null ? "done" : i < at ? "done" : i === at ? "now" : "todo",
+  }));
+  return { current, paused, stops };
+}
+
+/**
+ * Whether the task card carries the commit table: its step commits (on this
+ * branch, or on a new one) and there is something on the tree to tick.
+ * Otherwise the table stays on the Changes tab inside the tools.
+ */
+export function cardShowsFiles(git, step) {
+  const g = git || {};
+  const p = step && step.primary;
+  if (g.inProgress || !p || (p.op !== "commit" && p.op !== "create-commit")) return false;
+  const ch = g.changes || {};
+  return list(ch.files).length + list(ch.untrackedDirs).length > 0;
 }
 
 /* ---------------------------------------------------------------- busy */

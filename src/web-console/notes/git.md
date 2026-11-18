@@ -49,7 +49,7 @@ An `auth` failure: a `notice` saying the tool never handles logins, with `next`.
 | `git init` | `confirm` naming folder and first branch (`init-check`'s `branch`, `danger:false`), `consequences` its `commands`. Run those, not a bare `git init`. |
 | `.gitignore` | The proposed file, or a `commit`'s `ignore[]` lines, as a doc plus `review`. |
 
-Risky files (`sensitive`, `large`) go in the card's `body`. There is no branch-offer card: the commit panel's **You're on main** asks, answered as `create` with `then:"commit"`.
+Risky files (`sensitive`, `large`) go in the card's `body`. There is no branch-offer card: on the default branch the board's Save step offers **Start a branch and commit**, answered as `create` with `then:"commit"`.
 
 **Conflict help.** A pull, rebase or merge stopped on conflicts: `choice` "Resolve them for me?": **Yes**, **I'll fix it**, **Abort pull**. On yes, each stop is doc `conflict` (replaced per stop: step N of M, the commit replayed, each file with a one-line reason, per-file diff) plus a `review` with a fresh id per stop, `"nothingYet":false`, verdicts `continue`, `change`, `abort` ("Abort pull", `danger`). Only **Continue** runs `plan continue`'s commands; **Abort pull** runs `plan abort`. A file you cannot resolve confidently keeps its markers, as does **I'll fix it**. A `continue` click from the board's banner means the files are fixed: run `plan continue`; on exit 5 (markers left) post a `reread` with its `message` as the `git-result`. End with a `notice` summary (commits replayed, each resolved file with its reason, "N commits ready to push").
 

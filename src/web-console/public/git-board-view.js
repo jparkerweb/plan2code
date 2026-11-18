@@ -1,8 +1,10 @@
 // Plan2Code Web Console - the tabbed git board's drawing.
 //
-// drawGitBoard(ctx) builds the whole board -- header, tab strip, card slot,
-// step strip and the Changes, Branches and Sync bodies -- from what
-// git-board.js decides and what the host hands it. It decides nothing new:
+// drawGitBoard(ctx) builds the whole board -- header (with Done with git), the
+// path (Save, Share, Review, Tidy), the card slot, one task card for where the
+// person is on it, and the "All branches and tools" fold-out holding the
+// Changes, Branches and Sync tabs -- from what git-board.js decides and what
+// the host hands it. It decides nothing new:
 // a rule belongs in git-board.js, a click goes out through ctx.on.
 //
 // No DOM access: every node comes from `ctx.h` (el, md, copyButton); the page
@@ -24,8 +26,10 @@ import {
   NOT_CONNECTED,
   PR_HOST_LABELS,
   boardActions,
+  boardPath,
   boardBranchLink,
   boardPrLink,
+  cardShowsFiles,
   cleanupGroups,
   commitTicks,
   composeBranchName,
@@ -101,8 +105,8 @@ export function activeTab(ctx) {
 
 /**
  * The whole board: `{ node, cardSlot }`. `node` is div.git-board holding the
- * header, the result line, the tab strip, `cardSlot` (empty, for the host's
- * cards) and the active tab's panel.
+ * header, the result line, the path, `cardSlot` (empty, for the host's
+ * cards), the task card and the tools fold-out (the tabs, while open).
  */
 export function drawGitBoard(ctx) {
   const { git, h } = ctx;
@@ -132,11 +136,12 @@ export function drawGitBoard(ctx) {
   }
   const tab = activeTab(ctx);
   node.appendChild(header(ctx));
-  // A landed result (`op` set) lives in the step strip's two zones instead.
+  // A landed result (`op` set) lives in the task card's two zones instead.
   if (ctx.notice && !ctx.notice.op) node.appendChild(resultLine(ctx, ctx.notice));
-  node.appendChild(tabStrip(ctx, tab));
+  node.appendChild(pathStrip(ctx));
   node.appendChild(cardSlot);
-  node.appendChild(tabPanel(ctx, tab));
+  node.appendChild(taskCard(ctx));
+  node.appendChild(toolsBox(ctx, tab));
   return { node, cardSlot };
 }
 
@@ -170,6 +175,9 @@ function header(ctx) {
     );
     if (remotes.length > 1 && cur && cur.upstreamRemote) row.appendChild(h.el("span", "pill is-accent is-caps badge", cur.upstreamRemote));
   }
+  const done = control(ctx, "button", "btn sm git-done", "Done with git", { role: "done", onClick: () => ctx.on.send("done") });
+  if (ctx.mode === "offline") done.title = ctx.offlineReason === "pending" ? "Your last click is still being picked up." : NOT_CONNECTED;
+  row.appendChild(done);
   box.appendChild(row);
 
   const meta = h.el("div", "git-head-meta");
@@ -221,16 +229,63 @@ function tabStrip(ctx, active) {
     b.appendChild(h.el("span", "git-tab-label", t.label));
     const badge = ctx.badges && ctx.badges[t.id];
     if (badge) {
-      b.appendChild(h.el("span", `git-tab-badge is-${badge.kind}${badge.next ? " is-next" : ""}`, badge.text));
+      b.appendChild(h.el("span", `git-tab-badge is-${badge.kind}`, badge.text));
       if (badge.label) b.setAttribute("aria-label", `${t.label}, ${badge.label}`);
     }
     strip.appendChild(b);
   }
   bar.appendChild(strip);
-  const done = control(ctx, "button", "btn sm git-done", "Done with git", { role: "done", onClick: () => ctx.on.send("done") });
-  if (ctx.mode === "offline") done.title = ctx.offlineReason === "pending" ? "Your last click is still being picked up." : NOT_CONNECTED;
-  bar.appendChild(done);
   return bar;
+}
+
+/* ---------------------------------------------------------------- path */
+
+// The four stops, the current one lit. Plain marks, no controls: the task
+// card under it is where the click is.
+function pathStrip(ctx) {
+  const { h } = ctx;
+  const p = boardPath(ctx.git, ctx.step);
+  const ol = h.el("ol", "git-route" + (p.paused ? " is-paused" : ""));
+  ol.setAttribute("aria-label", p.paused ? "Where you are: paused until this is sorted" : "Where you are");
+  p.stops.forEach((s, i) => {
+    const li = h.el("li", `git-stop is-${s.state}`);
+    if (s.state === "now") li.setAttribute("aria-current", "step");
+    const mark = h.el("span", "git-stop-mark", s.state === "done" ? "✓" : String(i + 1));
+    mark.setAttribute("aria-hidden", "true");
+    li.appendChild(mark);
+    const words = h.el("span", "git-stop-words");
+    words.appendChild(h.el("strong", "git-stop-label", s.label));
+    words.appendChild(h.el("span", "git-stop-hint", s.hint));
+    li.appendChild(words);
+    ol.appendChild(li);
+  });
+  return ol;
+}
+
+/* --------------------------------------------------------------- tools */
+
+// Every action the path does not put front and center, folded away until
+// the person opens it. Opening it is navigation, so it is never locked.
+function toolsBox(ctx, tab) {
+  const { h } = ctx;
+  const open = Boolean(ctx.board && ctx.board.tools);
+  const box = h.el("section", "git-toolbox" + (open ? " is-open" : ""));
+  const toggle = control(ctx, "button", "git-toolbox-toggle", null, { role: "nav", onClick: () => ctx.on.toggleTools() });
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  toggle.setAttribute("aria-controls", "git-toolbox-body");
+  const chev = h.el("span", "git-toolbox-chev", "›");
+  chev.setAttribute("aria-hidden", "true");
+  toggle.appendChild(chev);
+  toggle.appendChild(h.el("span", "git-toolbox-label", "All branches and tools"));
+  toggle.appendChild(h.el("span", "git-toolbox-sub", "Changes, Branches, Sync"));
+  box.appendChild(toggle);
+  if (!open) return box;
+  const body = h.el("div", "git-toolbox-body");
+  body.id = "git-toolbox-body";
+  body.appendChild(tabStrip(ctx, tab));
+  body.appendChild(tabPanel(ctx, tab));
+  box.appendChild(body);
+  return box;
 }
 
 /* ---------------------------------------------------------- tab panels */
@@ -240,13 +295,11 @@ function tabPanel(ctx, id) {
   panel.setAttribute("role", "tabpanel");
   panel.id = `git-panel-${id}`;
   panel.setAttribute("aria-labelledby", `git-tab-${id}`);
-  const strip = stepStrip(ctx, id);
-  if (strip) panel.appendChild(strip);
   panel.appendChild(id === "changes" ? changesBody(ctx) : id === "branches" ? branchesBody(ctx) : syncBody(ctx));
   return panel;
 }
 
-/* ---------------------------------------------------------- step strip */
+/* ----------------------------------------------------------- task card */
 
 // One step's click, as the board offers it.
 function runStep(ctx, s) {
@@ -260,7 +313,7 @@ function runStep(ctx, s) {
       return on.send("commit", picks);
     }
     case "create-commit":
-      return on.openPanel("create", { commit: true });
+      return on.openPanel("create", { commit: true, ...tablePicks(ctx) });
     case "create":
       return on.openPanel("create");
     case "cleanup":
@@ -282,24 +335,24 @@ function runStep(ctx, s) {
   }
 }
 
+// A commit step works on ticked files or .gitignore picks alone (the held-back
+// offer leaves only those), so it grays only when both are empty.
 function stepButton(ctx, s, cls) {
   if (s.op === "pr") return prLink(ctx, s.url, cls);
-  const disabled = s.op === "commit" && !tablePicks(ctx).files.length;
-  return control(ctx, "button", cls, stepLabel(ctx, s), { disabled, onClick: () => runStep(ctx, s) });
+  const ticking = s.op === "commit" || (s.op === "create-commit" && cardShowsFiles(ctx.git, ctx.step));
+  const picks = tablePicks(ctx);
+  const disabled = ticking && !picks.files.length && !picks.ignore.length;
+  return control(ctx, "button", cls, s.action || stepLabel(ctx, s), { disabled, onClick: () => runStep(ctx, s) });
 }
 
 // A step's name. A "Commit N files" count follows the table's ticks, so the
-// card and its button say what the click will send.
+// card and its button say what the click will send; with only .gitignore
+// picks, the commit takes .gitignore alone and says so.
 function stepLabel(ctx, s) {
   if (!s || s.op !== "commit" || !/^Commit \d+ files?$/.test(s.label)) return s ? s.label : "";
-  return `Commit ${plural(tablePicks(ctx).files.length, "file", "files")}`;
-}
-
-// Whether the step strip over the Changes tab already carries a plain commit
-// button (the same one the commit table would draw).
-function stripCommits(ctx) {
-  const p = ctx.step && ctx.step.primary;
-  return Boolean(p && p.op === "commit" && ctx.step.tab === "changes");
+  const { files, ignore } = tablePicks(ctx);
+  if (!files.length && ignore.length) return `Add ${ignore.length} to .gitignore`;
+  return `Commit ${plural(files.length, "file", "files")}`;
 }
 
 // The commit table's ticked files and .gitignore picks, checked against the snapshot.
@@ -312,19 +365,16 @@ function tablePicks(ctx) {
   return { files: [...ticks].filter((path) => known.has(path)), ignore: [...ignored].filter((path) => known.has(path)) };
 }
 
-function stepStrip(ctx, id) {
+// The one thing to do now, under the path. On a Save stop that commits it
+// carries the file table (and, once asked, the new-branch prompt), so the
+// person ticks and commits in one place.
+function taskCard(ctx) {
   const { git, h, step } = ctx;
   const p = step.primary;
-  if (id !== step.tab) {
-    if (!p) return null;
-    const where = GIT_TABS.find((t) => t.id === step.tab);
-    return control(ctx, "button", "btn sm standby git-hint", `Next step is on ${where ? where.label : step.tab}: ${stepLabel(ctx, p)} →`, {
-      role: "nav",
-      onClick: () => ctx.on.pickTab(step.tab),
-    });
-  }
-  // Mid-operation, Sync's own block is the step (syncBody).
-  if (id === "sync" && git.inProgress) return null;
+  // Mid-operation the card is the operation: its files and its two buttons.
+  if (git.inProgress) return opBlock(ctx);
+  const files = cardShowsFiles(git, step);
+  const creating = Boolean(files && ctx.board.panel === "create" && ctx.board.create && ctx.board.create.commit);
   // A landed result: the notice (it carries `op`) becomes the left zone and
   // the leftover step the right, muted, so the board reads "done, and this
   // much is not yours" rather than one loud suggestion to commit it all.
@@ -357,6 +407,12 @@ function stepStrip(ctx, id) {
       held.appendChild(h.md(step.held, "md git-held-body"));
       left.appendChild(held);
     }
+    if (creating) {
+      left.appendChild(createPanel(ctx, false));
+      duo.appendChild(left);
+      return duo;
+    }
+    if (files) left.appendChild(fileTable(ctx, false));
     const acts = h.el("div", "git-step-actions");
     if (theirs) {
       acts.appendChild(stepButton(ctx, { ...theirs, label: "Commit other changes" }, "btn primary"));
@@ -369,7 +425,7 @@ function stepStrip(ctx, id) {
     duo.appendChild(left);
     return duo;
   }
-  const box = h.el("div", "git-step" + (git.inProgress ? " is-warn" : "") + (p ? "" : " is-calm"));
+  const box = h.el("div", "git-step" + (p ? "" : " is-calm"));
   box.appendChild(h.el("div", "git-step-kicker", p ? "Next step" : "Nothing to do"));
   box.appendChild(h.el("h3", "git-step-title", p ? stepLabel(ctx, p) : step.line));
   if (p && p.why) box.appendChild(h.el("p", "git-step-why", p.why));
@@ -379,6 +435,11 @@ function stepStrip(ctx, id) {
     held.appendChild(h.md(step.held, "md git-held-body"));
     box.appendChild(held);
   }
+  if (creating) {
+    box.appendChild(createPanel(ctx, false));
+    return box;
+  }
+  if (files) box.appendChild(fileTable(ctx, false));
   if (ctx.mode === "running") {
     box.appendChild(activityLine(ctx, "p", ctx.activity || "Plan2Code is working on it."));
     return box;
@@ -425,6 +486,13 @@ function changesBody(ctx) {
   const body = h.el("div", "git-changes");
   const frozen = Boolean(git.inProgress);
   if (frozen) body.appendChild(waitLine(ctx));
+  // The task card already carries the table: say so rather than draw it twice.
+  if (cardShowsFiles(git, ctx.step)) {
+    const ch0 = git.changes || {};
+    const n = list(ch0.files).length + list(ch0.untrackedDirs).length;
+    body.appendChild(h.el("p", "git-note", `Your ${plural(n, "changed file is", "changed files are")} in the Save step above.`));
+    return body;
+  }
   if (board.panel === "create" && board.create && board.create.commit) {
     body.appendChild(createPanel(ctx, frozen));
     return body;
@@ -439,12 +507,12 @@ function changesBody(ctx) {
   return body;
 }
 
-function commitPanel(ctx, frozen) {
+// The commit table: one row per changed file or untracked folder, each with
+// its tick and, for held-back files and folders, an Add to .gitignore toggle.
+// Shared by the task card (on a Save stop) and the Changes tab.
+function fileTable(ctx, frozen) {
   const { git, board, h, on } = ctx;
   const ch = git.changes || {};
-  const first = git.hasCommits === false;
-  const opened = board.panel === "commit";
-  const p = panelFrame(ctx, first ? "Make the first commit" : "Commit", { closable: opened, disabled: frozen });
   const ticks = board.ticks || (board.ticks = commitTicks(ch));
   const ignored = board.ignore || (board.ignore = new Set());
 
@@ -518,7 +586,15 @@ function commitPanel(ctx, frozen) {
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
-  p.appendChild(table);
+  return table;
+}
+
+function commitPanel(ctx, frozen) {
+  const { git, board, h, on } = ctx;
+  const first = git.hasCommits === false;
+  const opened = board.panel === "commit";
+  const p = panelFrame(ctx, first ? "Make the first commit" : "Commit", { closable: opened, disabled: frozen });
+  p.appendChild(fileTable(ctx, frozen));
 
   const { files, ignore } = tablePicks(ctx);
   const send = () => on.send("commit", { files, ignore });
@@ -545,10 +621,7 @@ function commitPanel(ctx, frozen) {
       })
     );
     actions.appendChild(control(ctx, "button", "btn sm", `Commit on ${head.branch}`, { disabled: frozen || !files.length, onClick: send }));
-  } else if (!stripCommits(ctx)) {
-    // The step above this table already offers this same "Commit N files" (its
-    // count follows the ticks), so a second one here would be a duplicate; the
-    // table keeps its own only when the step is somewhere else.
+  } else {
     actions.appendChild(
       control(ctx, "button", "btn sm primary", `Commit ${plural(files.length, "file", "files")}`, { disabled: frozen || !files.length, onClick: send })
     );
@@ -882,7 +955,7 @@ function syncBody(ctx) {
   const { git, h } = ctx;
   const body = h.el("div", "git-sync");
   if (git.inProgress) {
-    body.appendChild(opBlock(ctx));
+    body.appendChild(h.el("p", "git-wait", `The ${opName(git.inProgress)} is in the step above; everything here waits until it is finished or aborted.`));
     return body;
   }
   const pr = prBlock(ctx);
@@ -890,12 +963,11 @@ function syncBody(ctx) {
 
   const acts = boardActions(git, { busy: ctx.mode !== "idle" });
   const row = h.el("div", "git-sync-actions");
-  const primaryOp = ctx.step.primary && ctx.step.primary.op;
   for (const key of ["refresh", "pull", "push", "publish"]) {
     const a = acts[key];
     if (!a.shown) continue;
     row.appendChild(
-      control(ctx, "button", "btn sm" + (key === primaryOp ? " primary" : ""), a.label, {
+      control(ctx, "button", "btn sm", a.label, {
         disabled: ctx.mode === "idle" && !a.enabled,
         title: a.title,
         onClick: () => runStep(ctx, { op: key }),

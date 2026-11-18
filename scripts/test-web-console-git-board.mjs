@@ -12,7 +12,10 @@ import { JOURNEYS, NOW, STATES } from "./fixtures/git-board-states.mjs";
 import {
   BRANCH_TYPES,
   GIT_TABS,
+  PATH_STOPS,
+  boardPath,
   busyMode,
+  cardShowsFiles,
   commitTicks,
   controlAllowed,
   createSources,
@@ -30,10 +33,7 @@ const ROLES = ["nav", "action", "done"];
 const TAB_IDS = GIT_TABS.map((t) => t.id);
 
 const step = (id) => nextStep(STATES[id].git, { now: NOW });
-const badges = (id) => {
-  const s = step(id);
-  return tabBadges(STATES[id].git, { now: NOW, stepTab: s.tab });
-};
+const badges = (id) => tabBadges(STATES[id].git, { now: NOW });
 
 test("git board rules: every sample state gives its expected primary, secondary and tab", () => {
   for (const [id, s] of Object.entries(STATES)) {
@@ -88,14 +88,14 @@ test("git board rules: no default branch means no clean-up step or badge, as boa
   const noDefault = { ...git, defaultBranch: null, branches: git.branches.map((b) => ({ ...b, default: false, merged: false, gone: b.current ? b.gone : b.name === "chore/bump-deps" })) };
   const n = nextStep(noDefault, { now: NOW });
   assert.ok(![n.primary, ...n.secondary].some((s) => s && s.op === "cleanup"));
-  assert.equal(tabBadges(noDefault, { now: NOW, stepTab: n.tab }).branches, null);
+  assert.equal(tabBadges(noDefault, { now: NOW }).branches, null);
 });
 
 test("git board badges: no 'not published' badge before the first commit, even with a remote", () => {
   const git = { ...STATES["e-first-commit"].git, remotes: STATES["cp-dirty"].git.remotes, lastFetch: STATES["cp-dirty"].git.lastFetch };
   const n = nextStep(git, { now: NOW });
   assert.equal(n.primary.op, "commit");
-  assert.equal(tabBadges(git, { now: NOW, stepTab: n.tab }).sync, null);
+  assert.equal(tabBadges(git, { now: NOW }).sync, null);
 });
 
 test("git board rules: the stale line never changes the step, and needs a remote", () => {
@@ -142,20 +142,20 @@ test("git board rules: on the default branch, a branch is suggested and committi
   assert.equal(n.secondary[0].tab, "changes");
 });
 
-test("git board badges: each tab badges what it has waiting, and the next step's tab is filled", () => {
+test("git board badges: each tab badges what it has waiting", () => {
   const dirty = badges("cp-dirty");
-  assert.deepEqual([dirty.changes.text, dirty.changes.kind, dirty.changes.next], ["3", "count", true]);
-  assert.equal(dirty.changes.label, "3 waiting, next step");
+  assert.deepEqual([dirty.changes.text, dirty.changes.kind, dirty.changes.next], ["3", "count", false]);
+  assert.equal(dirty.changes.label, "3 waiting");
   assert.equal(dirty.branches.text, "2");
   assert.equal(dirty.branches.next, false);
   assert.equal(dirty.sync, null);
 
   const held = badges("e-held-only");
-  assert.deepEqual([held.changes.kind, held.changes.text, held.changes.next], ["dot", "·", false], "no primary, so no filled badge");
+  assert.deepEqual([held.changes.kind, held.changes.text, held.changes.next], ["dot", "·", false]);
 
   assert.equal(badges("e-many-branches").branches.text, "40");
   assert.equal(badges("pc-diverged").sync.text, "↑1 ↓3");
-  assert.equal(badges("pc-diverged").sync.label, "1 to push, 3 to pull, next step");
+  assert.equal(badges("pc-diverged").sync.label, "1 to push, 3 to pull");
   assert.equal(badges("nb-unpublished").sync.text, "↑");
   assert.equal(badges("e-gone").sync.text, "↑");
   assert.equal(badges("e-stale").sync.text, "?");
@@ -166,12 +166,6 @@ test("git board badges: each tab badges what it has waiting, and the next step's
   assert.equal(conflict.sync.text, "!");
   assert.equal(conflict.changes, null);
   assert.equal(conflict.branches, null);
-});
-
-test("git board badges: a tab owning the step with nothing of its own gets a filled dot", () => {
-  const b = badges("cp-pushed");
-  assert.deepEqual([b.sync.kind, b.sync.text, b.sync.next], ["dot", "·", true]);
-  assert.equal(b.sync.label, "next step");
 });
 
 test("git board busy: offline beats running beats a waiting card", () => {
@@ -299,7 +293,7 @@ function fakeOn() {
   const rec = (name) => (...args) => calls.push([name, ...args]);
   return {
     calls,
-    send: rec("send"), redraw: rec("redraw"), pickTab: rec("pickTab"), openPanel: rec("openPanel"),
+    send: rec("send"), redraw: rec("redraw"), pickTab: rec("pickTab"), openPanel: rec("openPanel"), toggleTools: rec("toggleTools"),
     closePanel: rec("closePanel"), pickPrHost: rec("pickPrHost"), persist: rec("persist"),
   };
 }
@@ -318,13 +312,14 @@ const seedCreate = (git, commit = false) => ({
 // The panels each tab can draw; "create-commit" is the create panel in commit mode, on Changes.
 const PANELS = { changes: [null, "commit", "create-commit"], branches: [null, "create", "cleanup"], sync: [null] };
 
-function draw(id, { mode = "idle", tab = null, panel = null, create = null } = {}) {
+function draw(id, { mode = "idle", tab = null, panel = null, create = null, tools = false } = {}) {
   const s = STATES[id];
   const git = s.git;
   const step = nextStep(git, { now: NOW });
-  const badges = tabBadges(git, { now: NOW, stepTab: step.tab });
+  const badges = tabBadges(git, { now: NOW });
   const board = {
     tab,
+    tools,
     panel: panel === "create-commit" ? "create" : panel,
     create: create || (panel === "create" ? seedCreate(git) : panel === "create-commit" ? seedCreate(git, true) : null),
     ticks: null, ignore: new Set(), sweep: null, query: "", showAll: false, remoteOpen: null, base: null,
@@ -353,7 +348,7 @@ const words = (n) => n.textContent.trim() || (n.parent && n.parent.tag === "labe
 function* everyRender(modes = ["idle", "running", "card", "offline"]) {
   for (const id of Object.keys(STATES)) {
     for (const mode of modes) {
-      for (const tab of TAB_IDS) for (const panel of PANELS[tab]) yield { id, mode, tab, panel, r: draw(id, { mode, tab, panel }) };
+      for (const tab of TAB_IDS) for (const panel of PANELS[tab]) yield { id, mode, tab, panel, r: draw(id, { mode, tab, panel, tools: true }) };
     }
   }
 }
@@ -378,7 +373,7 @@ test("git board view: no control leaks the busy lock, in any state, mode, tab or
   assert.ok(checked > 1000, "the guard looked at the board's controls");
 });
 
-test("git board view: every function of today's board is reachable on some tab", () => {
+test("git board view: every function of today's board is reachable in the card or the tools", () => {
   const texts = new Set();
   const ids = { select: new Set(), input: new Set() };
   const take = (r) => {
@@ -389,7 +384,7 @@ test("git board view: every function of today's board is reachable on some tab",
   };
   for (const { r } of everyRender(["idle"])) take(r);
   // A name that is taken offers Switch to it.
-  take(draw("cp-dirty", { tab: "branches", panel: "create", create: { ...seedCreate(STATES["cp-dirty"].git), name: "main" } }));
+  take(draw("cp-dirty", { tools: true, tab: "branches", panel: "create", create: { ...seedCreate(STATES["cp-dirty"].git), name: "main" } }));
 
   // Exact, except the labels that carry a count ("Commit 3 files", "Show all 179").
   const has = (want, prefix = false) => [...texts].some((t) => t === want || (prefix && t.startsWith(`${want} `)));
@@ -433,17 +428,11 @@ test("git board view: pins on its source and on a few states", () => {
   const conflict = controls(draw("pc-conflict").node).filter((c) => c.textContent.startsWith("Abort"));
   assert.equal(conflict.length, 1, "mid-rebase, Abort is offered once");
 
-  const held = draw("e-held-only", { tab: "changes" });
+  const held = draw("e-held-only");
   const strip = walk(held.node).find((n) => n.classes.has("git-step"));
-  assert.ok(strip, "the step strip is on Changes");
+  assert.ok(strip, "the task card is drawn");
   assert.ok(walk(strip).find((n) => n.classes.has("git-held")).textContent.includes("`.env.local` held back"));
   assert.ok(controls(strip).some((c) => c.textContent === "Add `.env.local` to .gitignore"), "the ignore offer is the secondary");
-
-  const away = draw("cp-dirty", { tab: "sync" });
-  const hint = walk(away.node).find((n) => n.classes.has("git-hint"));
-  assert.ok(hint, "a tab that does not own the step points at it");
-  assert.ok(hint.textContent.includes("Commit 3 files"));
-  assert.ok(hint.textContent.startsWith("Next step is on Changes:"));
 });
 
 test("git board view: a working line carries the spinner, and only while running", () => {
@@ -451,14 +440,14 @@ test("git board view: a working line carries the spinner, and only while running
   const spun = (n) => n.children.some((c) => c.classes.has("spinner") && c.classes.has("tiny"));
 
   const busy = lines(draw("cp-committing", { mode: "running", tab: "changes" }));
-  assert.equal(busy.length, 2, "the header and the step strip both say what is under way");
+  assert.equal(busy.length, 2, "the header and the task card both say what is under way");
   for (const n of busy) {
     assert.ok(spun(n), `"${n.textContent}" has a spinner`);
     assert.equal(n.textContent, "Committing 3 files on feature/ABC-12001-export-csv");
   }
 
   const quiet = lines(draw("cp-dirty", { mode: "running", tab: "changes" }));
-  assert.equal(quiet.length, 1, "with no activity, only the step strip speaks");
+  assert.equal(quiet.length, 1, "with no activity, only the task card speaks");
   assert.ok(spun(quiet[0]));
   assert.equal(quiet[0].textContent, "Plan2Code is working on it.");
 
@@ -466,7 +455,8 @@ test("git board view: a working line carries the spinner, and only while running
 });
 
 const click = (n) => n.listeners.click.forEach((fn) => fn());
-const stepButtons = (r) => controls(walk(r.node).find((n) => n.classes.has("git-step")));
+// The card's buttons (and links), not the file table's ticks inside it.
+const stepButtons = (r) => controls(walk(r.node).find((n) => n.classes.has("git-step"))).filter((c) => c.tag !== "input");
 
 test("git board view: each step's click goes out as the board offers it", () => {
   const held = draw("e-held-only");
@@ -482,10 +472,10 @@ test("git board view: each step's click goes out as the board offers it", () => 
   click(branch);
   click(onMain);
   const mainFiles = [...commitTicks(STATES["nb-main-dirty"].git.changes)];
-  assert.deepEqual(main.on.calls, [["openPanel", "create", { commit: true }], ["send", "commit", { files: mainFiles, ignore: [] }]]);
+  assert.deepEqual(main.on.calls, [["openPanel", "create", { commit: true, files: mainFiles, ignore: [] }], ["send", "commit", { files: mainFiles, ignore: [] }]]);
 
-  // The commit table is always on show below the step, so the step's Commit
-  // sends what the table has ticked rather than "opening" a panel already open.
+  // The commit table is in the card, so the card's Commit sends what it has
+  // ticked rather than "opening" a panel already open.
   const dirty = draw("cp-dirty", { tab: "changes" });
   const ticked = [...commitTicks(STATES["cp-dirty"].git.changes)];
   const top = stepButtons(dirty).find((c) => c.textContent.startsWith("Commit "));
@@ -497,7 +487,7 @@ test("git board view: each step's click goes out as the board offers it", () => 
   unticked.board.ticks.clear();
   const redrawn = drawGitBoard({
     git: STATES["cp-dirty"].git, board: unticked.board, now: NOW, mode: "idle", step: unticked.step,
-    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW, stepTab: unticked.step.tab }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
+    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
   });
   const none = controls(walk(redrawn.node).find((n) => n.classes.has("git-step"))).find((c) => c.textContent.startsWith("Commit "));
   assert.ok(none.disabled, "nothing ticked: the step's Commit is grayed, like the table's");
@@ -506,14 +496,13 @@ test("git board view: each step's click goes out as the board offers it", () => 
   one.board.ticks = new Set([ticked[0]]);
   const again = drawGitBoard({
     git: STATES["cp-dirty"].git, board: one.board, now: NOW, mode: "idle", step: one.step,
-    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW, stepTab: one.step.tab }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
+    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
   });
   const card = walk(again.node).find((n) => n.classes.has("git-step"));
   assert.equal(walk(card).find((n) => n.classes.has("git-step-title")).textContent, "Commit 1 file", "the card's title follows the ticks too");
 
-  const away = draw("pc-conflict", { tab: "changes" });
-  click(walk(away.node).find((n) => n.classes.has("git-hint")));
-  assert.deepEqual(away.on.calls, [["pickTab", "sync"]]);
+  const fix = draw("pc-conflict");
+  assert.ok(!walk(fix.node).some((n) => n.classes.has("git-hint")), "no hint pointing at another tab");
 
   const op = draw("pc-conflict");
   const opButtons = controls(walk(op.node).find((n) => n.classes.has("git-op")));
@@ -525,10 +514,10 @@ test("git board view: a .gitignore-only pick commits just .gitignore, and never 
   const ignoreHeld = (git) => ({ ...git, changes: STATES["e-held-only"].git.changes });
   const opened = (git) => {
     const step = nextStep(git, { now: NOW });
-    const board = { tab: "changes", panel: "commit", create: null, ticks: new Set(), ignore: new Set([".env.local"]), sweep: null, query: "", showAll: false, remoteOpen: null, base: null };
+    const board = { tab: "changes", tools: true, panel: "commit", create: null, ticks: new Set(), ignore: new Set([".env.local"]), sweep: null, query: "", showAll: false, remoteOpen: null, base: null };
     const h = fakeH();
     const on = fakeOn();
-    const { node } = drawGitBoard({ git, board, now: NOW, mode: "idle", step, badges: tabBadges(git, { now: NOW, stepTab: step.tab }), notice: null, activity: null, h, on });
+    const { node } = drawGitBoard({ git, board, now: NOW, mode: "idle", step, badges: tabBadges(git, { now: NOW }), notice: null, activity: null, h, on });
     return { node, on };
   };
 
@@ -589,12 +578,12 @@ test("git board docs: the agent prose, Help topic and readme describe the tabbed
   assert.ok(!read("../.readme/web-console.md").includes("commits on one page"), "the readme no longer says commits on one page");
 });
 
-test("git board view: a landed result splits the step strip into Just landed and Still on the tree", () => {
+test("git board view: a landed result splits the task card into Just landed and Still on the tree", () => {
   const landed = (id, notice) => {
     const s = STATES[id];
     const git = s.git;
     const step = nextStep(git, { now: NOW });
-    const badges = tabBadges(git, { now: NOW, stepTab: step.tab });
+    const badges = tabBadges(git, { now: NOW });
     const board = { tab: null, panel: null, create: null, ticks: null, ignore: new Set(), sweep: null, query: "", showAll: false, remoteOpen: null, base: null };
     const h = fakeH();
     const on = fakeOn();
@@ -624,4 +613,142 @@ test("git board view: a landed result splits the step strip into Just landed and
   const clean = landed("nb-unpublished", notice);
   const duoClean = walk(clean.node).find((n) => n.classes.has("git-duo"));
   assert.ok(duoClean, "zones still draw when nothing is left to commit");
+});
+
+/* ------------------------------------------------- the guided path */
+
+// Where each sample state sits on the path: the current stop, or null when
+// nothing is left (every stop done) or an operation has paused the path.
+const PATH_AT = {
+  "cp-dirty": "save", "cp-committing": "save", "cp-ahead": "share", "cp-pushing": "share", "cp-pushed": "review",
+  "nb-main-dirty": "save", "nb-creating": "save", "nb-unpublished": "share", "nb-publishing": "share", "nb-published": "review",
+  "pc-diverged": "share", "pc-pulling": "share", "pc-conflict": null, "pc-resolved": null, "pc-continuing": null,
+  "pc-rebased": "share", "pc-pushing": "share", "pc-pushed": "review",
+  "e-caught-up": null, "e-stale": null, "e-held-only": null, "e-gone": "share", "e-no-remote": null,
+  "e-first-commit": "save", "e-detached": "save", "e-many-branches": "tidy",
+};
+
+test("git board path: four stops, Save, Share, Review and Tidy, in that order", () => {
+  assert.deepEqual(PATH_STOPS.map((s) => [s.id, s.label]), [["save", "Save"], ["share", "Share"], ["review", "Review"], ["tidy", "Tidy"]]);
+  for (const s of PATH_STOPS) assert.ok(typeof s.hint === "string" && s.hint.length > 0, `${s.id} has a hint`);
+});
+
+test("git board path: every sample state lands on its stop; stops before it are done, after it still to do", () => {
+  assert.deepEqual(Object.keys(PATH_AT).sort(), Object.keys(STATES).sort(), "every sample state has an expected stop");
+  const ids = PATH_STOPS.map((s) => s.id);
+  for (const [id, s] of Object.entries(STATES)) {
+    const p = boardPath(s.git, nextStep(s.git, { now: NOW }));
+    assert.equal(p.current, PATH_AT[id], `${id}: current stop`);
+    assert.equal(p.paused, Boolean(s.git.inProgress), `${id}: paused only mid-operation`);
+    assert.deepEqual(p.stops.map((x) => x.id), ids, `${id}: stops in order`);
+    const at = ids.indexOf(p.current);
+    p.stops.forEach((x, i) => {
+      const want = p.paused ? "todo" : p.current === null ? "done" : i < at ? "done" : i === at ? "now" : "todo";
+      assert.equal(x.state, want, `${id}: ${x.id} is ${want}`);
+    });
+  }
+});
+
+test("git board path: the card shows the file table only on a Save stop that commits", () => {
+  const shows = (id) => cardShowsFiles(STATES[id].git, nextStep(STATES[id].git, { now: NOW }));
+  for (const id of ["cp-dirty", "nb-main-dirty", "e-first-commit"]) assert.equal(shows(id), true, id);
+  for (const id of ["e-detached", "e-held-only", "pc-conflict", "cp-ahead", "e-caught-up"]) assert.equal(shows(id), false, id);
+});
+
+test("git board path: the branch-and-commit step's button says what it does", () => {
+  const s = step("nb-main-dirty");
+  assert.equal(s.primary.label, "Start a branch for 2 files");
+  assert.equal(s.primary.action, "Start a branch and commit");
+});
+
+test("git board badges: no tab is marked as the next step any more", () => {
+  for (const id of Object.keys(STATES)) {
+    const b = tabBadges(STATES[id].git, { now: NOW });
+    for (const t of TAB_IDS) assert.ok(!b[t] || b[t].next === false, `${id}: ${t} is not marked next`);
+  }
+  assert.equal(tabBadges(STATES["cp-pushed"].git, { now: NOW }).sync, null, "a tab with nothing of its own has no badge");
+});
+
+test("git board view: the path, one task card and a closed tools fold-out lead the board", () => {
+  for (const id of Object.keys(STATES)) {
+    const r = draw(id);
+    const nodes = walk(r.node);
+    const path = nodes.find((n) => n.classes.has("git-route"));
+    assert.ok(path, `${id}: the path is drawn`);
+    assert.equal(path.children.length, 4, `${id}: four stops`);
+    const now = path.children.filter((c) => c.classes.has("is-now"));
+    assert.equal(now.length, PATH_AT[id] ? 1 : 0, `${id}: one current stop at most`);
+    if (PATH_AT[id]) assert.ok(now[0].textContent.includes(PATH_STOPS.find((s) => s.id === PATH_AT[id]).label), `${id}: the right stop is current`);
+    assert.equal(nodes.filter((n) => n.classes.has("git-step")).length, 1, `${id}: exactly one task card`);
+    assert.ok(!nodes.some((n) => n.classes.has("git-hint")), `${id}: no "Next step is on" hint`);
+    const tools = nodes.find((n) => n.classes.has("git-toolbox"));
+    assert.ok(tools, `${id}: the tools fold-out is there`);
+    const toggle = controls(tools).find((c) => c.classes.has("git-toolbox-toggle"));
+    assert.equal(toggle.attrs["aria-expanded"], "false", `${id}: closed by default`);
+    assert.equal(toggle.attrs["data-gate"], "nav", `${id}: opening it is never locked`);
+    assert.ok(!nodes.some((n) => n.classes.has("git-tabs")), `${id}: no tab strip while closed`);
+    const head = r.node.children.find((c) => c.tag === "header");
+    assert.ok(controls(head).some((c) => c.textContent === "Done with git"), `${id}: Done with git sits in the header`);
+  }
+  const paused = walk(draw("pc-conflict").node).find((n) => n.classes.has("git-route"));
+  assert.ok(paused.classes.has("is-paused"), "mid-rebase the path is paused");
+});
+
+test("git board view: opening the fold-out shows the tabs and the active tab's panel", () => {
+  const r = draw("cp-ahead", { tools: true, tab: "branches" });
+  const nodes = walk(r.node);
+  const toggle = nodes.find((n) => n.classes.has("git-toolbox-toggle"));
+  assert.equal(toggle.attrs["aria-expanded"], "true");
+  assert.ok(nodes.some((n) => n.classes.has("git-tabs")), "the tab strip is inside");
+  assert.ok(nodes.some((n) => n.id === "git-panel-branches"), "the Branches panel is drawn");
+  click(toggle);
+  assert.deepEqual(r.on.calls, [["toggleTools"]], "the toggle asks the host to flip it");
+});
+
+test("git board view: on a Save stop the file table sits in the task card, with one set of commit buttons", () => {
+  const main = draw("nb-main-dirty", { tools: true, tab: "changes" });
+  const card = walk(main.node).find((n) => n.classes.has("git-step"));
+  assert.ok(walk(card).some((n) => n.classes.has("git-files")), "the file table is in the card");
+  const labels = controls(main.node).map((c) => words(c));
+  assert.equal(labels.filter((t) => t === "Start a branch and commit").length, 1, "one branch-and-commit button");
+  assert.equal(labels.filter((t) => t === "Commit on main").length, 1, "one commit-on-main button");
+  assert.ok(!labels.includes("Create branch"), "the table's old You're on main buttons are gone");
+  const changes = walk(main.node).find((n) => n.id === "git-panel-changes");
+  assert.ok(!walk(changes).some((n) => n.classes.has("git-files")), "the Changes tab does not draw the table twice");
+  assert.ok(changes.textContent.includes("in the Save step above"), "the Changes tab points at the card");
+
+  const dirty = draw("cp-dirty", { tools: true, tab: "changes" });
+  assert.equal(controls(dirty.node).filter((c) => /^Commit \d+ files?$/.test(c.textContent)).length, 1, "one Commit N files button");
+
+  const detached = draw("e-detached", { tools: true, tab: "changes" });
+  const dCard = walk(detached.node).find((n) => n.classes.has("git-step"));
+  assert.ok(!walk(dCard).some((n) => n.classes.has("git-files")), "no table in a card that is not committing");
+});
+
+test("git board view: mid-operation the card is the operation, and Sync does not repeat it", () => {
+  const r = draw("pc-conflict", { tools: true, tab: "sync" });
+  const card = walk(r.node).find((n) => n.classes.has("git-step"));
+  assert.ok(card.classes.has("git-op"), "the card lists the files and the two buttons");
+  assert.equal(controls(r.node).filter((c) => c.textContent.startsWith("Abort")).length, 1, "Abort once, tools open or not");
+  assert.equal(controls(r.node).filter((c) => c.textContent === "Continue").length, 1, "Continue once");
+});
+
+test("git board view: with only .gitignore picks, the card commits just .gitignore", () => {
+  const r = draw("cp-dirty");
+  r.board.ticks = new Set();
+  r.board.ignore = new Set([".env.local"]);
+  const git = STATES["cp-dirty"].git;
+  const on = fakeOn();
+  const { node } = drawGitBoard({ git, board: r.board, now: NOW, mode: "idle", step: r.step, badges: tabBadges(git, { now: NOW }), notice: null, activity: null, hasCard: false, h: fakeH(), on });
+  const card = walk(node).find((n) => n.classes.has("git-step"));
+  assert.equal(walk(card).find((n) => n.classes.has("git-step-title")).textContent, "Add 1 to .gitignore", "the title says what the click does");
+  const add = controls(card).filter((c) => c.tag !== "input").find((c) => c.textContent === "Add 1 to .gitignore");
+  assert.ok(add && !add.disabled, "the card's button is live with only a .gitignore pick");
+  click(add);
+  assert.deepEqual(on.calls, [["send", "commit", { files: [], ignore: [".env.local"] }]]);
+
+  r.board.ignore = new Set();
+  const empty = drawGitBoard({ git, board: r.board, now: NOW, mode: "idle", step: r.step, badges: tabBadges(git, { now: NOW }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn() });
+  const none = controls(walk(empty.node).find((n) => n.classes.has("git-step"))).find((c) => c.textContent === "Commit 0 files");
+  assert.ok(none && none.disabled, "nothing ticked and nothing to ignore: grayed");
 });
