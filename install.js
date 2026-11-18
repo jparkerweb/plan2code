@@ -3818,19 +3818,89 @@ async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims
 }
 
 // ============================================================================
+// RELEASE REDIRECT
+// ============================================================================
+//
+// Launchers older than the release channel run `plan2code update` (and uninstall) as
+// `npx git+<repo> --update`, which is the tip of main, and so does an install command copied from
+// an older README. Without this, those people would get unreleased work. When this copy came from
+// an npx fetch of a commit that no `vX.Y.Z` tag points at, it hands the same command to the
+// newest release instead. Any run the current launcher starts says which ref it picked on purpose
+// (PLAN2CODE_INSTALL_REF, `--main` included), and a checkout (`node install.js`) is never under
+// node_modules, so neither is redirected. Anything unknown (no lock file, no network) also means
+// no redirect: the run goes on exactly as before.
+
+/** The commit npx fetched this copy from (from npm's hidden lock file beside it), or null. */
+function fetchedCommit(dir = __dirname) {
+  const modules = path.dirname(dir);
+  if (path.basename(modules) !== 'node_modules') return null;
+  try {
+    const lock = JSON.parse(fs.readFileSync(path.join(modules, '.package-lock.json'), 'utf8'));
+    const entry = lock && lock.packages && lock.packages[`node_modules/${path.basename(dir)}`];
+    const m = entry && typeof entry.resolved === 'string' ? /#([0-9a-f]{40})$/i.exec(entry.resolved) : null;
+    return m ? m[1].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The release tag to hand this run to, as `vX.Y.Z`, or null to run here. `lsRemote` is
+ * `git ls-remote --tags` output and `newest` its newest release (update-check.mjs's pick). A
+ * commit any release tag points at (peeled or not) stays, so an older launcher's
+ * `update --tag v3.0.2` and the `#release` branch are left alone.
+ */
+function releaseRedirectRef({ commit, lsRemote, newest, env = process.env }) {
+  if (env.PLAN2CODE_INSTALL_REF || !commit || !newest || typeof lsRemote !== 'string') return null;
+  for (const line of lsRemote.split(/\r?\n/)) {
+    const m = /^([0-9a-f]{40})\s+refs\/tags\/v\d+\.\d+\.\d+(\^\{\})?$/i.exec(line.trim());
+    if (m && m[1].toLowerCase() === commit) return null;
+  }
+  return `v${newest}`;
+}
+
+/**
+ * Run the newest release's installer with the same options when this copy is unreleased work
+ * fetched by an older launcher. Resolves the child's exit code, or null to carry on here.
+ */
+async function redirectToRelease(argv) {
+  if (!argv.every((a) => /^--[a-z]+$/.test(a))) return null;
+  const commit = fetchedCommit();
+  if (!commit || process.env.PLAN2CODE_INSTALL_REF) return null;
+  let ref = null;
+  try {
+    const checker = await import(pathToFileURL(UPDATE_CHECK_SRC).href);
+    const stub = process.env.PLAN2CODE_LS_REMOTE_FILE;
+    const lsRemote = stub ? fs.readFileSync(stub, 'utf8') : await checker.runLsRemote();
+    ref = releaseRedirectRef({ commit, lsRemote, newest: checker.latestTag(lsRemote) });
+  } catch {
+    return null;
+  }
+  if (!ref) return null;
+  console.log(`This installer is unreleased work from main, so Plan2Code is switching to the newest release, ${ref}.`);
+  console.log(`${COLORS.DIM}Fetching it can take a minute or two.${COLORS.RESET}`);
+  const command = ['npx', '--yes', '--allow-git=all', `git+https://github.com/jparkerweb/plan2code.git#${ref}`, ...argv].join(' ');
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, { shell: true, stdio: 'inherit', env: { ...process.env, PLAN2CODE_INSTALL_REF: ref } });
+    } catch {
+      resolve(null);
+      return;
+    }
+    // The child owns the terminal now: Ctrl+C reaches it, and this process waits for its code.
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {});
+    child.on('error', () => resolve(null));
+    child.on('exit', (code) => resolve(code ?? 1));
+  });
+}
+
+// ============================================================================
 // MAIN
 // ============================================================================
 
-// Run only when invoked directly; requiring the file (the update tests do) is load-only.
-if (require.main === module) {
-  // Non-interactive build hooks for the generated skills/ artifact.
-  const argv = process.argv.slice(2);
-
-  if (argv.includes('--build-skills')) {
-    process.exit(buildSkills() ? 0 : 1);
-  } else if (argv.includes('--verify-skills')) {
-    process.exit(verifySkillsSync() ? 0 : 1);
-  } else if (argv[0] === '--update' && argv.slice(1).every((a) => a === '--force')) {
+function runCommand(argv) {
+  if (argv[0] === '--update' && argv.slice(1).every((a) => a === '--force')) {
     update({ force: argv.includes('--force') }).then((code) => process.exit(code));
   } else if (argv[0] === '--uninstall' && argv.slice(1).every((a) => a === '--yes' || a === '--purge')) {
     uninstall({ yes: argv.includes('--yes'), purge: argv.includes('--purge') }).then((code) => process.exit(code));
@@ -3844,4 +3914,18 @@ if (require.main === module) {
   }
 }
 
-module.exports = { printKeptData, uninstallSkillsPiece, removeSkillsDirectly, removeConsoleFolders, uninstallStatusLine, listKeptData, newUninstallReport, printUninstallReport, UNINSTALL_STEPS, UNINSTALL_PROBES, PIECE_LABELS, createSpinner, printGettingStarted, pathFixLine, fullCommandPath, desktopAppState, detectAgents, agentInstallLine, writeLauncherShim, isOurLauncherShim, LAUNCHER_MARKER, NO_TERMINAL_MESSAGE, appAllowLine, APP_GUIDE_URL, formatBytes, nodeVersionProblem, appWebviewDirs, purgeAppWebview, appRunning, uninstall, uninstallAll, purgeData, installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };
+// Run only when invoked directly; requiring the file (the update tests do) is load-only.
+if (require.main === module) {
+  const argv = process.argv.slice(2);
+
+  // Non-interactive build hooks for the generated skills/ artifact.
+  if (argv.includes('--build-skills')) {
+    process.exit(buildSkills() ? 0 : 1);
+  } else if (argv.includes('--verify-skills')) {
+    process.exit(verifySkillsSync() ? 0 : 1);
+  } else {
+    redirectToRelease(argv).then((code) => (code === null ? runCommand(argv) : process.exit(code)));
+  }
+}
+
+module.exports = { fetchedCommit, releaseRedirectRef, printKeptData, uninstallSkillsPiece, removeSkillsDirectly, removeConsoleFolders, uninstallStatusLine, listKeptData, newUninstallReport, printUninstallReport, UNINSTALL_STEPS, UNINSTALL_PROBES, PIECE_LABELS, createSpinner, printGettingStarted, pathFixLine, fullCommandPath, desktopAppState, detectAgents, agentInstallLine, writeLauncherShim, isOurLauncherShim, LAUNCHER_MARKER, NO_TERMINAL_MESSAGE, appAllowLine, APP_GUIDE_URL, formatBytes, nodeVersionProblem, appWebviewDirs, purgeAppWebview, appRunning, uninstall, uninstallAll, purgeData, installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

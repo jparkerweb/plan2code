@@ -58,6 +58,8 @@ function sandbox(clis, { installed, project = true, lookup = true, agents } = {}
   fs.writeFileSync(
     recorder,
     'require("fs").writeFileSync(require("path").join(__dirname, process.argv[2] + ".json"), JSON.stringify(process.argv.slice(3)));\n' +
+      // The ref the launcher marks its installer runs with, so install.js never redirects them.
+      'if (process.env.PLAN2CODE_INSTALL_REF) require("fs").writeFileSync(require("path").join(__dirname, process.argv[2] + ".ref"), process.env.PLAN2CODE_INSTALL_REF);\n' +
       "process.exitCode = Number(process.env.P2C_TEST_EXIT || 0);\n"
   );
   for (const cli of clis) {
@@ -503,6 +505,7 @@ test("launcher: update installs the newest release tag, by version and not by na
   assert.ok(args.includes("--update"), args.join(" "));
   assert.ok(args.includes(`${REPO}#v3.10.0`), args.join(" "));
   assert.ok(!args.includes("--force"), args.join(" "));
+  assert.equal(fs.readFileSync(path.join(box.dir, "bin", "npx.ref"), "utf8"), "v3.10.0", "the run is marked with the ref it picked");
   assert.equal(box.argsOf("claude"), null);
 });
 
@@ -518,6 +521,8 @@ test("launcher: update --main installs the tip of main, as it always did", (t) =
   // Unreleased work on main carries the last release's version, so the installer's "Already on"
   // check would stop it: --main always reinstalls.
   assert.ok(args.includes("--force"), args.join(" "));
+  // Marked as chosen, so install.js's redirect for older launchers leaves it on main.
+  assert.equal(fs.readFileSync(path.join(box.dir, "bin", "npx.ref"), "utf8"), "main");
 });
 
 test("launcher: update --tag reinstalls for a branch, and not for a release tag", (t) => {

@@ -312,6 +312,93 @@ test("install.js --update: an option other than --force is refused", () => {
   assert.match(refused.stderr, /Unknown option\(s\): --update --nope/);
 });
 
+const SHA_RELEASE = "a".repeat(40);
+const SHA_OLD_RELEASE = "b".repeat(40);
+const SHA_MAIN = "c".repeat(40);
+const TAGS = [`${SHA_OLD_RELEASE}\trefs/tags/v3.0.2`, `${SHA_RELEASE}\trefs/tags/v3.1.2`, `${"d".repeat(40)}\trefs/tags/nightly`].join("\n");
+
+test("release redirect: unreleased work goes to the newest release; a release commit, a chosen ref or an unknown stays", () => {
+  const ref = (commit, extra = {}) => installer.releaseRedirectRef({ commit, lsRemote: TAGS, newest: "3.1.2", env: {}, ...extra });
+  assert.equal(ref(SHA_MAIN), "v3.1.2");
+  assert.equal(ref(SHA_RELEASE), null, "the newest release (and the release branch on it) stays");
+  assert.equal(ref(SHA_OLD_RELEASE), null, "an older launcher's update --tag v3.0.2 stays on v3.0.2");
+  assert.equal(ref("d".repeat(40)), "v3.1.2", "a tag that is not vX.Y.Z is not a release");
+  assert.equal(ref(SHA_MAIN, { env: { PLAN2CODE_INSTALL_REF: "main" } }), null, "the current launcher's --main stays on main");
+  assert.equal(ref(null), null);
+  assert.equal(ref(SHA_MAIN, { newest: null }), null);
+  assert.equal(ref(SHA_MAIN, { lsRemote: null }), null);
+  // An annotated tag's commit is on its peeled line.
+  assert.equal(ref(SHA_MAIN, { lsRemote: `${"e".repeat(40)}\trefs/tags/v3.1.2\n${SHA_MAIN}\trefs/tags/v3.1.2^{}` }), null);
+});
+
+/** install.js laid out as npx leaves a git package: node_modules/plan2code beside npm's hidden lock file. */
+function npxCopy(commit) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-npx-copy-"));
+  const pkg = path.join(dir, "node_modules", "plan2code");
+  fs.mkdirSync(path.join(pkg, "src", "web-console"), { recursive: true });
+  fs.copyFileSync(INSTALL, path.join(pkg, "install.js"));
+  fs.copyFileSync(path.join(ROOT, "version.json"), path.join(pkg, "version.json"));
+  fs.copyFileSync(path.join(ROOT, "src", "web-console", "update-check.mjs"), path.join(pkg, "src", "web-console", "update-check.mjs"));
+  if (commit) {
+    const resolved = `git+ssh://git@github.com/jparkerweb/plan2code.git#${commit}`;
+    fs.writeFileSync(path.join(dir, "node_modules", ".package-lock.json"), JSON.stringify({ packages: { "node_modules/plan2code": { version: VERSION, resolved } } }));
+  }
+  fs.writeFileSync(path.join(dir, "ls-remote.txt"), TAGS + "\n");
+  // A stand-in npx that records its arguments and the ref the redirect handed it.
+  const bin = path.join(dir, "bin");
+  fs.mkdirSync(bin);
+  const recorder = path.join(bin, "record.js");
+  fs.writeFileSync(
+    recorder,
+    'require("fs").writeFileSync(require("path").join(__dirname, "npx.json"), JSON.stringify({ args: process.argv.slice(2), ref: process.env.PLAN2CODE_INSTALL_REF }));\nprocess.exitCode = 5;\n'
+  );
+  if (process.platform === "win32") fs.writeFileSync(path.join(bin, "npx.cmd"), `@"${process.execPath}" "${recorder}" %*\r\n`);
+  else {
+    fs.writeFileSync(path.join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${recorder}" "$@"\n`);
+    fs.chmodSync(path.join(bin, "npx"), 0o755);
+  }
+  const run = (args, env = {}) => {
+    const runEnv = { ...process.env, HOME, USERPROFILE: HOME, PLAN2CODE_LS_REMOTE_FILE: path.join(dir, "ls-remote.txt"), ...env };
+    delete runEnv.PLAN2CODE_INSTALL_REF;
+    for (const key of Object.keys(runEnv)) if (key.toUpperCase() === "PATH") delete runEnv[key];
+    runEnv.PATH = bin + path.delimiter + (process.env.PATH || process.env.Path || "");
+    Object.assign(runEnv, env);
+    return spawnSync(process.execPath, [path.join(pkg, "install.js"), ...args], { encoding: "utf8", env: runEnv, input: "" });
+  };
+  const npx = () => (fs.existsSync(path.join(bin, "npx.json")) ? JSON.parse(fs.readFileSync(path.join(bin, "npx.json"), "utf8")) : null);
+  return { dir, run, npx, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+test("release redirect: an old launcher's update from main runs the newest release's installer with the same options", (t) => {
+  const copy = npxCopy(SHA_MAIN);
+  t.after(copy.cleanup);
+  const result = copy.run(["--update", "--force"]);
+  assert.equal(result.status, 5, "the release installer's exit code is passed through\n" + result.stderr);
+  assert.match(result.stdout, /switching to the newest release, v3\.1\.2/);
+  const { args, ref } = copy.npx();
+  assert.deepEqual(args, ["--yes", "--allow-git=all", "git+https://github.com/jparkerweb/plan2code.git#v3.1.2", "--update", "--force"]);
+  assert.equal(ref, "v3.1.2", "the handed-off run is marked, so it never redirects again");
+});
+
+test("release redirect: a release copy, a run the launcher chose, or a copy with no lock file is not redirected", (t) => {
+  for (const [commit, env] of [[SHA_RELEASE, {}], [SHA_MAIN, { PLAN2CODE_INSTALL_REF: "main" }], [null, {}]]) {
+    const copy = npxCopy(commit);
+    t.after(copy.cleanup);
+    // An unknown option shows the run carried on here: the usage error, and no npx.
+    const result = copy.run(["--update", "--nope"], env);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /Unknown option\(s\)/);
+    assert.equal(copy.npx(), null);
+  }
+});
+
+test("release redirect: an interactive install from main is handed to the newest release too", (t) => {
+  const copy = npxCopy(SHA_MAIN);
+  t.after(copy.cleanup);
+  assert.equal(copy.run([]).status, 5);
+  assert.deepEqual(copy.npx().args.slice(-1), ["git+https://github.com/jparkerweb/plan2code.git#v3.1.2"]);
+});
+
 test("update: the real status line step keeps a custom statusLine without asking", async () => {
   const claudeDir = path.join(HOME, ".claude");
   const settingsFile = path.join(claudeDir, "settings.json");

@@ -1700,6 +1700,7 @@ async function runUpdate({ tag, main, force } = {}) {
   }
   console.log(ref === undefined ? 'Updating Plan2Code to the newest work on main...' : `Updating Plan2Code to ${ref}...`);
   console.log(c.dim('One update covers the skills, the plan2code command and the desktop app (when installed).'));
+  console.log(c.dim('npx fetches it quietly first, which can take a minute or two.'));
   const unreleased = main || (tag !== undefined && !/^v\d+\.\d+\.\d+$/.test(tag));
   return runInstaller(['--update', ...(force || unreleased ? ['--force'] : [])], ref);
 }
@@ -1745,7 +1746,10 @@ function runInstaller(installerArgs, tag) {
     return process.exit(127);
   }
   const spec = tag ? `git+${REPO_URL}#${tag}` : `git+${REPO_URL}`;
-  const child = spawnCommand(npx, ['--yes', '--allow-git=all', spec, ...installerArgs], { stdio: 'inherit' });
+  // The ref was picked on purpose (main included): install.js's release redirect, there for
+  // launchers older than the release channel, must leave this run where it is.
+  const env = { ...process.env, PLAN2CODE_INSTALL_REF: tag || 'main' };
+  const child = spawnCommand(npx, ['--yes', '--allow-git=all', spec, ...installerArgs], { stdio: 'inherit', env });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(signal, () => {});
   }
