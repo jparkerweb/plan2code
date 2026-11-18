@@ -7,7 +7,9 @@
    inherited min-height inside a bordered host counts the border twice. The
    height: auto resets cut notepad-editor.css's height: 100% rules, which this
    sheet is loaded beside and must never inherit sizing from. */
-:host { display: flex; flex-direction: column; height: auto; }
+/* cursor: a press anywhere inside the border goes to the text (md-field.js),
+   so the whole box shows the text pointer; .md-host.is-disabled outside wins. */
+:host { display: flex; flex-direction: column; height: auto; cursor: text; }
 .md-field { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .cm-editor { flex: 1 1 auto; min-height: 0; height: auto; background: transparent; color: var(--ink); font: inherit; }
 div.cm-editor.cm-focused { outline: none; }

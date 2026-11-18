@@ -16,6 +16,11 @@
 - About: scripts/test-web-console-shape.mjs, .agents-docs/AGENTS-architecture-console-page.md
 - Noted: 2026-11-14, implement-review
 
+### A no-hop dashboard request goes as a __<name> send; the agent answers with a top-level patch key checked in validate() (patches.mjs), and pointersForSend() maps it to console-launches.md.
+- Kind: convention
+- About: src/web-console/patches.mjs, src/web-console/pointers.mjs
+- Noted: 2026-11-17, quick-task
+
 ### A test run of node install.js with a temp HOME still writes the plan2code shims into the real npm global bin, because npm's prefix does not follow HOME; also set npm_config_prefix to a temp folder.
 - Kind: correction
 - About: install.js
@@ -26,6 +31,11 @@
 - Kind: how-it-works
 - About: install.js
 - Noted: 2026-11-17, implement-review
+
+### In a Markdown field (md-field.js), CodeMirror's scroller and content are only as tall as the text, not the bordered host: code that hit-tests the scroller must not assume it fills the box.
+- Kind: how-it-works
+- About: src/web-console/public/md-field.js
+- Noted: 2026-11-17, quick-task
 
 ### In a node:test file, start fixtures such as a test server in a root before hook, never with a top-level await after the first test(), which lets the runner run after hooks early
 - Kind: correction

@@ -233,6 +233,57 @@ export function makeMdField({ id, className, value = "", placeholder: hint, labe
       if (view) view.destroy();
     },
   };
+  // The editable line is only as tall as its text, so a press in the empty
+  // space below it (or on the frame's padding) would land on the scroller,
+  // which takes no focus. Anywhere inside the border counts as the box: focus
+  // it and put the caret at the nearest spot. Left alone: presses on the text
+  // itself (CodeMirror's own), the resize grip in the bottom-right corner and
+  // a scrollbar, whose drags a preventDefault would break.
+  host.addEventListener("mousedown", (event) => {
+    if (!view || off || event.button !== 0) return;
+    if (event.composedPath().includes(view.contentDOM)) return;
+    const box = host.getBoundingClientRect();
+    if (box.right - event.clientX < 18 && box.bottom - event.clientY < 18) return;
+    const scroller = view.scrollDOM;
+    const sb = scroller.getBoundingClientRect();
+    const inside = (x, y) => x >= sb.left && x < sb.right && y >= sb.top && y < sb.bottom;
+    const onBar =
+      inside(event.clientX, event.clientY) &&
+      (event.clientX >= sb.left + scroller.clientLeft + scroller.clientWidth || event.clientY >= sb.top + scroller.clientTop + scroller.clientHeight);
+    if (onBar) return;
+    event.preventDefault();
+    // The preventDefault also stops the browser's own selecting, and
+    // CodeMirror listens only on the text, so what a textarea does with a
+    // press is done here: Shift extends, a double click takes the word, a
+    // triple click the line, and a drag selects up to wherever it goes.
+    const where = (e) => view.posAtCoords({ x: e.clientX, y: e.clientY }, false) ?? view.state.doc.length;
+    const at = where(event);
+    const pick = (selection) => view.dispatch({ selection, userEvent: "select.pointer" });
+    view.focus();
+    if (event.detail >= 3) {
+      const line = view.state.doc.lineAt(at);
+      pick({ anchor: line.from, head: line.to });
+      return;
+    }
+    if (event.detail === 2) {
+      const word = view.state.wordAt(at);
+      pick(word ? { anchor: word.from, head: word.to } : { anchor: at });
+      return;
+    }
+    const anchor = event.shiftKey ? view.state.selection.main.anchor : at;
+    pick({ anchor, head: at });
+    const win = host.ownerDocument.defaultView;
+    const stop = () => {
+      win.removeEventListener("mousemove", move);
+      win.removeEventListener("mouseup", stop);
+    };
+    const move = (e) => {
+      if (gone || !(e.buttons & 1)) return stop();
+      pick({ anchor, head: where(e) });
+    };
+    win.addEventListener("mousemove", move);
+    win.addEventListener("mouseup", stop);
+  });
   if (off) host.classList.add("is-disabled");
   host.field = field;
   if (cm) build();

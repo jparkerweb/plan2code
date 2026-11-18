@@ -60,6 +60,62 @@ test("the answer box renders Markdown live, like the Notebook", async (t) => {
   assert.deepEqual(answerTo(got, "q1"), { text: "**bold**\nplain" });
 });
 
+test("a click anywhere inside the answer box's border focuses it, not only on the text line", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to build", body: "Describe it.", placeholder: "One line of hint." }] },
+  });
+  const card = itemCard(s.page, "q1");
+  const host = card.locator(".md-host").first();
+  const content = host.locator(".cm-content");
+  await content.waitFor({ timeout: 15000 });
+  await settled(s.page, "#main");
+  const box = await host.boundingBox();
+  const line = await content.boundingBox();
+  assert.ok(box.height - line.height > 30, "the box is taller than its one line of text, leaving empty space to click");
+  // Low in the box, well below the text line and clear of the resize grip.
+  await s.page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
+  assert.equal(await host.evaluate((el) => el === document.activeElement), true, "the box took the focus");
+  await s.page.keyboard.type("typed after a low click");
+  assert.equal(await host.evaluate((el) => el.field.value), "typed after a low click");
+});
+
+test("a press in the empty part of the answer box selects like a textarea: Shift extends, a drag selects, a double click takes the word", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to build", body: "Describe it." }] },
+  });
+  const host = itemCard(s.page, "q1").locator(".md-host").first();
+  const content = host.locator(".cm-content");
+  await content.waitFor({ timeout: 15000 });
+  await settled(s.page, "#main");
+  await content.click();
+  await s.page.keyboard.type("hello world");
+  const range = () => host.evaluate((el) => [el.field.selectionStart, el.field.selectionEnd]);
+  const box = await host.boundingBox();
+  const low = { x: box.x + box.width / 2, y: box.y + box.height - 12 };
+  assert.equal(await host.evaluate((el) => getComputedStyle(el).cursor), "text", "the whole box shows the text pointer");
+
+  await s.page.keyboard.press("Home");
+  // page.mouse takes no modifiers option: hold Shift on the keyboard.
+  await s.page.keyboard.down("Shift");
+  await s.page.mouse.click(low.x, low.y);
+  await s.page.keyboard.up("Shift");
+  assert.deepEqual(await range(), [0, 11], "Shift+click below the text extends from the caret");
+
+  const line = await content.boundingBox();
+  await s.page.mouse.move(low.x, low.y);
+  await s.page.mouse.down();
+  await s.page.mouse.move(line.x + 2, line.y + line.height / 2, { steps: 5 });
+  await s.page.mouse.up();
+  assert.deepEqual(await range(), [0, 11], "a drag from below the text up to its start selects it");
+
+  await s.page.mouse.dblclick(low.x, low.y);
+  assert.deepEqual(await range(), [6, 11], "a double click below the text takes the last word");
+});
+
 // The agent's side of one question: settle what came before, post `item`
 // alone, and wait for its card.
 async function ask(s, item) {
