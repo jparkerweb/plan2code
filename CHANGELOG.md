@@ -2,7 +2,37 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
-## v3.1.0
+<!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
+
+## v3.1.1 (2026-11-17)
+
+### ✨ Added
+
+- **install**: the install command now ends in `#release`, a branch that moves to each published release, so a new install never gets unfinished work from `main`.
+- **launcher**: `plan2code update` installs the newest release and prints one short summary (`Updating <old> -> <new>`, or `Already on <new>`); `--main` takes the newest work instead, `--tag <release>` goes back to an earlier one, and `--force` reinstalls.
+- **launcher**: `plan2code uninstall` lists what it removes and what it keeps in `~/.plan2code/`, with sizes; `--purge` also removes the desktop app's own data, and `--yes` skips the questions.
+- **launcher**: `plan2code --help` and `--version`; arguments after `--` go to the agent unchanged.
+- **desktop app**: Update and restart in the top bar installs the newest release with live progress and reopens on the same project, asking first when an agent or a loop is running.
+- **desktop app**: the window remembers its size and place, and the terminal gets a right-click menu, copy on select, font size keys and clickable links; new keyboard shortcuts work from both panes.
+- **docs**: a SECURITY.md for private vulnerability reports, and the issue form links to the docs, the desktop app guide and security.
+
+### 🔧 Changed
+
+- **license**: Plan2Code is now licensed under Apache 2.0 (it was MIT), with a NOTICE file.
+- **installer**: plainer output, with no colors or boxes when piped (`NO_COLOR` is honored), a spinner while the skills install, the exact PATH line for your shell when the command is not found, and a clear stop on Node.js older than 18.
+- **web console**: a broad visual refresh (spacing, type, shadow and motion tokens, shared top-bar icons); "Helpers" is now "Subagents" everywhere, and the meter says "Conversation".
+- **web console**: Clear acts at once with a 10-second Undo, the finish screen shows one main button, Help groups its topics with a filter and opens with `?`, and Cleanup shows what it will delete and its size.
+- **desktop app**: its own confirm dialogs (Cancel first and focused), plain-language errors with the details underneath, the console's theme from the first paint, and a top bar that folds extra buttons into a "+N more" menu.
+- **UI Prototype**: the carry-over card opens ticked as suggested, each item tagged Keep or Free up with its reason.
+- **docs**: the README is rewritten and shorter, the long guides moved into `.readme/`, the site hosts its own fonts and has a social card, and the screenshots are refreshed (Notepad is now Notebook).
+- **For contributors**: the release workflow fast-forwards the `release` branch, new `make-site-images`, `make-social-card` and `make-app-placeholders` scripts, more screenshot fixtures, and wider launcher, installer, app and console tests.
+
+### 🐛 Fixed
+
+- **launcher**: `plan2code update --main` reinstalls even when the version number has not moved (unreleased work on `main` keeps the last release's number), `uninstall` runs the newest release's installer, and a failed update no longer blocks the retry with "Already on".
+- **desktop app**: on macOS Ctrl+C stays the interrupt even with text selected, `uninstall --purge` also removes the saved window state, the PATH lookup works under fish, and loop spec names may contain dots.
+
+## v3.1.0 (2026-11-15)
 
 ### ✨ Added
 

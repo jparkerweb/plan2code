@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://plan2code.jparkerweb.com/sitemap.xml

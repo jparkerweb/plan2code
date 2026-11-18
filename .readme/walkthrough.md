@@ -9,7 +9,7 @@ Each session stays short, and the specs on disk carry everything from one sessio
 
 ## Before you start
 
-- **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
+- **Node.js 18 or newer** (22 or newer if you install Claude Code with npm). Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
 - **Git.** Check with `git --version`. The installer is fetched from GitHub with Git, and without it npm stops with `spawn git ENOENT`. No Git? Get it from [git-scm.com](https://git-scm.com/downloads), or run `winget install Git.Git` on Windows, `brew install git` on macOS, or use your package manager on Linux. Then open a new terminal.
 - **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
@@ -96,7 +96,7 @@ Parallel execution groups: Phase 3 and Phase 4 don't share files.
 ## Sessions 3 to N: Implement, one phase each
 
 Look at the session meter in the top bar first. Plan and Document add 2 points each, so after
-those two the meter is at 4: **Session: getting long**, in yellow. That is the cue to close this
+those two the meter is at 4: **Conversation: getting long**, in yellow. That is the cue to close this
 console session and start a fresh one for the build (run `plan2code` again). This is the first of
 the four rules:
 
@@ -134,7 +134,7 @@ Repeat. A fresh session each time. It always finds the next open phase itself.
 When you reach a parallel group, it offers you the choice: open a second agent, take the other
 phase, and the `[/]` marks keep them from colliding.
 
-Pick **Implement + review** instead when review should run automatically before phase approval.
+Pick **Implement + Review** instead when review should run automatically before phase approval.
 **Review** remains available on the dashboard for an independent second opinion at any other time.
 
 ---

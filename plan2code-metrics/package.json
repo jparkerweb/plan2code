@@ -20,7 +20,7 @@
     "plan2code",
     "contributor-tooling"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

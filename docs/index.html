@@ -9,16 +9,25 @@
 <meta name="theme-color" content="#0b2150">
 <meta property="og:title" content="Plan2Code: plan it, approve it, let it build">
 <meta property="og:description" content="A spec-driven workflow for AI coding agents, and a desktop app that puts the plan, your agent and every sign-off in one window.">
-<meta property="og:image" content="https://plan2code.jparkerweb.com/banner.jpg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://plan2code.jparkerweb.com/">
+<meta property="og:image" content="https://plan2code.jparkerweb.com/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Plan2Code: Plan it. Approve it. Let it build. Beside it, the Approve this phase card from the web console.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://plan2code.jparkerweb.com/">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=Martian+Mono:wght@300..600&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/martian-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 <script>document.documentElement.className += " js"</script>
 <style>
+/* Self-hosted, subset to Latin (see scripts/ and the Phase 11 notes): no blocking request to a font host. */
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 300 900; font-stretch: 62% 125%; font-display: swap; src: url("fonts/archivo-latin.woff2") format("woff2"); }
+@font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 300 800; font-stretch: 75% 112.5%; font-display: swap; src: url("fonts/martian-mono-latin.woff2") format("woff2"); }
 /* The page is a blueprint: cyanotype blue, chalk-white line work, one highlighter
    yellow for the moments that are yours (your move, your sign-off). The app window
    keeps the product's own warm dark palette, so it reads as the built thing lying
@@ -74,7 +83,7 @@ body {
 img { max-width: 100%; height: auto; }
 a { color: var(--chalk); text-underline-offset: 4px; text-decoration-color: var(--chalk-3); }
 a:hover { text-decoration-color: var(--mark); }
-code, kbd { font-family: var(--mono); font-size: 0.8em; }
+code, kbd { font-family: var(--mono); font-size: max(0.8em, 12.5px); }
 :focus-visible { outline: 2px solid var(--mark); outline-offset: 3px; border-radius: 3px; }
 h1, h2, h3 { margin: 0; font-family: var(--sans); }
 h2 {
@@ -94,7 +103,7 @@ p { margin: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sheet { padding: 120px 0; border-top: 1px solid var(--line-2); background: var(--bp-900); }
 .sheet.deep { background: var(--bp-950); }
-.fig-note { margin-top: 14px; color: var(--chalk-3); font: 400 11.5px/1.6 var(--mono); }
+.fig-note { margin-top: 14px; color: var(--chalk-3); font: 400 12.5px/1.6 var(--mono); }
 
 /* Planny. The star eye is always the highlight color. */
 .planny { display: block; width: 44px; height: 60px; overflow: visible; flex: none; color: var(--chalk); --shell: var(--bp-800); --star: var(--mark); }
@@ -147,6 +156,8 @@ p { margin: 0; }
 .hero-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px 48px; align-items: end; margin-top: 32px; }
 .hero-foot .lede { margin-top: 0; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-cmd { max-width: 880px; margin: 22px auto 0; }
+.cmd.hero-cmd pre { font-size: 15px; }
 
 /* The stage: dimension lines, the app window, the four moments of a session. */
 .stage { position: relative; max-width: 1320px; margin: 64px auto 0; padding: 0 var(--gutter); }
@@ -175,7 +186,7 @@ p { margin: 0; }
 .surface img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; opacity: 0; transition: opacity 0.5s ease; }
 .surface img.on { opacity: 1; }
 .stamp { position: absolute; right: 9%; top: 40%; padding: 10px 20px 8px; border: 3px solid var(--mark); border-radius: 6px; color: var(--mark); font: 800 clamp(15px, 2.2vw, 28px)/1.1 var(--sans); font-stretch: 122%; letter-spacing: 0.02em; background: rgba(23, 21, 19, 0.82); transform: rotate(-7deg) scale(1.6); opacity: 0; pointer-events: none; }
-.stamp small { display: block; font: 400 11px/1.6 var(--mono); letter-spacing: 0; color: var(--a-ink-2); }
+.stamp small { display: block; font: 400 12.5px/1.6 var(--mono); letter-spacing: 0; color: var(--a-ink-2); }
 .stamp.on { opacity: 1; transform: rotate(-7deg) scale(1); transition: transform 0.22s cubic-bezier(0.2, 1.4, 0.4, 1), opacity 0.12s; }
 .term { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--a-term); border-left: 1px solid var(--a-rule); }
 .stage[data-dock="bottom"] .term { border-left: 0; border-top: 1px solid var(--a-rule); height: 190px; }
@@ -186,7 +197,7 @@ html.js .seg { display: inline-flex; }
 .seg button + button { border-left: 1px solid rgba(255, 255, 255, 0.22); }
 .seg button[aria-pressed="true"] { background: var(--a-accent); color: #0c1117; }
 .seg button:focus-visible { outline-offset: -2px; }
-.tb { flex: 1; min-height: 0; margin: 0; padding: 12px; overflow: hidden; font: 400 11.5px/1.75 var(--mono); white-space: pre-wrap; word-break: break-word; display: flex; flex-direction: column; justify-content: flex-end; color: var(--a-ink); }
+.tb { flex: 1; min-height: 0; margin: 0; padding: 12px; overflow: hidden; font: 400 12.5px/1.75 var(--mono); white-space: pre-wrap; word-break: break-word; display: flex; flex-direction: column; justify-content: flex-end; color: var(--a-ink); }
 .tb .d { color: #a39b8e; }
 .tb .g { color: #7fd29a; }
 .tb .b { color: #8fb8f0; }
@@ -231,7 +242,7 @@ html:not(.js) .moments button { cursor: default; }
 .details svg .hi { stroke: var(--mark); }
 .details svg .hi-fill { fill: var(--mark); stroke: none; }
 .details svg .soft { stroke-dasharray: 3 4; stroke: var(--chalk-3); }
-.details svg text { fill: var(--chalk-2); stroke: none; font: 400 8px var(--mono); }
+.details svg text { fill: var(--chalk-2); stroke: none; font: 400 12.5px var(--mono); }
 .details p { color: var(--chalk-2); font-size: 15.5px; margin-top: 8px; }
 
 /* The Implementation Loop. */
@@ -248,7 +259,7 @@ html:not(.js) .moments button { cursor: default; }
 .banner .pips i.done { background: var(--a-ok); }
 .banner .pips i.now { background: var(--a-accent); animation: pulse 1.2s ease-in-out infinite alternate; }
 @keyframes pulse { to { opacity: 0.45; } }
-.banner .el { margin-left: auto; color: var(--a-ink-2); font: 400 12px var(--mono); }
+.banner .el { margin-left: auto; color: var(--a-ink-2); font: 400 12.5px var(--mono); }
 .banner .stop { padding: 4px 10px; border: 1px solid var(--a-rule-2); border-radius: 6px; font-size: 12.5px; color: var(--a-ink-2); }
 .ledger-scroll { overflow-x: auto; }
 .ledger th:first-child { padding-left: 16px; }
@@ -257,7 +268,7 @@ html:not(.js) .moments button { cursor: default; }
 .ledger thead th { font-weight: 500; font-size: 12.5px; color: var(--a-ink-2); background: var(--a-panel); }
 .ledger tbody th { font-weight: 600; white-space: nowrap; }
 .ledger tbody th small { display: block; font-weight: 400; color: var(--a-ink-2); font-size: 12.5px; }
-.ledger td { font-family: var(--mono); font-size: 11.5px; line-height: 1.7; color: var(--a-ink-2); white-space: nowrap; }
+.ledger td { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--a-ink-2); white-space: nowrap; }
 .ledger td[data-s="done"] { color: #7fd29a; }
 .ledger td[data-s="done"]::before { content: "\2713\00a0"; }
 .ledger td[data-s="now"] { color: var(--a-ink); }
@@ -283,21 +294,21 @@ html:not(.js) .moments button { cursor: default; }
 .pipe .n { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 1.5px solid var(--chalk); border-radius: 50%; background: var(--bp-950); font: 600 13px var(--mono); }
 .pipe li.opt .n { border-style: dashed; border-color: var(--chalk-3); color: var(--chalk-2); }
 .pipe h3 { margin-top: 18px; }
-.pipe h3 small { font: 400 11.5px var(--mono); color: var(--chalk-3); margin-left: 4px; }
+.pipe h3 small { font: 400 12.5px var(--mono); color: var(--chalk-3); margin-left: 4px; }
 .pipe p { color: var(--chalk-2); font-size: 14.5px; line-height: 1.5; margin-top: 6px; }
-.pipe code { display: block; margin-top: 12px; color: var(--mark); font-size: 10.5px; line-height: 1.6; }
-.pipe .out { display: block; margin-top: 4px; color: var(--chalk-3); font: 400 10.5px/1.6 var(--mono); }
+.pipe code { display: block; margin-top: 12px; color: var(--mark); font-size: 12.5px; line-height: 1.6; }
+.pipe .out { display: block; margin-top: 4px; color: var(--chalk-3); font: 400 12.5px/1.6 var(--mono); }
 .under { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px 64px; margin-top: 88px; }
 .under h3 { font-size: 1.45rem; font-weight: 800; font-stretch: 115%; letter-spacing: -0.01em; }
 .under h3 + p { color: var(--chalk-2); margin-top: 10px; font-size: 15.5px; }
-.tree { margin: 22px 0 0; padding: 20px 22px; border: 1px solid var(--line-2); border-radius: 6px; background: rgba(7, 22, 52, 0.6); font: 400 12px/1.95 var(--mono); color: var(--chalk-2); overflow-x: auto; white-space: pre; }
+.tree { margin: 22px 0 0; padding: 20px 22px; border: 1px solid var(--line-2); border-radius: 6px; background: rgba(7, 22, 52, 0.6); font: 400 12.5px/1.95 var(--mono); color: var(--chalk-2); overflow-x: auto; white-space: pre; }
 .tree b { color: var(--chalk); font-weight: 500; }
 .tree .x { color: var(--ok); }
 .tree .w { color: var(--mark); }
 .tree .c { color: var(--chalk-3); }
 .skills { margin: 22px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 40px; border-top: 1px solid var(--line-2); }
 .skills li { padding: 12px 0; border-bottom: 1px solid var(--line-2); font-size: 14.5px; line-height: 1.45; color: var(--chalk-2); }
-.skills code { display: block; color: var(--chalk); font-size: 11.5px; margin-bottom: 3px; }
+.skills code { display: block; color: var(--chalk); font-size: 12.5px; margin-bottom: 3px; }
 .agents { margin-top: 28px; color: var(--chalk-2); font-size: 15.5px; max-width: 72ch; }
 
 /* The rules. */
@@ -313,6 +324,7 @@ html:not(.js) .moments button { cursor: default; }
 .shots img { display: block; width: 100%; border-radius: 8px; box-shadow: 0 0 0 1px rgba(238, 244, 255, 0.22), 0 24px 60px rgba(2, 8, 24, 0.6); }
 .shots figcaption { margin-top: 16px; color: var(--chalk-2); font-size: 15.5px; max-width: 56ch; }
 .shots figcaption strong { color: var(--chalk); }
+.loop-shots { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 36px; }
 .aside { margin-top: 56px; display: flex; gap: 18px; align-items: center; color: var(--chalk-2); max-width: 70ch; }
 .aside .planny { width: 34px; height: 46px; }
 
@@ -320,12 +332,17 @@ html:not(.js) .moments button { cursor: default; }
 .install { padding: 120px 0 104px; border-top: 1px solid var(--line-2); }
 .install-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px 64px; align-items: start; }
 .before { border: 1px solid var(--line-2); border-radius: 6px; background: rgba(7, 22, 52, 0.7); padding: 22px 24px; font-size: 15.5px; }
-.before h3 { margin-bottom: 10px; }
+.needs { margin: 16px 0 0; color: var(--chalk-2); font-size: 15.5px; }
+.needs strong { color: var(--chalk); }
+.before { margin-top: 16px; padding: 14px 24px; }
+.before summary { cursor: pointer; font-weight: 700; color: var(--chalk); min-height: 28px; }
+.before summary:focus-visible { outline: 2px solid var(--mark); outline-offset: 4px; }
+.before[open] summary { margin-bottom: 10px; }
 .before ul { margin: 0; padding-left: 20px; color: var(--chalk-2); }
 .before li { margin: 8px 0; }
 .before strong { color: var(--chalk); }
 .cmd { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 10px 10px 10px 16px; background: var(--bp-950); border: 1.5px solid var(--chalk); border-radius: 6px; }
-.cmd pre { flex: 1; min-width: 0; margin: 0; overflow-x: auto; font: 400 11.5px/1.6 var(--mono); white-space: pre; color: var(--chalk); }
+.cmd pre { flex: 1; min-width: 0; margin: 0; overflow-x: auto; font: 400 12.5px/1.6 var(--mono); white-space: pre; color: var(--chalk); }
 .cmd pre span { color: var(--mark); user-select: none; }
 .copy { flex: none; min-height: 40px; padding: 0 16px; border: 0; border-radius: 4px; background: var(--mark); color: var(--bp-950); font: 700 14px var(--sans); cursor: pointer; }
 .copy:hover { background: #ffe08a; }
@@ -373,7 +390,7 @@ footer .brand { margin-right: auto; }
   .details li:first-child { border-top: 0; }
   .moments button { padding: 12px 12px 10px; font-size: 13.5px; }
   .cmd { flex-direction: column; align-items: stretch; padding: 14px; }
-  .cmd pre { font-size: 11.5px; }
+  .cmd pre { font-size: 12.5px; }
   .brand span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -398,6 +415,11 @@ footer .brand { margin-right: auto; }
 .light { position: absolute; left: -3%; right: -3%; top: -110px; height: 560px; background: radial-gradient(ellipse 50% 50% at 50% 50%, var(--light-1), var(--light-2) 40%, transparent 72%); filter: blur(46px); pointer-events: none; }
 .win { transform-origin: 50% 100%; transform: rotateX(var(--tilt, 0deg)); box-shadow: 0 0 0 1px var(--line-2), 0 -18px 70px -10px color-mix(in srgb, var(--light-2) 55%, transparent), 0 40px 90px rgba(0, 0, 0, 0.6); }
 .moments, .stage .fig-note { position: relative; }
+.pause { display: block; margin: 16px auto 0; min-height: 40px; padding: 0 18px; border: 1px solid var(--line-2); border-radius: 6px; background: transparent; color: var(--chalk); font: 600 14px var(--sans); cursor: pointer; }
+html:not(.js) .pause { display: none; }
+.pause[aria-pressed="true"] { background: rgba(238, 244, 255, 0.1); }
+.pause:hover { background: rgba(238, 244, 255, 0.07); }
+.pause:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
 .tree, .before { background: color-mix(in srgb, var(--bp-950) 70%, transparent); }
 .install { position: relative; overflow: hidden; }
 .install::before { content: ""; position: absolute; left: 10%; right: 10%; bottom: -330px; height: 460px; background: radial-gradient(ellipse 50% 50% at 50% 50%, var(--light-1), var(--light-2) 40%, transparent 72%); filter: blur(60px); opacity: .5; pointer-events: none; }
@@ -454,6 +476,10 @@ footer .brand { margin-right: auto; }
         <a class="btn solid" href="#install">Install Plan2Code</a>
         <a class="btn line" href="#workflow">See the workflow</a>
       </div>
+      <div class="cmd hero-cmd">
+        <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release</pre>
+        <button class="copy" type="button" aria-label="Copy the install command">Copy</button>
+      </div>
     </div>
   </div>
 
@@ -487,10 +513,10 @@ footer .brand { margin-right: auto; }
       </div>
       <div class="wbody">
         <div class="surface" id="surface">
-          <img class="on" src="screenshots/dashboard-plan-dark.webp" width="2560" height="1600" alt="The Plan2Code dashboard for a new task API project: the steps in order as cards, with the Plan card marked Suggested.">
-          <img src="screenshots/question-dark.webp" width="2560" height="1600" alt="A Plan question card, How tasks are paged, with three options, the first marked Suggested, each with its trade-off underneath.">
-          <img src="screenshots/build-dark.webp" width="2560" height="1600" alt="Phase 3 of the task API being built: 5 of 11 done on the progress bar, and the phase's task list with the first five ticked.">
-          <img src="screenshots/signoff-dark.webp" width="2560" height="1600" alt="The Approve this phase card, with a button to read the completion report and three choices: Review the code first, Approve this phase, and I want changes.">
+          <img class="on" src="screenshots/dashboard-plan-dark.webp" srcset="screenshots/dashboard-plan-dark-1280.webp 1280w, screenshots/dashboard-plan-dark.webp 2560w" sizes="(min-width: 1240px) 900px, 100vw" width="2560" height="1600" fetchpriority="high" aria-hidden="false" alt="The Plan2Code dashboard for a new task API project: the steps in order as cards, with the Plan card marked Suggested.">
+          <img src="screenshots/question-dark.webp" srcset="screenshots/question-dark-1280.webp 1280w, screenshots/question-dark.webp 2560w" sizes="(min-width: 1240px) 900px, 100vw" width="2560" height="1600" loading="lazy" aria-hidden="true" alt="A Plan question card, How tasks are paged, with three options, the first marked Suggested, each with its trade-off underneath.">
+          <img src="screenshots/build-dark.webp" srcset="screenshots/build-dark-1280.webp 1280w, screenshots/build-dark.webp 2560w" sizes="(min-width: 1240px) 900px, 100vw" width="2560" height="1600" loading="lazy" aria-hidden="true" alt="Phase 3 of the task API being built: 5 of 11 done on the progress bar, and the phase's task list with the first five ticked.">
+          <img src="screenshots/signoff-dark.webp" srcset="screenshots/signoff-dark-1280.webp 1280w, screenshots/signoff-dark.webp 2560w" sizes="(min-width: 1240px) 900px, 100vw" width="2560" height="1600" loading="lazy" aria-hidden="true" alt="The Approve this phase card, with a button to read the completion report and three choices: Review the code first, Approve this phase, and I want changes.">
           <div class="stamp" id="stamp" aria-hidden="true">Approved<small>phase 3 of 4, by you</small></div>
         </div>
         <div class="term">
@@ -521,6 +547,7 @@ footer .brand { margin-right: auto; }
       <li><button type="button" aria-pressed="false"><strong>Sign off</strong>Nothing is marked complete until you approve it.</button></li>
     </ol>
     <p class="fig-note">Illustration: the app's window drawn around real screenshots of its pages. The terminal lines are an example.</p>
+    <button class="pause" id="pause" type="button" aria-pressed="false">Pause the tour</button>
   </div>
 </section>
 
@@ -552,6 +579,16 @@ footer .brand { margin-right: auto; }
         <p>A dot on the taskbar entry turns green when a question or a sign-off is waiting, so the window can sit behind your other work.</p>
       </li>
     </ul>
+    <div class="shots">
+      <figure>
+        <img loading="lazy" src="screenshots/app-launch-dark.webp" width="2560" height="1600" alt="The desktop app's launch card, asking which agent, model and effort to start on.">
+        <figcaption><strong>Pick the agent first.</strong> The launch card asks which agent, model and effort to start on, with permission checks as their own tick.</figcaption>
+      </figure>
+      <figure>
+        <img loading="lazy" src="screenshots/app-terminal-dark.webp" width="2560" height="1600" alt="The desktop app with the dashboard on the left and the agent's terminal docked on the right.">
+        <figcaption><strong>The plan beside the agent.</strong> The dashboard and the agent's terminal share one window, docked where you like.</figcaption>
+      </figure>
+    </div>
   </div>
 </section>
 
@@ -591,6 +628,16 @@ footer .brand { margin-right: auto; }
           <div class="ping"><div><b>✅ Phase complete</b><span>Plan2Code loop on task-api: Phase 2 of 4 (Tasks model) is complete. Done: 5 tasks, committed "Add the tasks model" (a41c9e2). Next: Phase 3, API endpoints. Elapsed: phase 6m, run 14m.</span></div></div>
         </div>
         <p class="fig-note">Illustration with example data. The message is the one the loop sends to your chat.</p>
+        <div class="shots loop-shots">
+          <figure>
+            <img loading="lazy" src="screenshots/loop-setup-dark.webp" width="2560" height="1600" alt="The Implementation Loop setup screen in the desktop app.">
+            <figcaption><strong>Set it up once.</strong> Pick the phases, a model strength for each and the quick check.</figcaption>
+          </figure>
+          <figure>
+            <img loading="lazy" src="screenshots/loop-banner-dark.webp" width="2560" height="1600" alt="The Implementation Loop banner while a phase builds, with Stop after this phase.">
+            <figcaption><strong>Watch it run.</strong> The banner shows the phase, the time and a way to stop after this phase.</figcaption>
+          </figure>
+        </div>
         <div class="stops">
           <h3>It would rather stop than guess. The loop ends on a stop screen, with the evidence, when:</h3>
           <ul>
@@ -627,7 +674,7 @@ footer .brand { margin-right: auto; }
         <h3>The checkboxes are the state</h3>
         <p>Progress lives in the spec files, not in the chat. Close the window mid-phase and nothing is lost.</p>
 <pre class="tree" aria-label="Example spec folder"><b>specs/task-api/</b>
-├─ PLAN-DRAFT-2026-11-02.md
+├─ PLAN-DRAFT-YYYYMMDD.md
 ├─ overview.md            <span class="c">phases 1 and 2 done</span>
 ├─ phase-1.md             <span class="x">[x] 4 of 4</span>
 ├─ phase-2.md             <span class="x">[x] 5 of 5</span>
@@ -647,6 +694,7 @@ footer .brand { margin-right: auto; }
           <li><code>/plan2code-xray</code>Explains how and why an area of the code works.</li>
           <li><code>/plan2code-pr-prep</code>Runs the checks your branch needs and writes the PR description.</li>
           <li><code>/plan2code-test</code>Finds code with no tests and writes them in your project's style.</li>
+          <li><code>/plan2code-deps</code>Finds outdated packages, says how safe each update is, and applies only what you pick.</li>
           <li><code>/plan2code-dead-code</code>Finds code nothing uses and removes only what you pick.</li>
           <li><code>/plan2code-1b-revise-plan</code>Requirements moved mid-build: revise the specs, not the code.</li>
           <li><code>/plan2code-handoff</code>Packs a session into a document a fresh one resumes from.</li>
@@ -655,7 +703,7 @@ footer .brand { margin-right: auto; }
         </ul>
       </div>
     </div>
-    <p class="agents">The skills install into every agent the skills CLI supports, including Claude Code, Cursor, GitHub Copilot, Windsurf, Codex, Devin, OpenCode, Gemini CLI, Cline, Goose and Zed. Each skill asks whether you want its page or plain terminal prompts, so the whole workflow also runs over SSH with no window at all.</p>
+    <p class="agents">The skills install into every agent the skills CLI supports, including Claude Code, Cursor, GitHub Copilot, Windsurf, Codex, Devin, OpenCode, Gemini CLI, Cline, Goose, Zed and more. Each skill asks whether you want its page or plain terminal prompts, so the whole workflow also runs over SSH with no window at all.</p>
   </div>
 </section>
 
@@ -687,7 +735,7 @@ footer .brand { margin-right: auto; }
         <figcaption><strong>Ask, beside the cards.</strong> A chat for anything you want to know, answered at the agent's next check-in. It never holds up your answers.</figcaption>
       </figure>
       <figure>
-        <img loading="lazy" src="screenshots/notepad-dark.webp" width="2560" height="1600" alt="The Notebook open over a question: two named tabs, and a heading, bullets and bold styled in place as they are typed.">
+        <img loading="lazy" src="screenshots/notebook-dark.webp" width="2560" height="1600" alt="The Notebook open over a question: two named tabs, and a heading, bullets and bold styled in place as they are typed.">
         <figcaption><strong>A private notebook.</strong> Markdown and pictures, one pad per folder. The agent reads a tab only when you start a workflow from it.</figcaption>
       </figure>
       <figure>
@@ -695,15 +743,23 @@ footer .brand { margin-right: auto; }
         <figcaption><strong>A clear next step.</strong> Every ending says what happened and what to run next, with one button to carry on in the same session.</figcaption>
       </figure>
       <figure>
-        <img loading="lazy" src="screenshots/dashboard-utilities-dark.webp" width="2560" height="1600" alt="The dashboard's utility cards: Get a PR ready, Write missing tests, Clear out dead code, Changelog, Git and Handoff, each with a line on what it does and its command.">
+        <img loading="lazy" src="screenshots/dashboard-utilities-dark.webp" width="2560" height="1600" alt="The dashboard's utility cards: Diagnose a bug, Get a PR ready, Write missing tests, Clear out dead code, Update dependencies, Prototype a screen, Changelog, Git (noting the folder is not a git repository yet) and Handoff, each with a line on what it does and its command.">
         <figcaption><strong>Every skill is a card.</strong> The any-time skills sit on the dashboard beside the steps, each with what it does and the command behind it.</figcaption>
       </figure>
       <figure>
         <img loading="lazy" src="screenshots/git-dark.webp" width="2560" height="1600" alt="The git board on feature/task-endpoints: the Changes tab opens on a Next step card reading Commit 3 files, above the three changed files ticked for the commit.">
         <figcaption><strong>A git board.</strong> Changes, Branches and Sync, opening on your likely next step. It asks before anything is pushed, published or deleted, and it never force-pushes.</figcaption>
       </figure>
+      <figure>
+        <img loading="lazy" src="screenshots/signoff-changes-dark.webp" width="2560" height="1600" alt="The Changes tab beside the Approve this phase card: three changed files listed on the left, and the diff of paginate.js on the right with added and removed lines marked.">
+        <figcaption><strong>Read the diff before you sign.</strong> The Changes tab lists every file the phase touched, with the diff beside the approval, so you see the code before you say yes.</figcaption>
+      </figure>
+      <figure>
+        <img loading="lazy" src="screenshots/lessons-dark.webp" width="2560" height="1600" alt="The Lessons to keep card: three lessons about the task API, each with Keep, Reword and Drop.">
+        <figcaption><strong>It remembers what it learned about your code.</strong> Lessons are offered at the end of a run, kept only when you say so, and saved with the repo for the next session.</figcaption>
+      </figure>
     </div>
-    <p class="aside"><svg class="planny" viewBox="0 0 22 30" aria-hidden="true" focusable="false"><use href="#pl-body"/><use href="#pl-up"/></svg><span>That is Planny. He waves when it is your turn, walks while the agent works, and throws his arms up when you approve a phase.</span></p>
+    <p class="aside"><svg class="planny" viewBox="0 0 22 30" aria-hidden="true" focusable="false"><use href="#pl-body"/><use href="#pl-up"/></svg><span>That is Planny. He waves when it is your turn, walks while the agent works, and throws his arms up when you approve a phase. <a href="https://github.com/jparkerweb/plan2code/blob/main/.readme/walkthrough.md">Read the walkthrough</a> for a whole feature, start to finish.</span></p>
   </div>
 </section>
 
@@ -711,26 +767,27 @@ footer .brand { margin-right: auto; }
   <div class="wrap install-grid">
     <div>
       <h2 id="install-title">One line installs all of it.</h2>
-      <p class="lede">The skills, the <code>plan2code</code> command and, if you say yes, the desktop app. Run it again any time to update. MIT licensed.</p>
+      <p class="lede">The skills, the <code>plan2code</code> command and, if you say yes, the desktop app. Run it again any time to update. Apache 2.0 licensed.</p>
     </div>
     <div>
-      <div class="before">
-        <h3>Before you start</h3>
+      <div class="cmd">
+        <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release</pre>
+        <button class="copy" type="button" aria-label="Copy the install command">Copy</button>
+      </div>
+      <p class="needs"><strong>Needs Node 18+ and Git.</strong> Includes the desktop app for Windows, macOS and Linux (<a href="https://github.com/jparkerweb/plan2code/releases/latest">latest release</a>).</p>
+      <details class="before">
+        <summary>Before you start</summary>
         <ul>
-          <li><strong>Node.js 18 or newer.</strong> Check with <code>node --version</code>. No Node? Get it from <a href="https://nodejs.org/">nodejs.org</a> (the LTS download), or run <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on macOS, or use <code>nvm</code> on Linux. Then open a new terminal.</li>
+          <li><strong>Node.js 18 or newer</strong> (22 or newer if you install Claude Code with npm). Check with <code>node --version</code>. No Node? Get it from <a href="https://nodejs.org/">nodejs.org</a> (the LTS download), or run <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on macOS, or use <code>nvm</code> on Linux. Then open a new terminal.</li>
           <li><strong>Git.</strong> Check with <code>git --version</code>. The installer is fetched from GitHub with Git, and without it npm stops with <code>spawn git ENOENT</code>. No Git? Get it from <a href="https://git-scm.com/downloads">git-scm.com</a>, or run <code>winget install Git.Git</code> on Windows, <code>brew install git</code> on macOS, or use your package manager on Linux. Then open a new terminal.</li>
           <li><strong>Start from your project.</strong> Open your terminal in the project you want to work on (<code>cd</code> into it) before you run anything. Plan2Code works on the folder you start it in.</li>
           <li><strong>Ways in.</strong> <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</li>
           <li><strong>No agent yet?</strong> Install Claude Code, Codex or Devin first, or let the <code>plan2code</code> command's setup page walk you through it.</li>
         </ul>
-      </div>
-      <div class="cmd">
-        <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
-        <button class="copy" type="button" aria-label="Copy the install command">Copy</button>
-      </div>
+      </details>
       <ul class="after">
         <li><strong>Then, from your project, run <code>plan2code</code>.</strong> With the app installed it opens the app, and <code>plan2code --classic</code> keeps the agent in your terminal. Already inside your agent? Type <code>/plan2code</code> (<code>$plan2code</code> in Codex).</li>
-        <li><strong>The app is checked before it is kept.</strong> The installer downloads the build for your system (Windows x64, macOS on Apple silicon or Intel, Linux x64) and verifies it against the release's checksum list. This first release is unsigned, so your system may ask you to allow it once. <a href="https://github.com/jparkerweb/plan2code/blob/main/docs/desktop-app.md">Read the app guide</a>.</li>
+        <li><strong>The app is checked before it is kept.</strong> The installer downloads the build for your system (Windows x64, macOS on Apple silicon or Intel, Linux x64) and verifies it against the release's checksum list. The app is not code-signed (signing is not planned for now), so your system may ask you to allow it once. <a href="https://github.com/jparkerweb/plan2code/blob/main/docs/desktop-app.md">Read the app guide</a>.</li>
         <li><strong>Back at your prompt with nothing printed?</strong> The installer always opens a menu, so no output at all means npm could not reach the repository and hid the reason. <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> shows why.</li>
       </ul>
     </div>
@@ -746,23 +803,23 @@ footer .brand { margin-right: auto; }
     <a href="https://github.com/jparkerweb/plan2code#readme">README</a>
     <a href="https://github.com/jparkerweb/plan2code/releases">Releases</a>
     <a href="https://github.com/jparkerweb/plan2code/blob/main/CHANGELOG.md">Changelog</a>
-    <span>MIT license</span>
+    <span>Apache 2.0 license</span>
   </div>
 </footer>
 
 <script>
 (function () {
-  var CMD = 'npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git';
+  var CMD = 'npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release';
   var $ = function (i) { return document.getElementById(i); };
   var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* Copy the install command. */
-  var copy = document.querySelector('.copy');
-  var copyTimer;
+  var copies = document.querySelectorAll('.copy');
+  var copyTimer, copy;
   function copied() {
-    copy.textContent = 'Copied';
+    [].forEach.call(copies, function (c) { c.textContent = 'Copied'; });
     clearTimeout(copyTimer);
-    copyTimer = setTimeout(function () { copy.textContent = 'Copy'; }, 1800);
+    copyTimer = setTimeout(function () { [].forEach.call(copies, function (c) { c.textContent = 'Copy'; }); }, 1800);
   }
   function copyFallback() {
     var ta = document.createElement('textarea');
@@ -775,9 +832,11 @@ footer .brand { margin-right: auto; }
     try { document.execCommand('copy'); copied(); } catch (e) {}
     document.body.removeChild(ta);
   }
-  copy.addEventListener('click', function () {
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CMD).then(copied, copyFallback);
-    else copyFallback();
+  [].forEach.call(copies, function (c) {
+    c.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CMD).then(copied, copyFallback);
+      else copyFallback();
+    });
   });
 
   /* The window: four moments of one session, played in order until someone picks one. */
@@ -831,7 +890,10 @@ footer .brand { margin-right: auto; }
     var m = MOMENTS[i], k;
     at = i;
     while (timers.length) clearTimeout(timers.pop());
-    for (k = 0; k < imgs.length; k++) imgs[k].classList.toggle('on', k === i);
+    for (k = 0; k < imgs.length; k++) {
+      imgs[k].classList.toggle('on', k === i);
+      imgs[k].setAttribute('aria-hidden', String(k !== i));
+    }
     for (k = 0; k < btns.length; k++) btns[k].setAttribute('aria-pressed', String(k === i));
     moments.classList.toggle('auto', auto);
     stamp.classList.remove('on');
@@ -852,8 +914,24 @@ footer .brand { margin-right: auto; }
     }, calm ? 0 : 3000);
     if (auto) later(function () { show((i + 1) % MOMENTS.length); }, BEAT);
   }
+  /* A visible, keyboard-reachable pause for the rotation. */
+  var pauseBtn = $('pause');
+  function syncPause() {
+    /* One fixed label; aria-pressed carries the state. */
+    pauseBtn.setAttribute('aria-pressed', String(!auto));
+  }
+  pauseBtn.addEventListener('click', function () {
+    auto = !auto;
+    syncPause();
+    if (auto) show(at);
+    else {
+      while (timers.length) clearTimeout(timers.pop());
+      moments.classList.remove('auto');
+    }
+  });
+  syncPause();
   [].forEach.call(btns, function (b, i) {
-    b.addEventListener('click', function () { auto = false; show(i); });
+    b.addEventListener('click', function () { auto = false; syncPause(); show(i); });
   });
   [].forEach.call(document.querySelectorAll('.seg button'), function (b) {
     b.addEventListener('click', function () {

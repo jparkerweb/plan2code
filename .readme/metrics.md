@@ -1,4 +1,4 @@
-# Metrics &amp; Self-Improvement
+# Metrics and Self-Improvement
 
 `plan2code-metrics` closes the loop on the workflow itself: it collects data from your finished
 specs, aggregates it across runs and prompt generations, then uses AI to diagnose which step is

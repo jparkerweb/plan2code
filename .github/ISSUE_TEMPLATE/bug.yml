@@ -32,20 +32,32 @@ body:
       label: Which skill or tool?
       options:
         - Dashboard (/plan2code)
-        - Init / Init Update
+        - Init / Init update
         - Pathfinder
-        - Plan / Revise Plan
-        - Quick Task
+        - Plan / Revise plan
         - Document
         - Implement / Implement + Review
-        - Review
-        - Finalize
-        - Handoff
-        - Web console (page itself)
         - Implementation Loop (desktop app)
+        - Finalize
+        - Quick task
+        - Review
+        - X-ray
+        - Diagnose
+        - PR Prep
+        - Test
+        - Dead Code
+        - Update dependencies
+        - UI Prototype
+        - Git
+        - Changelog
+        - Handoff
+        - Learning
+        - Activities (the games)
+        - Web console (page itself)
+        - The plan2code launcher (command line)
+        - Installer
         - Metrics
         - Status line
-        - Installer
         - Other
     validations:
       required: true
@@ -55,6 +67,7 @@ body:
       label: Where were you working?
       options:
         - Web console
+        - Desktop app
         - Terminal
         - Not sure
     validations:
@@ -64,7 +77,7 @@ body:
     attributes:
       label: Plan2Code version
       description: Found in version.json, the installer banner, or at the bottom of the web console's Help dialog.
-      placeholder: "2.4.0"
+      placeholder: "3.1.0"
   - type: input
     id: environment
     attributes:

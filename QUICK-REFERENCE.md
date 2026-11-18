@@ -16,7 +16,7 @@ The web console is the main way in: a local page where questions, documents, bui
 | ------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
 | From your project (shell) | `plan2code`                          | Opens Claude Code, Devin or Codex on the dashboard (`--cli claude` / `devin` / `codex` to choose) |
 | Inside any agent          | `/plan2code` (`$plan2code` in Codex) | Opens the dashboard: a card for every skill, launched on the same page                 |
-| Install                   | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command (re-run it to update without the `plan2code` command) |
+| Install                   | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release` | Installs the skills and the `plan2code` command (to update, run `plan2code update`; re-running the install command also works, and removes nothing) |
 | Update                    | `plan2code update`                   | Updates the skills, command, app and status line, with no menu (metrics and the bot only from a git checkout: `node install.js`); never uninstalls anything |
 | Uninstall                 | `plan2code uninstall`                | Removes the skills, command, app and dev tools after a Y/N; then asks whether `~/.plan2code/` (your notebooks, handoffs, settings) goes too. `--yes` skips the questions and keeps your data, `--purge` deletes it |
 | Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
@@ -25,7 +25,11 @@ The install command always opens a menu. Back at your prompt with no output at a
 
 Pick a skill on the dashboard and the same page becomes that session. Details: [.readme/web-console.md](.readme/web-console.md) · worked example: [.readme/walkthrough.md](.readme/walkthrough.md).
 
-The **Notebook** icon in the top bar opens a private scratch pad for the folder you are in (Markdown and pictures, kept in `~/.plan2code/notepads/`). Private: the agent never reads your Notebook. A tab reaches it only when you start a workflow with it.
+The **Notebook** icon in the top bar opens a private scratch pad for the folder you are in (Markdown and pictures, kept in `~/.plan2code/notepads/`); the agent reads a tab only when you send it by starting a skill from that tab.
+
+**Desktop app:** the installer also offers a window with the dashboard and your agent's terminal side by side; once installed, `plan2code` opens it.
+`plan2code --classic` keeps the agent in your terminal instead.
+The **Implementation Loop** (app only) builds every remaining phase of a spec unattended, one fresh agent per phase: [docs/desktop-app.md](docs/desktop-app.md).
 
 ## Commands
 
@@ -45,13 +49,14 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | 3          | /plan2code-3-implement        | overview.md     | Implemented code                                                                                              |
 | 3+review   | /plan2code-3-implement-review | overview.md     | Reviewed implementation ready for approval (alternative to `/plan2code-3-implement`)                          |
 | 4          | /plan2code-4-finalize         | overview.md     | Archived specs                                                                                                |
-| handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc (OS temp dir by default, or a folder you pick such as `handoffs/`)                 |
+| handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc, saved in `~/.plan2code/handoffs/` and listed on the dashboard to pick up         |
 | xray       | /plan2code-xray               | An area, or none | An explanation citing files and commits, or `ARCHITECTURE-BRIEF-<date>.md` with the rough spots you picked |
-| diagnose   | /plan2code-diagnose           | A bug, or none  | `DIAGNOSIS-<date>.md` with the cause and its evidence, then Quick Task (or Plan for a big fix) to fix it |
+| diagnose   | /plan2code-diagnose           | A bug, or none  | `DIAGNOSIS-<date>.md` with the cause and its evidence, then Quick task (or Plan for a big fix) to fix it |
 | pr-prep    | /plan2code-pr-prep            | Your branch     | A readiness verdict (Ready, Ready with notes, Not ready) and a PR description to copy; no commits, no push |
 | test       | /plan2code-test               | An area, or none | New unit and integration tests in the project's style, run; a bug handed to Diagnose; no source changes |
 | dead-code  | /plan2code-dead-code          | A folder, or none | Findings labeled Safe, Check first or Warning, then only the removals you pick, checked by the tests and build; no commits, no installs |
 | ui-prototype | /plan2code-ui-prototype     | A screen or flow, or none | One page of several versions with live dials, your pick pasted back; `prototypes/<name>.html` and `.md` in a spec on a yes; no code changes |
+| deps       | /plan2code-deps               | Your manifests  | Each update labeled Safe, Check first or Warning, then only the ones you pick applied in batches with your checks after each; a ticked Warning writes `UPGRADE-<date>.md`; no commits |
 | changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
 | git        | /plan2code-git                | Your repo       | Commits (`<subject>` / `AI Assisted`), branches, pull with conflict help, push, publish                       |
 
@@ -67,13 +72,20 @@ specs/
     │   ├── questions/NN-<slug>.md    #   one decision question per file
     │   └── briefs/brief-<date>.md    #   on-demand plain-English decision briefs
     │                                 #   (GitHub Issues backend: map issue + sub-issues instead)
+    ├── prototypes/                   # From Prototype a screen (saved on a yes)
+    │   └── <name>.html + <name>.md   #   the page, and the choice it made
     ├── PLAN-DRAFT-<date>.md          # From Step 1 (verified plan)
     ├── PLAN-CONVERSATION-<date>.md   # From Step 1 (conversation log)
+    ├── DIAGNOSIS-<date>.md           # From Diagnose a bug
+    ├── UPGRADE-<date>.md             # From Update dependencies (a ticked Warning)
     ├── overview.md                   # From Step 2
-    └── phase-X.md                    # From Step 2
+    ├── phase-X.md                    # From Step 2
+    └── LOOP-SUMMARY-<date>.md        # From the Implementation Loop (desktop app)
 
 specs--completed/                     # After Step 4
 └── <feature-name>/                   # Archived specs
+
+.plan2code/                           # Saved with the repository: the project's lessons and the Learning switch
 ```
 
 Note: `<date>` uses YYYYMMDD format (e.g., `20250204`)

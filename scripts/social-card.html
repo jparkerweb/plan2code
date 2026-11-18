@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Plan2Code social card</title>
+<style>
+@font-face { font-family: "Archivo"; src: url("../docs/fonts/archivo-latin.woff2") format("woff2"); font-weight: 300 900; font-stretch: 62% 125%; }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1200px; height: 630px; overflow: hidden; }
+body {
+  background: radial-gradient(900px 500px at 85% 10%, #1a4596 0%, #0b2150 55%, #071634 100%);
+  font-family: "Archivo", system-ui, sans-serif;
+  color: #eef4ff;
+  position: relative;
+}
+.grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(170,200,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(170,200,255,.08) 1px, transparent 1px); background-size: 40px 40px; }
+.copy { position: absolute; left: 64px; top: 120px; width: 500px; }
+.brand { font-size: 26px; font-weight: 700; letter-spacing: .02em; color: #b9cbee; margin-bottom: 28px; }
+h1 { font-size: 76px; line-height: 1.02; font-weight: 800; font-stretch: 100%; letter-spacing: -.01em; }
+h1 span { display: block; }
+h1 .mark { color: #ffd45e; }
+p { margin-top: 28px; font-size: 26px; line-height: 1.35; color: #b9cbee; }
+.shot { position: absolute; left: 620px; top: 150px; width: 700px; border-radius: 14px; border: 1px solid rgba(170,200,255,.35); box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+</style>
+<div class="grid"></div>
+<div class="copy">
+  <div class="brand">Plan2Code</div>
+  <h1><span>Plan it.</span><span>Approve it.</span><span class="mark">Let it build.</span></h1>
+  <p>Plan, approve and build with your AI agent, on one page.</p>
+</div>
+<img class="shot" src="../docs/screenshots/signoff-dark.webp" alt="">

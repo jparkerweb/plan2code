@@ -1,19 +1,33 @@
 
 # Plan2Code
 
-**A spec-driven workflow for AI coding agents.**
+[![Release](https://img.shields.io/github/v/release/jparkerweb/plan2code)](https://github.com/jparkerweb/plan2code/releases/latest) [![License](https://img.shields.io/github/license/jparkerweb/plan2code)](LICENSE) ![Platforms: Windows, macOS, Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
-<img src="docs/banner.jpg" alt="banner" data="object-fit:contain;" style="max-width:1024px;">
+**Plan it. Approve it. Let it build.**
 
-You work through Plan2Code on a page in your browser. The dashboard lists every step as a card, and
-each step's questions, progress and sign-offs arrive on that same page while your agent does the
-work. What you decide still lands in your repo as plain files: an approved plan becomes phase
-documents, and the agent builds to them one phase at a time, so the next session, the next agent and
-the next engineer all start from the same specs.
+- **The app.** A desktop window with the dashboard and your agent's terminal side by side, for Windows, macOS and Linux.
+- **The Loop.** It builds every remaining phase of a spec, one fresh agent per phase, while you do something else.
+- **Plain files in your repo.** What you decide lands as specs, so the next session, agent and engineer start from the same plan.
 
-One command opens it, every step is a card, and the terminal is always there if you prefer it.
+<img src="docs/banner.jpg" alt="Plan2Code: Planny walking the steps from Pathfinder to Finalize" width="1024">
 
-Version 3.1.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Plan2Code is a spec-driven workflow for AI coding agents. You work through it on a page in your browser: the dashboard lists every step as a card, and each step's questions, progress and sign-offs arrive on that same page while your agent does the work. An approved plan becomes phase documents, and the agent builds to them one phase at a time.
+
+Version 3.1.1 · Apache 2.0 · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+
+---
+
+## Contents
+
+- [See it](#see-it)
+- [Install and start](#install-and-start)
+- [A session on the page](#a-session-on-the-page)
+- [The workflow](#the-workflow)
+- [The skills](#the-skills)
+- [The four rules](#the-four-rules-that-do-most-of-the-work)
+- [What lands in your repo](#what-lands-in-your-repo)
+- [Troubleshooting](#troubleshooting)
+- [Dive deeper](#dive-deeper)
 
 ---
 
@@ -25,6 +39,12 @@ Version 3.1.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparke
 </picture>
 
 The dashboard, in a project halfway through a build. It suggests the next step for the spec you pick.
+
+```bash
+npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release
+```
+
+Needs Node.js 18+ and Git (details under [Before you start](#before-you-start)). Then `cd` into your project and run `plan2code`.
 
 ---
 
@@ -38,10 +58,10 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
 - **No agent yet?** Install Claude Code, Codex or Devin first, or let the `plan2code` command's setup page walk you through it.
 
-Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, run `plan2code update` (or re-run the install command). To remove everything, run `plan2code uninstall`: it asks first, then asks whether your own data in `~/.plan2code/` (notebooks, handoffs, settings) goes too. `--yes` skips the questions and keeps your data; add `--purge` to delete it.
+Installation needs network access and runs through the [skills CLI](https://skills.sh). The command installs the newest release: `#release` is a branch that moves to each release as it is published, so you never get unfinished work from `main`. To update, run `plan2code update`: it installs the newest release too, prints `Updating <old> -> <new>` (or `Already on <new>` and stops; `plan2code update --force` reinstalls anyway), and `plan2code update --main` takes the newest work on `main` instead. **Go back to a release** with `plan2code update --tag v3.0.2` (any release tag works). To remove everything, run `plan2code uninstall`: it asks first, then asks whether your own data in `~/.plan2code/` (notebooks, handoffs, settings) goes too. `--yes` skips the questions and keeps your data; add `--purge` to delete it.
 
 ```bash
-npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
+npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release
 ```
 
 This fetches the installer to a temp directory, builds the workflow as Agent Skills, delegates
@@ -76,74 +96,15 @@ The installer opens this menu (cloning and running `node install.js`, below, ope
 
 Already inside your agent? Type `/plan2code` instead (`$plan2code` in Codex).
 
-<details>
-<summary>About the plan2code command</summary>
+Run `plan2code` from any project to open the dashboard in Claude Code, Devin or Codex (it asks which when more than one is installed). Flags, permission prompts, the desktop shortcut, other agent CLIs and the setup page for a missing agent are in [.readme/launcher.md](.readme/launcher.md).
 
-Install (`I`) adds `plan2code` as a global command (Advanced `A` → `D` adds just the command). Run it from any project and the Plan2Code
-dashboard opens right there, in **Claude Code**, **Devin** or **Codex**. With more than one installed it asks which and
-remembers your pick; `plan2code --cli claude`, `--cli devin` or `--cli codex` skips the question, and `--model <name>`
-chooses the model. It works in cmd, PowerShell, Git Bash, macOS and Linux shells, and needs the
-Claude Code, Devin or Codex CLI on your `PATH`. After you pick the agent it asks whether to turn its
-permission prompts off (Yes by default; `--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass`
-in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex, a custom agent's bypass arguments, and no question for a
-custom agent that has none; for Codex the question names its sandbox, which that flag turns off too). It asks on every
-launch and remembers no answer. `plan2code --keep-permissions` keeps the prompts without asking, and
-`plan2code --bypass-permissions` turns them off without asking. With no terminal to ask on (a script or a pipe) the
-prompts stay on unless `--bypass-permissions` is given. The installer then offers a desktop shortcut (answer `y`),
-which opens a folder menu first: Choose a folder, with the project folders you opened lately under it (with none yet, it goes straight to the folder dialog). In a terminal, `plan2code` offers the same recent folders as a numbered menu. Uninstalling (`U`, or `plan2code uninstall` from any terminal) removes both.
-</details>
+### The desktop app
 
-<details>
-<summary>Using another agent CLI, or none yet</summary>
+<img src="docs/screenshots/app-terminal-dark.webp" alt="The desktop app: the Plan2Code dashboard on the left and the agent's terminal docked on the right.">
 
-Plan2Code runs inside an AI coding agent CLI. With no agent it can run (none of Claude Code,
-Devin or Codex, and no working custom agent),
-`plan2code` opens a setup page in your browser (the web console runs it, so no agent is needed).
-The page lists each agent as **Found**, **Found outside PATH** or **Not found**, with its install
-commands for your system, a Copy button per command and an **Install page** link. Install one and
-press **Check again**: no restart needed. An agent found outside `PATH` gets **Use it from here**,
-which saves where it was found so you never touch `PATH` yourself. Below the list sit five starter
-templates (GitHub Copilot CLI, OpenCode, Gemini CLI, Pi and Cursor CLI) for agents Plan2Code does not ship.
-**Start with this agent** carries the run straight on in the same tab, onto the new agent's
-dashboard. Naming a built-in that is missing with `--cli <name>` opens the same page on that agent
-(a missing custom agent prints its own steps and exits 127). In the
-desktop app a **Set up an agent** button opens the same page in the window and returns to the
-launch card with the found agent picked. Where no page can open, such as over SSH or with no
-display, `plan2code` prints the install commands and install pages and exits with code 127.
+The installer also offers the **Plan2Code desktop app**: one window with the dashboard and your agent's terminal side by side, docked right or bottom. A launch card asks which agent, model and effort to start on, and once it is installed `plan2code` opens the app (`plan2code --classic` keeps the terminal flow). `plan2code update` updates the skills, the command and the app together.
 
-Once an agent is running, to use a different agent CLI, open the web console's **User Preferences → Agents & models** and add it: a name, the
-command, and (optionally) its arguments, the start prompt, arguments for skipping permission prompts, and
-how it takes a model. Custom agents are saved in `~/.plan2code/agents.json` and used by both the
-`plan2code` command (listed after the built-ins; `--cli <id>` picks one) and the desktop app's picker. The
-`/plan2code` start prompt only does something in an agent that loads the installed Plan2Code skills; for
-any other, leave the start prompt blank and start a skill yourself. Details in
-[.readme/web-console.md](.readme/web-console.md#agents--models).
-</details>
-
-<details>
-<summary>About the desktop app</summary>
-
-The installer also offers the **Plan2Code desktop app**: one window with the dashboard and your agent's
-terminal side by side, docked right (or bottom) and collapsible. Every console page, not only the
-dashboard, opens inside it. A launch card asks which agent, model and effort to start on, with
-permission checks off as its own tick (on by default, matching the terminal flow; untick it to keep
-the agent's approval prompts). A **New Session** button in the top bar replaces the agent with a fresh
-one on a brief built from the session, and the console's own Session meter points at it when a
-session is getting long. Once it is installed, `plan2code` opens the app instead of running the agent
-in your terminal. `plan2code --classic` keeps the terminal flow, and so does a Linux machine with no
-display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
-command and the app together; run it in a terminal outside the app when the bar says **Update
-available**, then reopen the app. The bar also offers **Update skills** when the app and the installed
-skills disagree. `plan2code uninstall` removes all three.
-
-The app can also build a whole spec unattended with the Implementation Loop; see [docs/desktop-app.md](docs/desktop-app.md#implementation-loop).
-
-The first release is unsigned, so macOS (**Open Anyway** in System Settings, Privacy & Security) or
-Windows (**More info**, then **Run anyway**) may ask you to allow it once. The app starts the agent
-with its normal approval prompts unless you tick the launch card's permission-checks-off option (the
-plain `plan2code` command above, without the app, asks instead, with prompts off by default too). Details:
-[docs/desktop-app.md](docs/desktop-app.md).
-</details>
+The app is not code-signed (signing is not planned for now), so your system may ask you to allow it once. More about the app, a manual download and the Implementation Loop: [docs/desktop-app.md](docs/desktop-app.md).
 
 **Supported tools** (the agents the skills CLI can install into): every agent it supports, including Claude Code · Cursor ·
 GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · OpenCode · Devin · Crush · Pi ·
@@ -192,7 +153,7 @@ worked on right now.
 </picture>
 
 **Sign off.** Read the completion report, then approve the phase or ask for changes. In Implement,
-you can also have the code reviewed first; Implement + review has already done it.
+you can also have the code reviewed first; Implement + Review has already done it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/signoff-dark.webp">
@@ -210,7 +171,7 @@ next check-in, and it never holds up your answers.
 There is more on the page when you need it. Notes on any question can carry screenshots and
 documents. The folder label in the bottom bar opens your workspace, where you add other folders
 as read-only context and point at them by `@name`. The **Notebook** in the top bar is a private pad of your own for the
-folder, in Markdown with pictures, that the agent reads only when you start a workflow from one of its tabs on
+folder, in Markdown with pictures, that the agent reads only when you start a skill from one of its tabs on
 the dashboard and send the box it fills. The **die** beside it opens **Activities**,
 thirteen small games to play through a long wait, which pause the moment it is your turn. The session meter in the top bar turns from green
 to red as a session grows long and suggests a fresh one. **Stop session** saves your place and gives
@@ -239,31 +200,7 @@ Each box is a card on the dashboard. Chaining a couple of small steps in one ses
 start a fresh session before a big plan or build step: planning context leaking into implementation
 is where most agent drift starts.
 
-The dashboard's cards, and when each one lights up for the spec you pick:
-
-| Card | What it is for | Lights up when |
-|------|----------------|----------------|
-| Set up this project | Reads your project and writes AGENTS.md, the guide every later step works from. | The project has no AGENTS.md yet |
-| Refresh AGENTS.md | Brings AGENTS.md and its notes up to date with what the project has learned lately. | The project has an AGENTS.md |
-| Pathfinder | A foggy idea becomes a clear list of decisions, settled one question at a time. | You start fresh, or the spec is still being explored |
-| Plan | Requirements, technical design and your approval: the shape of what gets built. | You start fresh, or the spec has a finished Pathfinder map, a drafted plan or a bug diagnosis |
-| Revise the plan | Requirements changed mid-build? Adjust the plan without starting over. | The spec is written up into phases, built or not |
-| Document | The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do. | The spec has a drafted plan |
-| Implement | Builds the next phase, task by task, with a report and your sign-off at the end. | The spec has phases with tasks still to build |
-| Implement + review | One phase built, then a careful review of the changes, then your sign-off. All in one run. | The spec has phases with tasks still to build |
-| Finalize | Checks the work, writes the summary, files the specs away and suggests the commit message. | Every task in the spec is done |
-| Quick task | Too small for the full process? A quick plan, then it just builds it. | Always (suggested when the spec is a diagnosed bug or an upgrade brief) |
-| Review | A second opinion on the changes. Problems ranked, and you pick what gets fixed. | Always |
-| Handoff | Pack this conversation into a document a fresh session can pick up cold. Any skill's **Stop with a handoff** writes one too, and the dashboard lists them to pick up. | Always |
-| Codebase X-ray | Explain how and why an area works, or find the rough spots worth fixing. | Always |
-| Diagnose a bug | Find a bug's cause and write it up, without fixing it. | Always |
-| Get a PR ready | Runs the checks your branch needs, says if it is ready, and writes the PR description to copy. Never commits, pushes or opens the PR. | Always |
-| Write missing tests | Finds code with no tests and writes unit and integration tests in your project's own style. Never changes source code. | Always |
-| Clear out dead code | Finds code nothing uses, says how safe each piece is to remove, and removes only what you pick. Uses the dead-code tools your project already has, and never commits. | Always |
-| Update dependencies | Scans every manifest, labels each update Safe, Check first or Warning, applies only what you pick in batches with your checks after each, and puts back whatever breaks. A ticked Warning becomes an upgrade brief for Quick task or Plan. Never commits. | Always |
-| Prototype a screen | Several versions of a screen on one page, tuned with live dials, and your pick brought back by Copy and paste. Saved into a spec only when you say, and never changes your code. | Always (takes the picked spec as the save folder) |
-| Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
-| Git | Branches, pull, push and commits on one board, asking before anything leaves your machine. | Always (offers to start a repository outside one) |
+Every box is a card, and so is every other skill. They are all in [The skills](#the-skills), with the command for each.
 
 Pathfinder, Plan, Revise the plan and Quick task can each offer a prototype when a decision is about how a screen looks or flows, and run it right there in the same session; nothing is drawn without your yes.
 
@@ -305,144 +242,44 @@ keep the two out of each other's way.
 
 ## The six steps in detail
 
-Each step is its own run, and the specs on disk are the only thing carried from one to the next.
-Chain a small one onto the last, or start a fresh session for a big one (rule 1).
-
-### 0 · Pathfinder 🧭 (optional)
-
-On the page: one question at a time with the options and their trade-offs, the map growing in its own
-tab, and a **Write a brief** button for a printable summary.
-
-Some ideas are too big and unclear to plan: you can feel the shape of the work but you can't write
-it as requirements, so planning would just invent the answers. Pathfinder finds the *way* to the
-destination; Step 1 then walks it.
-
-1. **Name the destination** — one or two lines fixing what this effort is finding its way to. Settled
-   first, because it fixes scope. It also asks where the map should live: **local files** under
-   gitignored `specs/` (private, solo — the default), or **GitHub Issues** (a map issue with one
-   sub-issue per decision, native blocking, so your team can see and work the frontier in the tracker).
-2. **Chart the map** — a breadth-first grilling surfaces the open decisions. Anything you can phrase
-   *sharply* becomes a question file; anything you can only sense stays listed as fog.
-3. **Clear the questions one at a time** — resolving one burns off the fog behind it, graduating
-   whatever just became sharp into new questions. After each decision it offers a menu: take the next
-   question here, or start fresh — recommended after about three, to keep the agent sharp.
-   Ask for a **brief** at any point and you get a dated, plain-English summary of what has been
-   decided, what is still open, and what is next — meeting minutes, with no jargon in them.
-4. **Hand off** — when nothing is left to decide, it writes a `PLAN-DRAFT` that
-   `/plan2code-1-plan` resumes from at Phase 4, with requirements, context, and scope already
-   answered.
-
-**Question types:** `grill` (a decision only you can make — the default) · `research` (a fact gates
-it; background agents resolve these, several in parallel) · `sketch` (you need something concrete to
-react to) · `legwork` (manual work that has to happen before a decision is possible).
-
-It never answers its own questions, and it **plans, it never builds.** When the urge to just build it
-arrives, the map is done. Skip Step 0 entirely when you already know what you're building.
-
-**Out:** `specs/<feature>/pathfinder/map.md` + `questions/` (or a `pathfinder:map` issue and its
-sub-issues) → `PLAN-DRAFT-<date>.md`. The draft is always a local file — that is what Step 1 reads.
-
-### 1 · Plan 🤔
-
-On the page: questions in batches of up to three, the phase breakdown as a list you can reorder and
-edit, and a sign-off at each stage.
-
-The agent works as a senior architect through seven phases, stopping for you after each: requirements
-analysis · system context (reading your actual codebase) · scope assessment (a large project saves and
-resumes in a fresh session) · tech stack (needs your explicit sign-off) · architecture design ·
-technical specification · transition decision.
-
-It won't finalize below **90% confidence**, and every assumption it makes is written into the draft.
-
-**In:** a description of the feature. **Out:** `PLAN-DRAFT-<date>.md` + `PLAN-CONVERSATION-<date>.md`
-
-### 2 · Document 📝
-
-On the page: a question only where the plan leaves something open, each phase file appearing as its
-own tab as it is written, and one sign-off at the end.
-
-The plan becomes the drawing. One `overview.md` with the phase checklist, plus one file per phase of
-one-story-point tasks. Each phase is **self-contained** — an agent opening `phase-3.md` cold needs
-nothing else to build it. Unit and E2E tests are excluded unless you ask for them.
-
-The overview also identifies the **parallel execution groups**: phases with no shared files or
-dependencies, safe to run in separate agents at once.
-
-**In:** the `PLAN-DRAFT`. **Out:** `overview.md` + `phase-1…N.md`
-
-### 3 · Implement ⚡
-
-On the page: a progress bar and the phase's task list ticking over as tasks land, then the completion
-report and a sign-off card where you approve, ask for changes, or have the code reviewed first.
-
-Point it at `overview.md` and it does the rest: finds the next unchecked phase, implements every task
-exactly as specified, ticks tasks off as they land, then reviews its own work against the spec and
-writes a completion summary.
-
-One phase per conversation. It won't run tests unless the phase says to.
-
-**In:** `specs/<feature>/overview.md`. **Out:** working code, and updated checkboxes.
-
-Want a second pair of eyes before you sign off? `/plan2code-3-implement-review` builds the phase the
-same way, runs a focused review and the fixes you pick, and only then asks for approval.
-
-### Review 🔬 — optional, any time
-
-On the page: a few questions on scope, the findings as a report you can read in full, and a list
-where you tick what gets fixed.
-
-An independent second opinion, not a rubber stamp. It figures out its own scope (conversation
-context, your instruction, or the git diff as a fallback), analyses across 11 dimensions, and ranks
-findings Critical / Warning / Suggestion. Every finding cites a file and a line, or it gets dropped —
-and the review pass is read-only. It fixes things only if you ask, and verifies each fix afterwards.
-
-Spec-aware when `specs/` exists, and works fine without it. Most useful right after a planning or
-implementation step, but there's no wrong time to run it.
-
-### 4 · Finalize 🧹
-
-On the page: the task audit and the summary as reports, a list of the doc updates to approve, and a
-confirmation before anything is archived.
-
-Validates every task against its phase spec, writes the summary and the list of files touched, flags
-the docs that drifted (`README`, `CHANGELOG`, `AGENTS.md`), then archives the whole spec folder —
-`pathfinder/` included — to `specs--completed/`. That folder is the record of *why* the code looks
-like this.
-
-**In:** `specs/<feature>/overview.md`. **Out:** archived specs.
+Each step is its own run, and the specs on disk are the only thing carried from one to the next. What each step asks, writes and hands on is in [.readme/steps.md](.readme/steps.md).
 
 ---
 
-## Prefer the terminal?
+## The skills
+
+Each one is a card on the dashboard and a command in your agent. Which cards light up for the spec you pick, the inputs and outputs, and the decision tree are on the [quick reference](QUICK-REFERENCE.md).
+
+| Command | What it does |
+|---------|--------------|
+| `/plan2code` | Open the dashboard: every skill below as a card, launched on the page |
+| `/plan2code-init` | Set up this project: reads it and writes AGENTS.md, the guide every later step works from |
+| `/plan2code-init-update` | Refresh AGENTS.md with what the project has learned lately |
+| `/plan2code-0-pathfinder` | Pathfinder: turn a foggy idea into decisions, one question at a time, and hand a plan draft to Plan |
+| `/plan2code-1-plan` | Plan: requirements, technical design and your approval |
+| `/plan2code-2-document` | Document: turn the plan into phase files of small tasks |
+| `/plan2code-3-implement` | Implement: build the next phase, with a report and your sign-off |
+| `/plan2code-3-implement-review` | Implement + Review: build the phase, review it, then ask for sign-off |
+| `/plan2code-4-finalize` | Finalize: check the work, summarize, archive the specs, suggest the commit |
+| `/plan2code-1b-revise-plan` | Revise the plan: requirements moved mid-build, so change the specs, not the code |
+| `/plan2code-quick-task` | Quick task: a small change with a quick plan, then it builds it |
+| `/plan2code-review` | Review: a second opinion on your changes, problems ranked, you pick what gets fixed |
+| `/plan2code-handoff` | Handoff: pack this conversation into a document a fresh session picks up cold |
+| `/plan2code-xray` | Codebase X-ray: explain how and why an area works, or rank the rough spots; never edits code |
+| `/plan2code-diagnose` | Diagnose a bug: find the cause and write it up without fixing it |
+| `/plan2code-pr-prep` | PR Prep: run the checks your branch needs, say if it is ready, write the PR description |
+| `/plan2code-test` | Write missing tests: find untested code and write tests in your project's style |
+| `/plan2code-dead-code` | Clear out dead code: find what nothing uses, remove only what you pick |
+| `/plan2code-deps` | Update dependencies: label each update Safe, Check first or Warning, apply what you pick in batches |
+| `/plan2code-ui-prototype` | Prototype a screen: several versions on one page with live dials; never changes your code |
+| `/plan2code-changelog` | Changelog: check the CHANGELOG version against the default branch, suggest entries |
+| `/plan2code-git` | Git: branches, pull, push and commits on one board, asking before anything leaves your machine |
+
+### Prefer the terminal?
 
 Every skill also runs right in the terminal. Each one asks at the start whether you want the web
 console or the terminal; add `--web` to skip the question and go straight to the web console:
 `/plan2code-1-plan --web plan a REST API for tasks`.
-
-| Command | Use it when |
-|---------|-------------|
-| `/plan2code` | Open the dashboard in the web console: every skill below as a card, launched on the page |
-| `/plan2code-0-pathfinder` | The idea is too big and unclear to plan. Charts it as decisions, clears them one at a time, hands a hot plan draft to Step 1 |
-| `/plan2code-1-plan` | Starting a feature. Full requirements → architecture pass |
-| `/plan2code-2-document` | Planning is done. Turn the plan into phase specs |
-| `/plan2code-3-implement` | Build the next phase (one per conversation) |
-| `/plan2code-3-implement-review` | Build the next phase and review it before you approve it (instead of `/plan2code-3-implement`) |
-| `/plan2code-review` | Independent second opinion on local changes, then optional fixes |
-| `/plan2code-4-finalize` | All phases done. Validate, summarize, archive |
-| `/plan2code-init` | Generate this repo's `AGENTS.md` so every agent starts informed |
-| `/plan2code-init-update` | Fold what you learned this session back into `AGENTS.md` |
-| `/plan2code-quick-task` | A small change that doesn't warrant the full sequence |
-| `/plan2code-1b-revise-plan` | Requirements moved mid-build. Revise the specs, not the code |
-| `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from, saved in `~/.plan2code/handoffs/` and listed on the dashboard to pick up |
-| `/plan2code-xray` | Explain how and why an area of the code works (citing files, commits and PRs), or rank the rough spots worth fixing into a brief for Pathfinder or Plan; never edits code |
-| `/plan2code-diagnose` | Find a bug's cause and write it up as `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it, then offer `/plan2code-quick-task` to fix it, or `/plan2code-1-plan` when the fix is big |
-| `/plan2code-pr-prep` | Before you open a pull request. Picks the checks the branch's changes need from the project's `## Test map` (or its config files), runs the ones you keep, says Ready, Ready with notes or Not ready, and writes a PR description to copy with the create-a-PR link; never commits, pushes or opens the PR |
-| `/plan2code-test` | Parts of the code have no tests. Asks where to look, finds the untested files (plus real coverage when the project already has a coverage tool), shows a plan in the project's own style, then writes and runs unit and integration tests; never changes source code, hands a real bug to `/plan2code-diagnose` |
-| `/plan2code-dead-code` | Code nothing calls anymore. Uses the project's own dead-code tools, one per language (Knip, vulture, cargo check and others), or searches by itself, checks every item for callers across the project, labels each Safe to remove, Check first or Warning, removes only what you pick, then runs the tests and build and puts back anything that breaks them; never commits, never installs anything |
-| `/plan2code-deps` | Clear a dependency backlog in one sitting. Scans every manifest (npm, pnpm, Yarn, Cargo, pip, uv, Go, .NET), labels each update Safe, Check first or Warning with a reason, applies the ones you pick in batches, runs the install and your checks after each batch and puts back whatever breaks; a ticked Warning writes `specs/<package>-upgrade/UPGRADE-<date>.md`, which the dashboard shows as *Upgrade ready* for `/plan2code-quick-task` or `/plan2code-1-plan`; never commits; installs a scanner or fixes a small break in your code only after you approve that exact change |
-| `/plan2code-ui-prototype` | See a screen before it gets built. Draws several versions of a screen or flow on one page that opens in your browser, with live dials for fonts, colors, spacing and feel; Copy and paste brings your pick back for the next round, and a yes saves it as `specs/<spec>/prototypes/<name>.html` and `.md`; never changes your code |
-| `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |
-| `/plan2code-git` | Branches, pull, push and commits on one board (or plain instructions in the terminal); asks before every push, publish and delete |
 
 ---
 
@@ -493,7 +330,8 @@ edits out through the skills CLI.
 
 Core reference:
 
-- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notebook and Activities in the top bar
+- **[.readme/](.readme/README.md)**: the index of the long guides
+- **[.readme/web-console.md](.readme/web-console.md)**: the guide to the web console, from the dashboard to the last sign-off, including the private Notebook, with [Activities](.readme/activities.md) and the [internals](.readme/web-console-internals.md) in their own files
 - **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** — the one-page card: commands, inputs, outputs, decision tree
 - **[.readme/walkthrough.md](.readme/walkthrough.md)** — one feature from a sentence to archived specs, session by session
 - **[AGENTS.md](AGENTS.md)** — architecture and contributor guide for this repo

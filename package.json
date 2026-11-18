@@ -1,7 +1,11 @@
 {
   "name": "plan2code",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "plan2code-install": "./install.js"
   },

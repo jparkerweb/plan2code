@@ -1,1 +1,11 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Read the docs
+    url: https://plan2code.jparkerweb.com
+    about: The guides, the quick reference and the walkthrough.
+  - name: Desktop app guide
+    url: https://github.com/jparkerweb/plan2code/blob/main/docs/desktop-app.md
+    about: Install, start, update and the not-code-signed prompts of the desktop app.
+  - name: Report a security problem
+    url: https://github.com/jparkerweb/plan2code/security/advisories/new
+    about: Report a vulnerability privately, not as a public issue.

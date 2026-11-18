@@ -1,7 +1,7 @@
 {
   "name": "Plan2Code",
-  "version": "3.1.0",
-  "description": "A structured 4-step workflow methodology for AI-assisted software development",
+  "version": "3.1.1",
+  "description": "A structured workflow of six steps (Pathfinder, Plan, Document, Implement, Review, Finalize) for AI-assisted software development",
   "keywords": [
     "ai",
     "workflow",
@@ -11,12 +11,12 @@
     "plan"
   ],
   "author": "Justin Parker",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/jparkerweb/plan2code"
   },
   "homepage": "https://github.com/jparkerweb/plan2code",
-  "releaseDate": "2026-11-15",
+  "releaseDate": "2026-11-17",
   "mode": "utility"
 }
