@@ -73,7 +73,7 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 ## What you get
 
 - **Every question laid out**, with the trade-offs next to each option, a progress bar ("4 of 9 settled") and Previous and Next under each card.
-- **Help with the answer.** An *Autofill suggestion* button puts an example in the box for you to edit, and *Ask for suggestions* in the notes panel asks Plan2Code what it would pick and why. Some pick lists open with the suggestion already ticked; an empty pick is an answer too.
+- **Help with the answer.** An *Autofill suggestion* button puts an example in the box for you to edit, and *Ask for suggestions* in the notes panel asks Plan2Code what it would pick and why (on the lessons card, its pick for each lesson is outlined with a dashed ring, never chosen for you). Some pick lists open with the suggestion already ticked; an empty pick is an answer too.
 - **Settled answers read as answers**: what you chose, in words, with the rest locked. A question you have sent is held until Plan2Code answers it, and the page carries on working meanwhile.
 - **Nothing is sent until you press Send**, and nothing gets lost: close the tab, reload, restart the machine, and your half-typed answers are still there.
 

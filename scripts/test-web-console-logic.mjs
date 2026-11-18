@@ -1692,6 +1692,13 @@ test("validate: a lessons item takes rows each with a type and its own choices, 
   refused({ rows: [row({ selected: true })] }, 'row "w1" selected: is not allowed');
   refused({ firstAsk: { ...firstAsk, sentences: ["a", "b"] } }, "firstAsk");
 
+  // Suggestions: one of each row's own words, for rows the card has; never a choice.
+  assert.deepEqual(one({ rows: [row(), row({ id: "w2" })], suggested: { w1: "Keep", w2: "Drop" } }), [], "a suggestion per row");
+  assert.deepEqual(one({ rows: [row()], suggested: null }), [], "cleared");
+  refused({ rows: [row()], suggested: ["Keep"] }, "suggested: must be");
+  refused({ rows: [row()], suggested: { w9: "Keep" } }, 'suggested "w9"');
+  refused({ rows: [row()], suggested: { w1: "Apply" } }, 'suggested "w1"');
+
   const two = validate({ items: [item({ rows: [row()] }), item({ id: "lessons-2", rows: [row()] })] });
   assert.ok(two.some((p) => p.includes("2 lessons cards are open at once")), two.join(" | "));
   const answered = validate({ items: [item({ rows: [row()], status: "answered" }), item({ id: "lessons-2", rows: [row()] })] });

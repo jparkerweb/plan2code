@@ -149,6 +149,11 @@
 .lessons-flag,
 .lessons-refused { padding: 5px 9px; font-size: var(--fs-sm); }
 .lessons-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* The agent's suggestion: a dashed accent ring, apart from focus's solid one;
+   it stays once the person picks that word. */
+.lessons-choices .btn.is-suggested { outline: 2px dashed var(--accent); outline-offset: 2px; }
+/* Keyboard focus still shows as the page's solid focus ring. */
+.lessons-choices .btn.is-suggested:focus-visible { outline: 2px solid var(--focus); outline-offset: var(--focus-offset); }
 .lessons-edit { margin-top: 10px; display: grid; gap: 8px; }
 .lessons-field { margin: 0; }
 .lessons-input,
@@ -173,13 +178,33 @@
 .modal.lessons-dialog { width: min(1200px, 90vw); max-width: none; }
 .lessons-dialog .card { margin: 0; box-shadow: none; border: 0; padding: 0; max-width: none; }
 
-/* Closable (corner x, Not now, Escape), locked while saving. */
+/* Closable (corner x, Not now, Escape), locked while saving. The button bar
+   is pinned to the dialog's bottom edge while the lessons scroll under it:
+   the negative margins run it to the dialog's edges over its padding. */
 .lessons-dialog .modal-actions { align-items: center; justify-content: flex-end; }
-.lessons-suggestions { flex: 1 1 100%; }
+.lessons-dialog > .modal-actions {
+  position: sticky;
+  /* Chrome sticks inside the dialog's 24px bottom padding; this reaches its edge. */
+  bottom: -24px;
+  z-index: 1;
+  margin: 20px -26px -24px;
+  padding: 14px 26px 20px;
+  background: var(--panel);
+  border-top: 1px solid var(--rule);
+}
+/* After the card, in the scrolling body; the margin keeps a reply scrolled
+   into view clear of the pinned buttons. The page-wide .md 68ch cap is lifted
+   so the reply fills the box. */
+.lessons-suggestions { margin: 16px 0 0; scroll-margin-bottom: 96px; }
 .lessons-suggestions h3 { margin: 0 0 6px; font-size: var(--fs-md); }
-.lessons-suggestions .md { max-height: 40vh; overflow: auto; font-size: var(--fs-md); }
+.lessons-suggestions .md { max-width: none; max-height: 40vh; overflow: auto; font-size: var(--fs-md); }
+.lessons-asking { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.lessons-asking .spinner { margin: 0; }
 .lessons-dialog .modal-actions { flex-wrap: wrap; }
-.lessons-dialog .modal-actions .btn .spinner { margin-right: 8px; }
+/* A span is inline, so the ring needs a box to show at its size in a button. */
+.lessons-dialog .modal-actions .btn .spinner { display: inline-block; vertical-align: -2px; margin-right: 8px; }
+/* Asking: held, but at full strength so the spinning ring reads as working. */
+.lessons-dialog #lessons-suggest.is-asking:disabled { opacity: 1; cursor: progress; }
 .modal-x {
   position: absolute;
   top: 10px;

@@ -1905,12 +1905,20 @@ function lessonRow(item, row, draft, commit) {
   const group = el("div", "lessons-choices");
   group.setAttribute("role", "group");
   group.setAttribute("aria-label", "Choices for: " + (row.text || row.id));
+  // The agent's suggestion (Ask for suggestions) outlines its word; it is
+  // never a pick, so nothing is chosen for the person.
+  const suggested = item.suggested && typeof item.suggested === "object" ? item.suggested[row.id] : null;
   choices.forEach((word, i) => {
     const on = pick === word;
-    const b = el("button", "btn sm" + (on ? " primary" : ""), word);
+    const hint = suggested === word;
+    const b = el("button", "btn sm" + (on ? " primary" : "") + (hint ? " is-suggested" : ""), word);
     b.type = "button";
     b.id = `lesson-${item.id}-${row.id}-${i}`;
     b.setAttribute("aria-pressed", String(on));
+    if (hint) {
+      b.title = "Suggested by Plan2Code";
+      b.setAttribute("aria-description", "Suggested");
+    }
     if (row.refused && word === keepWord && !reworded) {
       b.disabled = true;
       b.title = "Reword it first: part of it was refused.";

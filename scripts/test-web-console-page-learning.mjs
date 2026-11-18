@@ -11,7 +11,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, textOf, styleOf, stylesOf, itemCard, sendAndCollect, settled } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, styleOf, stylesOf, itemCard, sendAndCollect, settled, scrollCard } from "./page-test-helpers.mjs";
 import { cli, until } from "./web-console-test-helpers.mjs";
 import { writePause, writeWaiting } from "../src/web-console/learning.mjs";
 
@@ -540,10 +540,88 @@ test("lessons card: the dialog has Ask for suggestions, which sends one request 
   assert.equal(sentAction.i, "lessons");
   assert.match(got.reply, /^Suggestions wanted on Lessons to keep:/m);
   await dlg.locator(".lessons-suggestions", { hasText: "Asking Plan2Code" }).waitFor();
-  assert.equal(await dlg.getByRole("button", { name: "Ask for suggestions" }).isDisabled(), true, "one request waits at a time");
+  assert.equal(await dlg.getByRole("button", { name: "Asking…" }).isDisabled(), true, "one request waits at a time");
   assert.equal(await dlg.getByRole("button", { name: "Keep" }).count(), 1, "the lessons stay open to choose");
   s.post({ items: [{ id: "lessons", thread: [{ who: "agent", text: "1. Keep it: a real trap." }] }], agent: { status: "waiting" } });
   await dlg.locator(".lessons-suggestions", { hasText: "Keep it: a real trap." }).waitFor();
+});
+
+test("lessons card: Ask for suggestions spins until the reply lands, and the reply is as wide as its box", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  postCard(s);
+  await dlg.locator(".lessons-row").waitFor();
+  await dlg.getByRole("button", { name: "Ask for suggestions" }).click();
+  s.wait(10);
+  await dlg.locator("#lessons-suggest .spinner").waitFor();
+  await dlg.locator(".lessons-suggestions .spinner").waitFor();
+  const long = "My suggestion is Keep. " + "It is a real trap that a full run hides, and the docs never say so. ".repeat(6);
+  s.post({ items: [{ id: "lessons", thread: [{ who: "agent", text: long }] }], agent: { status: "waiting" } });
+  const reply = dlg.locator(".lessons-suggestions .md");
+  await reply.waitFor();
+  assert.equal(await dlg.locator(".spinner").count(), 0, "no spinner once the reply is in");
+  const box = await dlg.locator(".lessons-suggestions").boundingBox();
+  const text = await reply.boundingBox();
+  assert.ok(text.width > box.width * 0.85, `the reply fills its box: ${text.width} of ${box.width}`);
+});
+
+test("lessons card: the dialog's buttons stay in view while the lessons scroll", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  const rows = Array.from({ length: 10 }, (_, i) => ({ ...ROWS[0], id: `${LESSON_ID}-${i}`, text: `Lesson number ${i + 1}, long enough to take a line.` }));
+  s.post({ items: [CARD(rows)], agent: { status: "waiting" } });
+  await dlg.locator(".lessons-row").first().waitFor();
+  const overflows = await dlg.evaluate((d) => d.scrollHeight > d.clientHeight + 40);
+  assert.ok(overflows, "the dialog scrolls with ten lessons");
+  for (const top of [0, 300]) {
+    await scrollCard(dlg, top);
+    const frame = await dlg.boundingBox();
+    const ask = await dlg.getByRole("button", { name: "Ask for suggestions" }).boundingBox();
+    assert.ok(ask.y >= frame.y && ask.y + ask.height <= frame.y + frame.height + 1, `scrolled to ${top}: Ask for suggestions is in view`);
+    const bar = await dlg.locator(":scope > .modal-actions").boundingBox();
+    assert.ok(bar.y + bar.height >= frame.y + frame.height - 2, `scrolled to ${top}: the bar reaches the dialog's bottom edge, with nothing showing under it`);
+  }
+  // A reply is scrolled into view once; a later state push leaves the scroll where the person put it.
+  await dlg.getByRole("button", { name: "Ask for suggestions" }).click();
+  s.wait(10);
+  s.post({ items: [{ id: "lessons", thread: [{ who: "agent", text: "Keep them all." }] }], agent: { status: "waiting" } });
+  await dlg.locator(".lessons-suggestions", { hasText: "Keep them all." }).waitFor();
+  await until(async () => (await dlg.evaluate((d) => d.scrollTop)) > 0, 3000);
+  await scrollCard(dlg, 0);
+  s.post({ agent: { status: "waiting", activity: "Still here" } });
+  s.post({ headline: { stage: "Reviewing lessons" }, agent: { status: "waiting" } });
+  await settled(s.page, "#lessons-modal");
+  assert.equal(await dlg.evaluate((d) => d.scrollTop), 0, "no pull back down to the reply");
+});
+
+test("lessons card: a suggestion outlines its button on each lesson without choosing it", async (t) => {
+  const { s, dlg } = await reviewOpen(t);
+  s.wait(10);
+  const second = `${LESSON_ID}-b`;
+  s.post({ items: [CARD([{ ...ROWS[0], id: LESSON_ID }, { ...ROWS[0], id: second, text: "Another lesson." }])], agent: { status: "waiting" } });
+  await dlg.locator(".lessons-row").first().waitFor();
+  await dlg.getByRole("button", { name: "Ask for suggestions" }).click();
+  s.wait(10);
+  s.post({ items: [{ id: "lessons", suggested: { [LESSON_ID]: "Keep", [second]: "Drop" }, thread: [{ who: "agent", text: "Keep the first, drop the second." }] }], agent: { status: "waiting" } });
+  await dlg.locator(".lessons-suggestions", { hasText: "Keep the first" }).waitFor();
+  const keep = dlg.locator(`.lessons-row[data-row="${LESSON_ID}"] .lessons-choices button`, { hasText: "Keep" });
+  const drop = dlg.locator(`.lessons-row[data-row="${second}"] .lessons-choices button`, { hasText: "Drop" });
+  for (const b of [keep, drop]) {
+    await b.and(s.page.locator(".is-suggested")).waitFor();
+    assert.equal(await b.getAttribute("aria-pressed"), "false", "a suggestion is not a choice");
+    assert.notEqual(await styleOf(b, "outlineStyle"), "none", "outlined");
+    assert.match(await b.getAttribute("title"), /Suggested/);
+  }
+  assert.equal(await dlg.locator(".lessons-choices .is-suggested").count(), 2, "only the suggested buttons");
+  assert.equal(await dlg.getByRole("button", { name: "Save lessons" }).isDisabled(), true, "nothing chosen for the person");
+  // Keyboard focus on a suggested button shows the solid focus ring, not the dashed hint.
+  await dlg.locator(`.lessons-row[data-row="${second}"] .lessons-choices button`, { hasText: "Reword" }).focus();
+  await s.page.keyboard.press("Tab");
+  await drop.and(s.page.locator(":focus")).waitFor();
+  assert.equal(await styleOf(drop, "outlineStyle"), "solid", "focused: the focus ring");
+  // Choosing the suggestion keeps the mark.
+  await keep.click();
+  await dlg.locator(`.lessons-row[data-row="${LESSON_ID}"] button.is-suggested[aria-pressed="true"]`).waitFor();
 });
 
 test("lessons card: closing with choices made asks first, and Keep editing goes back", async (t) => {

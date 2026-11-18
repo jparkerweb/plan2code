@@ -924,6 +924,22 @@ function lessonsProblems(item, at) {
       problems.push(rule(at, `${name} refused`, "must be the { pattern, part } lessons.mjs gave, or null", { refused: { pattern: "aws-access-key", part: "AKIA" } }));
     }
   });
+  // The agent's answer to Ask for suggestions, readable by the page: row id to
+  // one of that row's own choice words. It outlines a button; it never picks.
+  const sug = item.suggested;
+  const SUGGESTED_RIGHT = { suggested: { w1: "Keep", w2: "Drop" } };
+  if (sug != null && !isPlainObject(sug)) {
+    problems.push(rule(at, "suggested", "must be an object of row id to one of that row's choice words, or null", SUGGESTED_RIGHT));
+  } else if (sug != null) {
+    const byId = new Map((hasRows ? item.rows : []).filter(isPlainObject).map((r) => [r.id, r]));
+    for (const [id, word] of Object.entries(sug)) {
+      const row = byId.get(id);
+      if (!row) problems.push(rule(at, `suggested "${id}"`, "names no row on this card. Use the row ids the card was posted with", SUGGESTED_RIGHT));
+      else if (typeof word !== "string" || !(row.choices || []).includes(word)) {
+        problems.push(rule(at, `suggested "${id}"`, `must be one of that row's choices (${(row.choices || []).join(", ")})`, SUGGESTED_RIGHT));
+      }
+    }
+  }
   return problems;
 }
 

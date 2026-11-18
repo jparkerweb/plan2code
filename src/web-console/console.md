@@ -65,7 +65,7 @@ Every item: `id` (new for each question, whole session), `kind`, `title` (2 to 4
 | `review` | read, then approve | `doc` (required), `summary`, `verdicts:[{id,label,danger?}]`, `nothingYet` (false once the change is on disk) | `{verdict,text?}` |
 | `checklist` | steps only they can do | `steps`, `valuesLabel` | `{done?,state?,text?}` |
 | `list` | reorder or edit a breakdown | `rows:[{id,title,body}]` | `{rows}` or `{text}` |
-| `lessons` | approve noted lessons | `rows`, `opening`, `firstAsk` (from `lessons.mjs list`) | `{decisions}` or `{firstAsk}` |
+| `lessons` | approve noted lessons | `rows`, `opening`, `firstAsk` (from `lessons.mjs list`), `suggested` (row id to a choice: outlined, not picked) | `{decisions}` or `{firstAsk}` |
 | `notice` | read, no answer | none | none |
 
 Items show in the order sent, so send them in answering order.

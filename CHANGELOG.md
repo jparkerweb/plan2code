@@ -15,6 +15,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **desktop app**: Update and restart in the top bar installs the newest release with live progress and reopens on the same project, asking first when an agent or a loop is running.
 - **desktop app**: the window remembers its size and place, and the terminal gets a right-click menu, copy on select, font size keys and clickable links; new keyboard shortcuts work from both panes.
 - **docs**: a SECURITY.md for private vulnerability reports, and the issue form links to the docs, the desktop app guide and security.
+- **Learning**: Ask for suggestions on the lessons review now outlines the suggested choice on each lesson (Keep, Drop and the rest) with a dashed ring, without choosing it for you.
 
 ### 🔧 Changed
 
@@ -22,6 +23,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **installer**: plainer output, with no colors or boxes when piped (`NO_COLOR` is honored), a spinner while the skills install, the exact PATH line for your shell when the command is not found, and a clear stop on Node.js older than 18.
 - **web console**: a broad visual refresh (spacing, type, shadow and motion tokens, shared top-bar icons); "Helpers" is now "Subagents" everywhere, and the meter says "Conversation".
 - **web console**: Clear acts at once with a 10-second Undo, the finish screen shows one main button, Help groups its topics with a filter and opens with `?`, and Cleanup shows what it will delete and its size.
+- **Learning**: the lessons review keeps Ask for suggestions, Not now and Save lessons pinned to the bottom of the dialog, shows a spinner while suggestions are on the way, and lets the answer use the dialog's full width.
 - **desktop app**: its own confirm dialogs (Cancel first and focused), plain-language errors with the details underneath, the console's theme from the first paint, and a top bar that folds extra buttons into a "+N more" menu.
 - **UI Prototype**: the carry-over card opens ticked as suggested, each item tagged Keep or Free up with its reason.
 - **docs**: the README is rewritten and shorter, the long guides moved into `.readme/`, the site hosts its own fonts and has a social card, and the screenshots are refreshed (Notepad is now Notebook).
