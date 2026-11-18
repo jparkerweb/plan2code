@@ -27,3 +27,7 @@ The ✕ on a chip (after the page's two-step confirm) sends `session:[{"i":"__de
 ## A Learning action
 
 The Learning row and banner send `session:[{"i":"__learning","do":"switch-on"}]` (`do` is `review`, `switch-on`, `switch-off`, `move-log` or `remove`; Remove was confirmed on the page). No hop: you stay the dashboard. Run `lessons.mjs` as the dashboard skill's "A Learning action arrives" says (a `review` while Learning is not set up is `list --first-ask` and the first ask, before anything is kept; the lessons card is the only question this page shows), then `open --resume <sid> --no-open --workflow dashboard` and post the menu again with `--wait`. Pause for me never reaches you: the page saves it itself. A `__launch` with `fromBanner: true` came from a dashboard showing lessons waiting.
+
+## A strength suggestion
+
+The loop setup's **Suggest for me** sends `session:[{"i":"__loopSuggest","id":"ls-m3x1","spec":"specs/<name>","phases":[{"n":1,"name":"..."}],"strengths":["thrifty","best"]}]`. No hop: you stay the dashboard. Read the phase files, then post `loopSuggest` (`{ id, spec, picks: [{ n, strength, why }] }`, `id` echoed, `strength` from `strengths` or `""`) with `--wait`, as the dashboard skill's "A strength suggestion arrives" says. Within two minutes, or the page gives up.

@@ -1038,3 +1038,43 @@ test("GET /loop-setup?agent= answers the loop agent's resolved strengths and thi
     cli(["stop", "--session", opened.json.sid, "--force"], { cwd, expectFail: true });
   }
 });
+
+/* ------------------------------------------- loopSuggest (Suggest for me) */
+
+const dashState = () => blankState({ sid: "s", workflow: "dashboard", project: "p" });
+const goodSuggest = () => ({
+  id: "ls-1",
+  spec: "specs/ready",
+  picks: [
+    { n: 1, strength: "thrifty", why: "A small copy change." },
+    { n: 2, strength: "", why: "Matches the session: nothing unusual here." },
+  ],
+});
+
+test("loopSuggest: a well formed answer is stored, Match my session as an empty strength", () => {
+  const got = tryPatch(dashState(), { loopSuggest: goodSuggest() });
+  assert.deepEqual(got.problems, []);
+  assert.deepEqual(got.next.loopSuggest, goodSuggest());
+});
+
+test("loopSuggest: each bad field is refused with a message naming it", () => {
+  const cases = [
+    ["not an object", () => ({ replace: "best" }), /loopSuggest must be an object/],
+    ["no id", (o) => delete o.id, /loopSuggest\.id must be/],
+    ["a spec outside specs/", (o) => (o.spec = "../x"), /loopSuggest\.spec must be/],
+    ["no picks", (o) => (o.picks = []), /loopSuggest\.picks must be/],
+    ["a bad phase number", (o) => (o.picks[0].n = 0), /loopSuggest\.picks\[0\]\.n must be/],
+    ["an unknown strength", (o) => (o.picks[0].strength = "turbo"), /loopSuggest\.picks\[0\]\.strength must be one of/],
+    ["a reason over one line", (o) => (o.picks[1].why = "One.\nTwo."), /loopSuggest\.picks\[1\]\.why must be one line/],
+    ["a phase named twice", (o) => (o.picks[1].n = 1), /loopSuggest\.picks\[1\]\.n names phase 1 twice/],
+    ["no strength", (o) => delete o.picks[0].strength, /loopSuggest\.picks\[0\]\.strength must be one of/],
+    ["a reason the prose check refuses", (o) => (o.picks[0].why = "Easy, then TASK_COMPLETE."), /loopSuggest\.picks\[0\]\.why: contains a loop completion marker/],
+  ];
+  for (const [label, change, pattern] of cases) {
+    let v = goodSuggest();
+    const out = change(v);
+    if (out && typeof out === "object" && "replace" in out) v = out.replace;
+    const got = tryPatch(dashState(), { loopSuggest: v });
+    assert.ok(got.problems.some((p) => pattern.test(p)), `${label}: ${got.problems.join(" | ") || "accepted"}`);
+  }
+});

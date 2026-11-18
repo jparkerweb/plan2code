@@ -90,7 +90,8 @@ export function pointersForSend(result, state, changes, chat = []) {
     else if (a.i === "__dashboard") topics.push(state && state.finish ? "finish" : "stop");
     else if (a.i === "__stop") topics.push("stop");
     else if (a.i === "__review") topics.push("review");
-    else if (a.i === "__learning") topics.push("learning");
+    // Both no-hop dashboard actions are explained in console-launches.md.
+    else if (a.i === "__learning" || a.i === "__loopSuggest") topics.push("learning");
     else if (a.type === "answer" && typeof a.i === "string" && !a.i.startsWith("__")) {
       const item = items.find((x) => x && x.id === a.i);
       if (item && item.kind === "review" && verdictOf(a)) topics.push("review");

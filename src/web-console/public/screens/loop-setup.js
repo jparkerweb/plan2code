@@ -7,12 +7,15 @@
 // runs or sends to the app.
 
 import { el } from "../render.js";
-import { hooks, page, redraw } from "../state.js";
+import { hooks, page, redraw, saveNow } from "../state.js";
 import { SKILL_CATALOG } from "../answers.js";
 import { postJson } from "../net.js";
 import { tellApp, wireLoopMessages } from "../app-bridge.js";
 
 let justPicked = ""; // the strength node picked a moment ago, which alone plays its grow
+// Suggest for me was pressed and has just come back (answer, time-out or failed
+// send): the next draw puts focus back on the button the busy redraw replaced.
+let refocusSuggest = false;
 
 const LEVELS = [
   ["critical", "Critical"],
@@ -37,6 +40,8 @@ const STRENGTH_WORDS = [
   ["best", "Best"],
 ];
 const MATCH_SESSION = "Match my session";
+// How long Suggest for me waits on the dashboard agent before it gives the field back.
+export const SUGGEST_WAIT_MS = 120000;
 
 const DEFAULT_NOTIFY_PARAM = "message";
 // What the setup can send a notification to. `name` is the label for the field
@@ -66,7 +71,7 @@ export async function openLoopSetup(spec) {
   const dir = spec.dir;
   page.loopStart = null;
   page.loopNotifyTest = null;
-  page.loopSetup = { spec: dir, loaded: false, failed: false, form: null, facts: null, problems: [], starting: false, resolvedFor: undefined };
+  page.loopSetup = { spec: dir, loaded: false, failed: false, form: null, facts: null, problems: [], starting: false, resolvedFor: undefined, suggest: null, why: {}, suggestNote: "" };
   tellApp("loop-facts");
   redraw();
   const mine = page.loopSetup;
@@ -186,6 +191,7 @@ export function pickModelText(resolved, word, appFacts) {
 
 function close() {
   stopWatchingLine();
+  if (page.loopSetup && page.loopSetup.suggest) clearTimeout(page.loopSetup.suggest.timer);
   page.loopSetup = null;
   page.loopStart = null;
   redraw();
@@ -450,6 +456,70 @@ function watchStrengthLine(grid) {
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawLine);
 }
 
+/**
+ * Suggest for me: ask the dashboard's agent to pick a strength per phase left.
+ * It goes as a `__loopSuggest` send (no hop: the agent stays the dashboard),
+ * carrying the phases and the words this agent has mapped; the agent reads the
+ * phase files and posts `loopSuggest` back, which applySuggestion() fills in.
+ */
+async function askForSuggestion(s, words) {
+  if (s.suggest || page.pendingResult || page.gone) return;
+  const id = "ls-" + Date.now().toString(36);
+  const mine = { id, timer: 0 };
+  s.suggest = mine;
+  s.suggestNote = "";
+  mine.timer = setTimeout(() => {
+    if (s.suggest !== mine) return;
+    s.suggest = null;
+    refocusSuggest = true;
+    s.suggestNote = "The agent did not answer in time. Your picks are as they were.";
+    redraw();
+  }, SUGGEST_WAIT_MS);
+  redraw();
+  const action = {
+    i: "__loopSuggest",
+    type: "loopSuggest",
+    id,
+    spec: s.spec,
+    phases: s.facts.phasesLeft.map((p) => ({ n: p.n, name: p.name })),
+    strengths: words,
+  };
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ actions: [action], reply: `Suggest a strength for each phase left in ${s.spec}.` }),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    page.pendingResult = true;
+    saveNow();
+  } catch {
+    if (s.suggest !== mine) return;
+    clearTimeout(mine.timer);
+    s.suggest = null;
+    refocusSuggest = true;
+    s.suggestNote = "The agent could not be asked just now. Try again in a moment.";
+    redraw();
+  }
+}
+
+/** Fill in the agent's answer to this screen's own request: mapped words only, a reason per row. */
+function applySuggestion(s, answer, resolved) {
+  clearTimeout(s.suggest.timer);
+  s.suggest = null;
+  refocusSuggest = true;
+  s.why = {};
+  const picks = Array.isArray(answer.picks) ? answer.picks : [];
+  for (const p of s.facts.phasesLeft) {
+    const hit = picks.find((x) => x && x.n === p.n);
+    if (!hit || typeof hit.strength !== "string") continue;
+    if (hit.strength && !(resolved && resolved[hit.strength])) continue;
+    setPick(s.form, s.spec, p, hit.strength);
+    if (typeof hit.why === "string" && hit.why.trim()) s.why[p.n] = hit.why.trim();
+  }
+  s.problems = [];
+}
+
 /** The "Strength per phase" field: the toggle, Set all to, and one row per phase left. */
 function strengthField(s, redo) {
   stopWatchingLine();
@@ -481,6 +551,15 @@ function strengthField(s, redo) {
   }
   if (!f.phaseStrength) return box;
 
+  const answer = page.S && page.S.loopSuggest;
+  if (s.suggest && answer && answer.id === s.suggest.id && answer.spec === s.spec) applySuggestion(s, answer, resolved);
+  const busy = Boolean(s.suggest);
+  if (busy) {
+    box.classList.add("is-suggesting");
+    box.setAttribute("aria-busy", "true");
+    sw.querySelector("input").disabled = true;
+  }
+
   // An unmapped word stays in the list, grayed, so a saved one is seen and changed.
   const options = [
     ["", MATCH_SESSION],
@@ -492,10 +571,29 @@ function strengthField(s, redo) {
   const everyone = select("loop-strength-all", "Set all phases to", [["-", "Choose..."], ...options.map(([v, t, d]) => [v === "" ? "match" : v, t, d])], "-", (v) => {
     if (v === "-") return;
     for (const p of s.facts.phasesLeft) setPick(f, s.spec, p, v === "match" ? "" : v);
+    s.why = {};
     redraw();
   });
+  everyone.disabled = busy;
   all.appendChild(everyone);
+  const words = STRENGTH_WORDS.map(([word]) => word).filter((word) => resolved[word]);
+  const suggest = el("button", "btn loop-strength-suggest", "Suggest for me");
+  suggest.type = "button";
+  suggest.id = "loop-strength-suggest";
+  suggest.title = "The agent reads each phase and picks a strength for it";
+  suggest.disabled = busy || page.pendingResult || page.gone || !s.facts.phasesLeft.length;
+  suggest.addEventListener("click", () => askForSuggestion(s, words));
+  all.appendChild(suggest);
+  if (refocusSuggest && !busy) {
+    refocusSuggest = false;
+    // Only when nothing else took focus meanwhile: the busy redraw dropped it on the body.
+    requestAnimationFrame(() => {
+      const a = document.activeElement;
+      if (suggest.isConnected && (!a || a === document.body)) suggest.focus();
+    });
+  }
   box.appendChild(all);
+  if (s.suggestNote && !busy) box.appendChild(el("p", "loop-hint loop-suggest-note", s.suggestNote));
 
   // One column per option, in rank order: level 0 is Match my session.
   const columns = [["", MATCH_SESSION], ...STRENGTH_WORDS].map(([value, label], level) => ({ value, label, level, mapped: value === "" || Boolean(resolved[value]) }));
@@ -528,11 +626,12 @@ function strengthField(s, redo) {
       input.id = `loop-strength-${p.n}-${c.value || "match"}`;
       input.value = c.value;
       input.checked = word === c.value;
-      input.disabled = !c.mapped;
+      input.disabled = !c.mapped || busy;
       input.setAttribute("aria-label", `Phase ${p.n} ${c.label}`);
       input.addEventListener("change", () => {
         if (!input.checked) return;
         setPick(f, s.spec, p, c.value);
+        delete s.why[p.n];
         s.problems = [];
         justPicked = input.id; // only this redraw plays the grow
         redraw();
@@ -544,6 +643,7 @@ function strengthField(s, redo) {
       row.appendChild(cell);
     }
     row.appendChild(el("span", "loop-strength-model", pickModelText(resolved, word, page.loopFacts)));
+    if (s.why[p.n]) row.appendChild(el("span", "loop-strength-why", s.why[p.n]));
     rows.appendChild(row);
   }
   grid.appendChild(rows);
@@ -552,6 +652,12 @@ function strengthField(s, redo) {
     watchStrengthLine(grid);
   }
   box.appendChild(grid);
+  if (busy) {
+    const veil = el("div", "loop-suggest-overlay");
+    veil.setAttribute("role", "status");
+    veil.append(el("span", "spinner"), el("span", null, "The agent is reading each phase and picking a strength..."));
+    box.appendChild(veil);
+  }
   return box;
 }
 

@@ -264,6 +264,7 @@ test("pointersForSend: the whole table", () => {
   assert.deepEqual(pointersForSend(act({ i: "__stop", handoff: true }), empty, noFlags), ["stop"]);
   assert.deepEqual(pointersForSend(act({ i: "__review" }), empty, noFlags), ["review"]);
   assert.deepEqual(pointersForSend(act({ i: "__learning", type: "learning", do: "remove" }), empty, noFlags), ["learning"]);
+  assert.deepEqual(pointersForSend(act({ i: "__loopSuggest", type: "loopSuggest", id: "ls-1", spec: "specs/x" }), empty, noFlags), ["learning"], "Suggest for me is explained in the same file");
   const reviewCard = { items: [{ id: "signoff", kind: "review" }] };
   assert.deepEqual(pointersForSend(act({ i: "signoff", type: "answer", verdict: "review" }), reviewCard, noFlags), ["review"]);
   assert.deepEqual(pointersForSend(act({ i: "signoff", type: "answer", answer: { verdict: "approve" } }), reviewCard, noFlags), ["review"]);

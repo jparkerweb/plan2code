@@ -4,6 +4,16 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
+## v3.1.2 (2026-11-17)
+
+### ✨ Added
+
+- **desktop app**: Suggest for me, beside Set all to in the Implementation Loop's Strength per phase, asks the dashboard's agent to read each phase and pick a strength for it, with a one-line reason under each row; every pick stays yours to change.
+
+### 🐛 Fixed
+
+- **web console**: a click anywhere inside a Markdown box's border now puts the cursor in it, not only a click on the text.
+
 ## v3.1.1 (2026-11-17)
 
 ### ✨ Added

@@ -145,6 +145,14 @@ The card: post `list`'s `card` as one `lessons` item with `--wait` (the page sho
 
 Then `node "<D>/console.mjs" open --resume <sid> --no-open --workflow dashboard` to rescan, and post the menu again with `"settle":true` and `--wait`, its note saying what changed (after the card, `decide`'s `closing` line). Never stage or commit.
 
+## A strength suggestion arrives
+
+The loop setup's **Suggest for me** sends `__loopSuggest` with `id`, `spec`, `phases` (`[{ n, name }]`, the phases left) and `strengths` (the words mapped for the loop's agent). No hop: you stay the dashboard and the setup screen stays up. The page gives up after two minutes, so answer before anything else:
+
+1. Read `<spec>/overview.md` and each phase file in `phases`: its tasks, the files it touches, what later phases build on it.
+2. Pick one word per phase, from `strengths` only: `thrifty` for small, mechanical or copy-only work; `balanced` for an ordinary feature; `best` for tricky logic, a wide refactor, security, concurrency or data migrations. `""` (Match my session) when none fits.
+3. Post with `--wait`: `{"loopSuggest":{"id":"<the send's id>","spec":"<spec>","picks":[{"n":1,"strength":"thrifty","why":"Label and copy changes only."}]},"agent":{"status":"waiting"}}`, one pick per phase, `why` one plain line the person reads under the row. The page fills the rows; the person can still change any of them.
+
 ## Coming back from another skill
 
 You arrive here mid-conversation after a `__dashboard` press — from a finished screen, or mid-workflow from the top bar's triangle once that skill saved its place — having already run `open --resume <sid> --no-open --workflow dashboard` (the send's `resume`; it cleared the last skill's page, its finish included — console-finish.md, console-stop.md). Skip Interface steps 1–2; your first job is the menu judgment, then post the menu with `--wait`: re-read `state.scan`, which the resume refreshed — the spec you just worked on is usually the most recently touched. Then the usual wait loop and launches.

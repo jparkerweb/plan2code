@@ -22,9 +22,9 @@ const PROJECT = {
 
 const MENU = { menu: { note: "Ready when you are." }, agent: { status: "waiting" } };
 
-async function openSetup(t) {
+async function openSetup(t, { clock = false } = {}) {
   const browser = await suite.browser();
-  const s = await openSession(browser, { t, workflow: "dashboard", payload: MENU, project: tempProject(PROJECT) });
+  const s = await openSession(browser, { t, workflow: "dashboard", payload: MENU, project: tempProject(PROJECT), clock });
   // Past Planny's wake-up and, on a first run, the Welcome.
   const skip = s.page.getByRole("button", { name: "Skip the intro" });
   await skip.click();
@@ -605,9 +605,9 @@ function installShippedModels() {
 }
 
 // The setup screen with the app's answer in: this launch choice, then the strengths read for it.
-async function openStrengthSetup(t, launch = LAUNCH) {
+async function openStrengthSetup(t, launch = LAUNCH, opts = {}) {
   installShippedModels();
-  const s = await openSetup(t);
+  const s = await openSetup(t, opts);
   await s.page.evaluate(async (facts) => {
     const { page, redraw } = await import(new URL("state.js", document.baseURI).href);
     page.loopFacts = facts;
@@ -836,4 +836,123 @@ test("the toggle and the picks survive reopening the screen, and the toggle off 
   await s.page.locator("#loop-strength-all").selectOption("match");
   const cleared = await save();
   assert.deepEqual(cleared.body.setup.strengths, {});
+});
+
+/* ------------------------------------------- Suggest for me (the agent's picks) */
+
+// The strength field with the toggle on and its rows drawn.
+async function openSuggestSetup(t, opts) {
+  const s = await openStrengthSetup(t, LAUNCH, opts);
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator(".loop-strength-row").first().waitFor();
+  return s;
+}
+
+const suggestButton = (s) => s.page.locator("#loop-strength-suggest");
+const busyField = (s) => s.page.locator(".loop-field.is-suggesting");
+
+test("Suggest for me sits right of Set all to, asks the dashboard agent with the phases and mapped words, and grays the field", async (t) => {
+  const s = await openSuggestSetup(t);
+  const button = suggestButton(s);
+  assert.equal(await textOf(button), "Suggest for me");
+  assert.equal(await button.evaluate((b) => b.previousElementSibling && b.previousElementSibling.id), "loop-strength-all", "right after the Set all to list");
+
+  await button.click();
+  await busyField(s).waitFor();
+  assert.equal(await busyField(s).getAttribute("aria-busy"), "true");
+  assert.match(await textOf(busyField(s).locator(".loop-suggest-overlay")), /reading each phase/i);
+  assert.equal(await s.page.locator("#loop-strength-all").isDisabled(), true, "Set all to waits too");
+  assert.equal(await button.isDisabled(), true);
+  assert.equal(await s.page.locator("#loop-phase-strength").isDisabled(), true, "the toggle waits too");
+  for (const radio of await s.page.locator(".loop-strength-row input").all()) assert.equal(await radio.isDisabled(), true);
+
+  const got = s.wait(10);
+  assert.equal(got.code, 0, "the request reached the agent");
+  assert.equal(got.actions.length, 1);
+  const [action] = got.actions;
+  assert.equal(action.i, "__loopSuggest");
+  assert.equal(action.spec, "specs/ready");
+  assert.deepEqual(action.phases, [{ n: 1, name: "One" }, { n: 2, name: "Two" }]);
+  assert.deepEqual(action.strengths, ["thrifty", "balanced", "best"], "only the words mapped for this agent, in rank order");
+  assert.match(action.id, /^[a-z0-9-]+$/);
+  assert.match(got.reply, /Suggest a strength for each phase left in specs\/ready/);
+});
+
+test("a posted suggestion fills the rows with a reason each, frees the field, and a hand change drops only that row's reason", async (t) => {
+  const s = await openSuggestSetup(t);
+  await suggestButton(s).click();
+  const got = s.wait(10);
+  assert.equal(got.code, 0);
+  const id = got.actions[0].id;
+  s.post({
+    loopSuggest: {
+      id,
+      spec: "specs/ready",
+      picks: [
+        { n: 1, strength: "thrifty", why: "A small copy change." },
+        { n: 2, strength: "best", why: "A new parser with many edge cases." },
+      ],
+    },
+    agent: { status: "waiting" },
+  });
+  await busyField(s).waitFor({ state: "detached" });
+  assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["thrifty", "best"]);
+  assert.deepEqual(await s.page.locator(".loop-strength-why").allInnerTexts(), ["A small copy change.", "A new parser with many edge cases."]);
+  assert.equal(await suggestButton(s).isDisabled(), false, "free to ask again");
+  await s.page.waitForFunction(() => document.activeElement && document.activeElement.id === "loop-strength-suggest");
+
+  await pickStrength(s, 1, "balanced");
+  assert.deepEqual(await s.page.locator(".loop-strength-why").allInnerTexts(), ["A new parser with many edge cases."], "row 1 was changed by hand");
+  await s.page.locator("#loop-strength-all").selectOption("match");
+  assert.equal(await s.page.locator(".loop-strength-why").count(), 0, "Set all to replaces every pick, and every reason with it");
+});
+
+test("an answer for an older request, or for another spec, is never applied", async (t) => {
+  const s = await openSuggestSetup(t);
+  await suggestButton(s).click();
+  const got = s.wait(10);
+  s.post({ loopSuggest: { id: "old-request", spec: "specs/ready", picks: [{ n: 1, strength: "best", why: "Old." }] }, agent: { status: "waiting" } });
+  s.post({ loopSuggest: { id: got.actions[0].id, spec: "specs/other", picks: [{ n: 1, strength: "best", why: "Other." }] } });
+  await s.page.waitForTimeout(500);
+  assert.equal(await busyField(s).count(), 1, "still waiting for its own answer");
+  assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["", ""]);
+});
+
+test("no answer in time frees the field, says the agent did not answer, and leaves the picks as they were", async (t) => {
+  const s = await openSuggestSetup(t, { clock: true });
+  await pickStrength(s, 2, "thrifty");
+  await suggestButton(s).click();
+  await busyField(s).waitFor();
+  await s.page.clock.fastForward(121000);
+  await busyField(s).waitFor({ state: "detached" });
+  assert.match(await textOf(s.page.locator(".loop-suggest-note")), /did not answer/);
+  assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["", "thrifty"]);
+});
+
+test("a send that fails frees the field at once with a note, and focus goes back to the button", async (t) => {
+  const s = await openSuggestSetup(t);
+  await s.page.route("**/submit", (route) => route.fulfill({ status: 500, body: "{}" }));
+  await suggestButton(s).click();
+  await s.page.locator(".loop-suggest-note").waitFor();
+  assert.match(await textOf(s.page.locator(".loop-suggest-note")), /could not be asked/);
+  assert.equal(await busyField(s).count(), 0);
+  assert.equal(await suggestButton(s).isDisabled(), false);
+  await s.page.waitForFunction(() => document.activeElement && document.activeElement.id === "loop-strength-suggest");
+});
+
+test("a pick for an unmapped word, or a phase left out, keeps that row as it was", async (t) => {
+  const s = await openSuggestSetup(t);
+  await s.page.evaluate(async () => {
+    const { page, redraw } = await import(new URL("state.js", document.baseURI).href);
+    page.loopSetup.facts.resolved = { thrifty: { model: "sonnet", effort: "low" }, balanced: { model: "sonnet", effort: "medium" } };
+    redraw();
+  });
+  await pickStrength(s, 2, "thrifty");
+  await suggestButton(s).click();
+  const got = s.wait(10);
+  assert.deepEqual(got.actions[0].strengths, ["thrifty", "balanced"], "Best is not mapped, so it is not offered");
+  s.post({ loopSuggest: { id: got.actions[0].id, spec: "specs/ready", picks: [{ n: 1, strength: "best", why: "Needs the strongest." }] }, agent: { status: "waiting" } });
+  await busyField(s).waitFor({ state: "detached" });
+  assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["", "thrifty"]);
+  assert.equal(await s.page.locator(".loop-strength-why").count(), 0, "no reason shows for a pick that was not applied");
 });

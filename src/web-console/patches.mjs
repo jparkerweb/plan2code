@@ -1197,6 +1197,8 @@ export function validate(state) {
   if (state.loopExpect !== undefined) problems.push(...loopExpectProblems(state.loopExpect));
   if (state.loopOutcome !== undefined) problems.push(...loopOutcomeProblems(state.loopOutcome, state.loopExpect));
   if (state.loopEnd !== undefined) problems.push(...loopEndProblems(state.loopEnd, state));
+  // The dashboard agent's answer to Suggest for me on the loop setup screen.
+  if (state.loopSuggest !== undefined) problems.push(...loopSuggestProblems(state.loopSuggest));
 
   // A note on a card is unanswered the moment no agent words follow it in its
   // thread. Once that is true, no patch may move past it except one that
@@ -1618,6 +1620,39 @@ export function loopOutcomeProblems(o, expect) {
       bad("tasks.assumed", "must be empty: this loop does not allow best guesses");
     }
   }
+  return p;
+}
+
+/**
+ * Problems with a `loopSuggest`: the dashboard agent's strength per phase for
+ * the loop setup's Suggest for me, answering the page's `__loopSuggest` send.
+ * `{ id, spec, picks: [{ n, strength, why }] }`; `id` echoes the send's, and
+ * an empty `strength` is Match my session.
+ */
+export const SUGGEST_STRENGTHS = ["", "thrifty", "balanced", "best"];
+export function loopSuggestProblems(v) {
+  const p = [];
+  const bad = (field, rule) => p.push(`loopSuggest.${field} ${rule}`);
+  const right = ' Like this: {"loopSuggest":{"id":"<the send id>","spec":"specs/<name>","picks":[{"n":1,"strength":"thrifty","why":"A small copy change."}]}}';
+  if (!isPlainObject(v)) return ["loopSuggest must be an object." + right];
+  if (typeof v.id !== "string" || !/^[a-z0-9-]{1,40}$/.test(v.id)) bad("id", "must be the id the __loopSuggest send carried");
+  if (typeof v.spec !== "string" || !/^specs\/[^/\\\r\n]+$/.test(v.spec)) bad("spec", "must be the send's spec, specs/<name>");
+  if (!Array.isArray(v.picks) || v.picks.length === 0) {
+    bad("picks", "must be a non-empty array, one { n, strength, why } per phase left");
+    return p;
+  }
+  const seen = new Set();
+  v.picks.forEach((pick, i) => {
+    if (!isPlainObject(pick)) return bad(`picks[${i}]`, "must be an object { n, strength, why }");
+    if (!isPosInt(pick.n)) bad(`picks[${i}].n`, "must be a positive integer, the phase number");
+    else if (seen.has(pick.n)) bad(`picks[${i}].n`, `names phase ${pick.n} twice`);
+    else seen.add(pick.n);
+    if (!SUGGEST_STRENGTHS.includes(pick.strength)) bad(`picks[${i}].strength`, 'must be one of "thrifty", "balanced", "best", or "" for Match my session');
+    if (pick.why !== undefined) {
+      if (!oneLine(pick.why, 160)) bad(`picks[${i}].why`, "must be one line of 1 to 160 characters");
+      else p.push(...proseProblems(pick.why, `loopSuggest.picks[${i}].why`));
+    }
+  });
   return p;
 }
 
