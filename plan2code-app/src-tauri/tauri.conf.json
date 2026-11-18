@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Plan2Code",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "identifier": "com.plan2code.desktop",
   "build": {
     "frontendDist": "../ui",
@@ -14,7 +14,10 @@
         "title": "Plan2Code",
         "width": 1280,
         "height": 800,
-        "maximized": true,
+        "minWidth": 960,
+        "minHeight": 600,
+        "visible": false,
+        "backgroundColor": "#171513",
         "dragDropEnabled": false,
         "url": "index.html"
       }

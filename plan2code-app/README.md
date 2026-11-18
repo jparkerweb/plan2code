@@ -1,6 +1,10 @@
 # plan2code-app
 
-The Plan2Code desktop app (v3.0): one window with the dashboard, a terminal panel for the agent, and a **New Session** button. Built with Tauri 2 (Rust and a web view).
+Users: see [docs/desktop-app.md](../docs/desktop-app.md). This file is for people who build the app.
+
+The Plan2Code desktop app: one window with the dashboard, a terminal panel for the agent, and a **New Session** button. Built with Tauri 2 (Rust and a web view).
+
+![The desktop app: the dashboard on the left and the agent's terminal docked on the right.](../docs/screenshots/app-terminal-dark.webp)
 
 The app is optional. The Node web console and the skills never depend on it, so running `/plan2code` inside an agent with no app works exactly as before.
 
@@ -39,14 +43,14 @@ Needs the Rust toolchain pinned in `rust-toolchain.toml`, Node 18+, and the Taur
 cd plan2code-app
 npm install
 npm run dev        # run the app
-npm run build      # build the installable bundle
+npm run build      # build the app and local installer bundles (the release ships only the plain executable)
 ```
 
 ## Tests
 
 ```
 cd plan2code-app
-node scripts/vendor.mjs    # once: the xterm files cargo builds against
+node scripts/vendor.mjs    # once: the xterm files and the console's tokens.css cargo builds against
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace

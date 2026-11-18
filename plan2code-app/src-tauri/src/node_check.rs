@@ -77,12 +77,63 @@ fn node_override_dir(args: &[String]) -> Option<String> {
 #[cfg(unix)]
 fn login_shell_path() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    // `printenv PATH`, not `echo $PATH`: fish expands `$PATH` to a list and
+    // echoes it space-separated, which is no PATH at all.
     let out = Command::new(&shell)
-        .args(["-lc", "echo $PATH"])
+        .args(["-lc", "printenv PATH"])
         .output()
         .ok()?;
-    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let path = parse_path_output(&String::from_utf8_lossy(&out.stdout));
     (out.status.success() && !path.is_empty()).then_some(path)
+}
+
+/// A PATH out of a shell's output: the last non-empty line (a login shell's
+/// profile may print a banner first), and a space-separated list of absolute
+/// folders (what fish's `echo $PATH` prints) turned into a `:` list. A single
+/// folder with a space in its name is left alone.
+#[cfg_attr(windows, allow(dead_code))]
+fn parse_path_output(output: &str) -> String {
+    let line = output
+        .lines()
+        .map(str::trim)
+        .rfind(|l| !l.is_empty())
+        .unwrap_or("");
+    let tokens: Vec<&str> = line.split_whitespace().collect();
+    let spaced_list = !line.contains(':')
+        && tokens.len() > 1
+        && tokens
+            .iter()
+            .all(|t| t.starts_with('/') || t.starts_with('~'));
+    if spaced_list {
+        tokens.join(":")
+    } else {
+        line.to_string()
+    }
+}
+
+/// What the PATH lookup is named after in the failure message: the login
+/// shell on macOS and Linux (its own file name, such as `fish`), the saved
+/// system and user PATH on Windows.
+pub fn path_source_label() -> String {
+    #[cfg(unix)]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        shell_name(&shell)
+    }
+    #[cfg(not(unix))]
+    {
+        "Windows (the system and user PATH)".to_string()
+    }
+}
+
+#[cfg_attr(windows, allow(dead_code))]
+fn shell_name(shell: &str) -> String {
+    let name = shell.rsplit(['/', '\\']).next().unwrap_or(shell);
+    if name.is_empty() {
+        "sh".to_string()
+    } else {
+        name.to_string()
+    }
 }
 
 static RESOLVED_PATH: Mutex<Option<String>> = Mutex::new(None);
@@ -250,13 +301,28 @@ pub fn node_binary_path() -> Option<String> {
 
 /// The plain message shown when the check fails; `None` when Node is fine.
 pub fn problem_message(status: &NodeStatus) -> Option<String> {
+    problem_message_from(status, &path_source_label())
+}
+
+/// `problem_message` with the PATH source named by the caller, so a test need
+/// not depend on this machine's shell.
+pub fn problem_message_from(status: &NodeStatus, source: &str) -> Option<String> {
+    let advice = format!(
+        "Install the current LTS release from https://nodejs.org and start Plan2Code again.
+
+Looked on PATH from {source}."
+    );
     match status {
         NodeStatus::Ok(_) => None,
         NodeStatus::TooOld(v) => Some(format!(
-            "Plan2Code needs Node.js {MIN_NODE_MAJOR} or newer, and this computer has {v}.\n\nInstall the current LTS release from https://nodejs.org and start Plan2Code again."
+            "Plan2Code needs Node.js {MIN_NODE_MAJOR} or newer, and this computer has {v}.
+
+{advice}"
         )),
         NodeStatus::Missing => Some(format!(
-            "Plan2Code needs Node.js {MIN_NODE_MAJOR} or newer, and it was not found.\n\nInstall the current LTS release from https://nodejs.org and start Plan2Code again."
+            "Plan2Code needs Node.js {MIN_NODE_MAJOR} or newer, and it was not found.
+
+{advice}"
         )),
     }
 }
@@ -371,5 +437,70 @@ mod tests {
         refresh_path();
         let inherited = std::env::var("PATH").unwrap_or_default();
         assert!(resolved_path().ends_with(&inherited));
+    }
+
+    #[test]
+    fn the_failure_message_names_where_it_looked() {
+        let text = problem_message_from(&NodeStatus::Missing, "fish").unwrap();
+        assert!(text.contains("Looked on PATH from fish."));
+        assert!(text.contains("https://nodejs.org"));
+        assert!(problem_message_from(&NodeStatus::Ok("v20.0.0".into()), "fish").is_none());
+    }
+
+    #[test]
+    fn shell_names_come_from_the_last_path_part() {
+        assert_eq!(shell_name("/usr/bin/fish"), "fish");
+        assert_eq!(shell_name("/bin/zsh"), "zsh");
+        assert_eq!(shell_name("bash"), "bash");
+        assert_eq!(shell_name(""), "sh");
+    }
+
+    #[test]
+    fn a_colon_path_is_kept_as_it_is() {
+        assert_eq!(
+            parse_path_output(
+                "/usr/local/bin:/usr/bin:/bin
+"
+            ),
+            "/usr/local/bin:/usr/bin:/bin"
+        );
+    }
+
+    #[test]
+    fn fish_s_space_separated_list_becomes_a_colon_list() {
+        assert_eq!(
+            parse_path_output(
+                "/home/sam/.nvm/bin /usr/local/bin /usr/bin
+"
+            ),
+            "/home/sam/.nvm/bin:/usr/local/bin:/usr/bin"
+        );
+    }
+
+    #[test]
+    fn a_banner_before_the_path_and_a_folder_with_a_space_are_handled() {
+        assert_eq!(
+            parse_path_output(
+                "Welcome back
+
+/usr/bin:/bin
+"
+            ),
+            "/usr/bin:/bin"
+        );
+        assert_eq!(
+            parse_path_output(
+                "/Users/Jo Smith/bin
+"
+            ),
+            "/Users/Jo Smith/bin"
+        );
+        assert_eq!(
+            parse_path_output(
+                "  
+"
+            ),
+            ""
+        );
     }
 }

@@ -7,12 +7,16 @@ session. The fresh agent gets a console session of its own, so the Session meter
 It is an addition: `/plan2code` typed inside an agent works exactly as before, with or
 without the app.
 
+![The launch card: which agent, model and effort to start on, with permission checks as their own tick.](screenshots/app-launch-dark.webp)
+
+![The app with the dashboard on the left and the agent's terminal docked on the right.](screenshots/app-terminal-dark.webp)
+
 ## Get it
 
 The installer offers the app after the skills and the `plan2code` command:
 
 ```
-npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
+npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git#release
 ```
 
 Answer **Y** to "Also install the Plan2Code desktop app?" (it is the default). It downloads the file
@@ -38,10 +42,19 @@ verified. `plan2code-app`'s own `npm run build` can produce `.msi`/NSIS/`.dmg`/`
 (Tauri's bundler is on), but the release workflow does not build or publish them; nothing today
 downloads or runs one.
 
+### Manual download
+
+Only when you cannot run the installer. Open the [latest release](https://github.com/jparkerweb/plan2code/releases/latest), then:
+
+1. Download the file for your system from the table above, and `plan2code-app-<version>-SHA256SUMS.txt` beside it.
+2. Verify it: the hash you compute must match that file's line in the checksum list. On macOS use `shasum -a 256 <file>`, on Linux `sha256sum <file>`, on Windows PowerShell `Get-FileHash <file> -Algorithm SHA256`.
+3. Put it in `~/.plan2code/app/` (on Windows `%USERPROFILE%\.plan2code\app\`) and name it `plan2code-app` (`plan2code-app.exe` on Windows), so `plan2code` finds it.
+4. On macOS and Linux, make it runnable: `chmod +x ~/.plan2code/app/plan2code-app`.
+
 You also need Node.js 18 or newer (the app checks at start and says what to install) and:
 
 - **Windows:** the WebView2 runtime, which comes with Windows 11 and current Windows 10.
-- **Linux:** WebKitGTK 4.1 (`libwebkit2gtk-4.1`) and a desktop session.
+- **Linux:** WebKitGTK 4.1 (`libwebkit2gtk-4.1`) and a desktop session. Install it with `sudo apt install libwebkit2gtk-4.1-0` (Debian, Ubuntu) or `sudo dnf install webkit2gtk4.1` (Fedora).
 
 ## Start it
 
@@ -50,7 +63,7 @@ Run `plan2code` in your project, as always. When the app is installed and a wind
 running the agent in your terminal. The desktop shortcut the installer can create runs the same
 command, so it opens the app too; it asks for the folder first, with **Choose a folder** at the top and the folders you opened lately under it (with none yet, it goes straight to the folder dialog).
 
-Start the app itself (from the Start menu, the Dock or a launcher) and it asks for a folder the same way: **Choose a folder** first, then your recent folders, newest first. It no longer reopens the last folder on its own.
+You can also start the app file itself: double-click it in `~/.plan2code/app/`, or run it from a terminal. Nothing adds it to the Start menu, the Dock or a launcher menu, so pin the file yourself if you want a shortcut. It asks for a folder the same way: **Choose a folder** first, then your recent folders, newest first. It no longer reopens the last folder on its own.
 
 Three things keep today's terminal flow:
 
@@ -123,9 +136,10 @@ to that offers the same **Reconnect the console** button — never "Restart the 
 The console also knows when it is running inside the app (the agent it talks to carries that signal):
 its session meter, the "Before you close this" guide on a finished step, and the dashboard's red-session
 banner all point at the app's own **New Session** button instead of a command to paste into a new
-conversation, since New Session already does that in one click. The dashboard's **UPDATE AVAILABLE**
-banner still shows, beside the bar's own **Update available**, and its steps say to run the command in a
-terminal outside the app and then reopen the app (see "Keep it up to date" below). A slash command still offered to continue a step (such as `/plan2code-4-finalize`) stays
+conversation, since New Session already does that in one click. The dashboard's **Update available**
+banner still shows, beside the bar's own **Update available**: its dialog points at the bar's **Update and
+restart** first, with the command as the fallback, run in a terminal outside the app before reopening the
+app (see "Keep it up to date" below). A slash command still offered to continue a step (such as `/plan2code-4-finalize`) stays
 exactly as it would in a terminal: paste it into the app's own terminal panel, which runs the real
 agent CLI.
 
@@ -135,6 +149,12 @@ The Implementation Loop builds every remaining phase of a documented spec for yo
 while you do something else. It is in the app only: the dashboard shows an **Implementation Loop**
 card there, and nowhere else. Pick a spec, answer a short setup, press **Start the loop**, and the app
 confirms it once in its own window before anything runs.
+
+![The Implementation Loop setup screen.](screenshots/loop-setup-dark.webp)
+
+![The Loop's banner while a phase builds, with Stop after this phase.](screenshots/loop-banner-dark.webp)
+
+![The Loop's stop screen, with the evidence for why it stopped.](screenshots/loop-stop-dark.webp)
 
 **How it runs.** Each phase gets a fresh agent session, so a long spec never grows one tired
 conversation. The app, not the agent, decides when a phase counts: it reads the spec's marks, runs the
@@ -148,7 +168,7 @@ not), so your own edits never end up inside a phase's commit.
 - **Fix findings**: **Smart pick** (the default) has a fresh agent read the findings and fix only the
   ones worth fixing, recording every skip. A skipped Critical stops the phase. **By level** fixes the
   Critical, Warning and Suggestion findings you tick (all three start ticked).
-- **Strength per phase** (off): turn on **Set strength per phase** to see one row per phase still to build under four headed columns, **Match my session**, **Thrifty**, **Balanced** and **Best**, and click a dot in a row to pick (the arrow keys move along a row), or use **Set all to** for one pick. A thick line steps through each row's picked dot, so the choices read at a glance, and the model each pick becomes shows at the end of its row. A phase you leave untouched runs on the model the app was launched with, as before. A phase whose agent crashes or goes quiet gets its one retry (when the retry tick is on) one step up (Thrifty to Balanced, Balanced to Best; Best stays Best; **Match my session** runs on the launch model and its retry stays there), and the phase's helpers follow the same strength. Which model each word means for your agent is set in User Preferences, **Agents & models**, under **Strengths in the loop**; an agent with nothing mapped shows the toggle off with a link there. The picks are remembered per project and spec, and a pick for a phase that is done or gone is dropped.
+- **Strength per phase** (off): turn on **Set strength per phase** to see one row per phase still to build under four headed columns, **Match my session**, **Thrifty**, **Balanced** and **Best**, and click a dot in a row to pick (the arrow keys move along a row), or use **Set all to** for one pick. A thick line steps through each row's picked dot, so the choices read at a glance, and the model each pick becomes shows at the end of its row. A phase you leave untouched runs on the model the app was launched with, as before. A phase whose agent crashes or goes quiet gets its one retry (when the retry tick is on) one step up (Thrifty to Balanced, Balanced to Best; Best stays Best; **Match my session** runs on the launch model and its retry stays there), and the phase's subagents follow the same strength. Which model each word means for your agent is set in User Preferences, **Agents & models**, under **Strengths in the loop**; an agent with nothing mapped shows the toggle off with a link there. The picks are remembered per project and spec, and a pick for a phase that is done or gone is dropped.
 - **When a phase asks something**: **Take the agent's best guess** (the default), which records the
   assumption as a `[?]` task, **Pause and wait for me**, or **Stop the loop**.
 - **After the last phase**: **Stop and offer Finalize** (the default) or **Run Finalize automatically**.
@@ -202,7 +222,7 @@ with, and it needs permission checks off. With them on, an agent would wait on a
 sees, so **Start the loop** stays grayed out until you turn them off (see
 [Permission checks are off by default](#permission-checks-are-off-by-default-same-as-the-terminal)).
 
-**What is locked while it drives.** Answers, sign-offs, launches, Workspace, Helpers, **Back** and
+**What is locked while it drives.** Answers, sign-offs, launches, Workspace, Subagents, **Back** and
 **New Session** are read-only, and Ask is off, except for a question the loop is waiting on. Activities, Notebook, Help, Preferences, the documents
 and the code review stay usable, so you can watch, play, or read along.
 
@@ -252,11 +272,17 @@ clean tree. The in-app **Help** has a matching topic, **Implementation Loop**, w
 
 `plan2code update` brings the skills, the `plan2code` command and the app up together.
 
-When a newer release is out, the app's top bar shows **Update available** with **Copy update command**,
-and the dashboard shows its **UPDATE AVAILABLE** banner. Neither updates for you: the app cannot replace
-itself while it runs (Windows will not overwrite a running file), so copy the command, run it in a
-terminal outside the app (not the app's terminal panel, which runs your agent), then close the app and
-open it again.
+When a newer release is out, the app's top bar shows **Update available** with **Update and restart**
+and a **What's new** link to the release page. **Update and restart** installs the newest release (the
+same installer `plan2code update` runs, with its progress in the bar) and then reopens the app on the
+same project; no terminal is needed. A running file cannot be overwritten on Windows, but the installer
+renames it aside and the app then restarts into the new one. If an agent or a loop is running, the app
+asks first (the same check as closing the window, with Stay as the default); answer Stay and the bar
+offers **Restart Plan2Code** for when you are ready. If the update fails, the app you have keeps running
+and the bar says why; you can press the button again or run `plan2code update` in a terminal. After the
+restart the bar says **Updated to vX** once. The app asks again every few hours while it stays open, and
+says so when it cannot check (git missing, or no answer from GitHub). The dashboard's own **Update
+available** banner points at **Update and restart** too, and keeps the terminal command as the fallback.
 
 If the app and the installed skills ever differ in version, the app's top bar says so and offers **Update
 skills**, which brings the skills level with the app's own version when you press it. That one is a
@@ -267,14 +293,18 @@ then asks whether your own data in `~/.plan2code/` (notebooks, handoffs, setting
 `--yes` skips both questions and keeps that data; add `--purge` to delete it. Close the app first:
 Windows cannot delete a running file.
 
-## The first release is unsigned
+## The app is not code-signed
 
-The app is not code-signed yet, so your system may stop it the first time it starts. It is the same
+The app is not code-signed, so your system may stop it the first time it starts. Signing is not planned for now. It is the same
 file the installer verified against the release's checksum list.
 
 **macOS.** If macOS says the app "cannot be opened because Apple cannot check it for malicious
 software": open **System Settings**, then **Privacy & Security**, scroll to the message about
-`plan2code-app`, and press **Open Anyway**. Start `plan2code` again and confirm.
+`plan2code-app`, and press **Open Anyway**. Start `plan2code` again and confirm. If **Open Anyway** does not appear, remove the quarantine mark and start it again:
+
+```
+xattr -d com.apple.quarantine ~/.plan2code/app/plan2code-app
+```
 
 **Windows.** If SmartScreen shows "Windows protected your PC": press **More info**, then **Run
 anyway**.

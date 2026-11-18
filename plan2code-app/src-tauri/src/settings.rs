@@ -10,6 +10,13 @@ const TERM_FRACTION_KEY: &str = "termFraction";
 const TERM_COLLAPSED_KEY: &str = "termCollapsed";
 const FIRST_RUN_DONE_KEY: &str = "firstRunDone";
 const TASKBAR_SIGNAL_KEY: &str = "taskbarSignal";
+const TERMINAL_FONT_SIZE_KEY: &str = "terminalFontSize";
+const COPY_ON_SELECT_KEY: &str = "copyOnSelect";
+const UPDATED_FROM_KEY: &str = "updatedFrom";
+
+pub const DEFAULT_TERMINAL_FONT_SIZE: u32 = 13;
+pub const TERMINAL_FONT_SIZE_MIN: u32 = 8;
+pub const TERMINAL_FONT_SIZE_MAX: u32 = 32;
 
 /// The terminal pane's remembered shape: which edge it docks to, how much of
 /// the window it takes (a fraction, not collapsed or maximized), and whether
@@ -111,6 +118,34 @@ pub fn save_term_panel(
     write(file, settings)
 }
 
+/// The terminal's font size in pixels: the saved one, clamped to its range,
+/// or 13 when the file has none (an old file) or holds something else.
+pub fn load_terminal_font_size(file: &Path) -> u32 {
+    read(file)
+        .get(TERMINAL_FONT_SIZE_KEY)
+        .and_then(|v| v.as_u64())
+        .map_or(DEFAULT_TERMINAL_FONT_SIZE, |size| {
+            size.clamp(
+                u64::from(TERMINAL_FONT_SIZE_MIN),
+                u64::from(TERMINAL_FONT_SIZE_MAX),
+            ) as u32
+        })
+}
+
+/// Save the terminal's font size, keeping any other key the file holds. A
+/// size outside 8 to 32 is rejected rather than saved.
+pub fn save_terminal_font_size(file: &Path, size: u32) -> Result<(), String> {
+    if !(TERMINAL_FONT_SIZE_MIN..=TERMINAL_FONT_SIZE_MAX).contains(&size) {
+        return Err(format!("font size out of range: {size}"));
+    }
+    let mut settings = read(file);
+    settings.insert(
+        TERMINAL_FONT_SIZE_KEY.to_string(),
+        serde_json::Value::from(size),
+    );
+    write(file, settings)
+}
+
 /// Whether the first-run checklist has already passed once. Once it has,
 /// later launches go straight to the launch card (Task 9.4).
 pub fn load_first_run_done(file: &Path) -> bool {
@@ -145,6 +180,54 @@ pub fn save_taskbar_signal(file: &Path, on: bool) -> Result<(), String> {
     let mut settings = read(file);
     settings.insert(TASKBAR_SIGNAL_KEY.to_string(), serde_json::Value::Bool(on));
     write(file, settings)
+}
+
+/// Copy-on-select's default: on for Linux, where selecting text is the
+/// copy gesture, off on Windows and macOS, where it would replace what the
+/// person last copied.
+pub fn default_copy_on_select() -> bool {
+    cfg!(target_os = "linux")
+}
+
+/// Whether selecting text in the terminal copies it at once (Task 10.6). The
+/// saved choice, or the per-OS default when the file has none or holds
+/// something other than a boolean.
+pub fn load_copy_on_select(file: &Path) -> bool {
+    read(file)
+        .get(COPY_ON_SELECT_KEY)
+        .and_then(|v| v.as_bool())
+        .unwrap_or_else(default_copy_on_select)
+}
+
+/// Save the choice, keeping any other key the file holds.
+pub fn save_copy_on_select(file: &Path, on: bool) -> Result<(), String> {
+    let mut settings = read(file);
+    settings.insert(COPY_ON_SELECT_KEY.to_string(), serde_json::Value::Bool(on));
+    write(file, settings)
+}
+
+/// Note the version the app was running before an "Update and restart", for
+/// the new app to say "Updated to vX" once (`take_updated_from`).
+pub fn save_updated_from(file: &Path, version: &str) -> Result<(), String> {
+    let mut settings = read(file);
+    settings.insert(
+        UPDATED_FROM_KEY.to_string(),
+        serde_json::Value::String(version.to_string()),
+    );
+    write(file, settings)
+}
+
+/// The version noted by `save_updated_from`, read once: the key is removed
+/// as it is read, so the message shows one time only.
+pub fn take_updated_from(file: &Path) -> Option<String> {
+    let mut settings = read(file);
+    let from = settings
+        .remove(UPDATED_FROM_KEY)?
+        .as_str()
+        .map(str::to_string)
+        .filter(|v| !v.is_empty());
+    let _ = write(file, settings);
+    from
 }
 
 fn write(file: &Path, settings: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
@@ -277,5 +360,63 @@ mod tests {
         assert_eq!(loaded.dock, "bottom");
         assert_eq!(loaded.fraction, 0.25);
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
+    }
+
+    #[test]
+    fn the_terminal_font_size_defaults_round_trips_and_keeps_other_keys() {
+        let file = temp_file("font-size");
+        assert_eq!(load_terminal_font_size(&file), 13, "missing file");
+        save_last_agent(&file, "claude").unwrap();
+        assert_eq!(
+            load_terminal_font_size(&file),
+            13,
+            "old file without the field"
+        );
+        save_terminal_font_size(&file, 18).unwrap();
+        assert_eq!(load_terminal_font_size(&file), 18);
+        assert_eq!(load_last_agent(&file).as_deref(), Some("claude"));
+        save_term_panel(&file, "bottom", 0.4, false).unwrap();
+        assert_eq!(load_terminal_font_size(&file), 18);
+    }
+
+    #[test]
+    fn an_out_of_range_terminal_font_size_is_refused_and_a_bad_one_on_disk_is_clamped() {
+        let file = temp_file("font-size-range");
+        assert!(save_terminal_font_size(&file, 7).is_err());
+        assert!(save_terminal_font_size(&file, 33).is_err());
+        assert_eq!(load_terminal_font_size(&file), 13, "nothing was written");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, r#"{"terminalFontSize": 400}"#).unwrap();
+        assert_eq!(load_terminal_font_size(&file), 32);
+        std::fs::write(&file, r#"{"terminalFontSize": 2}"#).unwrap();
+        assert_eq!(load_terminal_font_size(&file), 8);
+        std::fs::write(&file, r#"{"terminalFontSize": "big"}"#).unwrap();
+        assert_eq!(load_terminal_font_size(&file), 13);
+    }
+
+    #[test]
+    fn copy_on_select_defaults_per_os_and_keeps_a_saved_choice() {
+        let file = temp_file("copy-on-select");
+        // No file: Linux copies on select, Windows and macOS do not.
+        assert_eq!(default_copy_on_select(), cfg!(target_os = "linux"));
+        assert_eq!(load_copy_on_select(&file), cfg!(target_os = "linux"));
+        save_copy_on_select(&file, !default_copy_on_select()).unwrap();
+        assert_eq!(load_copy_on_select(&file), !default_copy_on_select());
+        save_copy_on_select(&file, default_copy_on_select()).unwrap();
+        assert_eq!(load_copy_on_select(&file), default_copy_on_select());
+        // Something other than a boolean reads as the default.
+        std::fs::write(&file, r#"{"copyOnSelect":"yes"}"#).unwrap();
+        assert_eq!(load_copy_on_select(&file), default_copy_on_select());
+    }
+
+    #[test]
+    fn the_updated_marker_is_read_once_and_keeps_other_keys() {
+        let file = temp_file("updated-from");
+        assert_eq!(take_updated_from(&file), None);
+        save_last_agent(&file, "claude").unwrap();
+        save_updated_from(&file, "3.1.0").unwrap();
+        assert_eq!(take_updated_from(&file).as_deref(), Some("3.1.0"));
+        assert_eq!(take_updated_from(&file), None);
+        assert_eq!(load_last_agent(&file).as_deref(), Some("claude"));
     }
 }

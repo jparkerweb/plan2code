@@ -1,7 +1,7 @@
 // Hide the extra console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -22,6 +22,7 @@ use plan2code_app_lib::session_reader;
 use plan2code_app_lib::settings;
 #[cfg(windows)]
 use plan2code_app_lib::task_dialog;
+use plan2code_app_lib::ui_confirm;
 use plan2code_app_lib::versions;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{Emitter, Manager, State};
@@ -42,12 +43,9 @@ struct AppState {
     page: PageChannel,
     // This window's endpoint for pages the agent's `console.mjs open` wants shown here.
     announce: Arc<Mutex<Option<AnnounceServer>>>,
-    // The Node version `main()` found before opening the window (Task 1.7 exits
-    // cleanly on anything else, so this is always a passing version once the
-    // window exists), and which binary that was, with `resolved_path`'s PATH
-    // (Task 9.9): the first-run checklist's Node row names both.
-    node_version: Option<String>,
-    node_binary: Option<String>,
+    // The Node check's result: it runs on a background thread after the
+    // window opens (Task 9.10), so this is unchecked until it reports.
+    node: Mutex<NodeReport>,
     // What the taskbar entry last said, and whether it may say anything.
     attention: Mutex<AttentionState>,
     // The app itself, once it is set up: the agent's sink clears the taskbar
@@ -60,6 +58,69 @@ struct AppState {
     // kept after the running record is gone so Resume, Fix together with an agent and
     // Finalize still work. Memory only.
     last_loop: Mutex<Option<LastLoop>>,
+    // The version this app was running before an "Update and restart" brought it up: read
+    // from app.json once at launch (and cleared there), for the page to say "Updated to vX".
+    updated_from: Option<String>,
+    // Confirms the shell's own modal is asked (ui_confirm.rs): the answers still to come, and
+    // whether the page has begun listening for requests (until then the OS box asks instead).
+    confirms: ui_confirm::Pending,
+    confirm_ready: AtomicBool,
+}
+
+/// What the Node check found, as the page reads it (`app_state` and the
+/// `node-status` event share this shape). `checked` is false until the check
+/// has finished; `problem` is the failure message, if any.
+#[derive(Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeReport {
+    checked: bool,
+    version: Option<String>,
+    binary: Option<String>,
+    problem: Option<String>,
+}
+
+/// Run the Node check off the main thread and publish its result: store it,
+/// tell the page, and on a failure show the dialog and end the app, as
+/// `main()` did before the window existed (FR-13).
+fn spawn_node_check(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let status = node_check::check_node();
+        let problem = node_check::problem_message(&status);
+        let version = match &status {
+            node_check::NodeStatus::Ok(version) => Some(version.clone()),
+            _ => None,
+        };
+        let binary = version
+            .as_ref()
+            .and_then(|_| node_check::node_binary_path());
+        let report = NodeReport {
+            checked: true,
+            version,
+            binary,
+            problem: problem.clone(),
+        };
+        if let Ok(mut slot) = app.state::<AppState>().node.lock() {
+            *slot = report.clone();
+        }
+        let _ = app.emit("node-status", &report);
+        if let Some(message) = problem {
+            // The first button is the default: Open nodejs.org, then the app ends either way.
+            let open_site = app
+                .dialog()
+                .message(&message)
+                .title("Plan2Code needs Node.js")
+                .kind(MessageDialogKind::Error)
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    "Open nodejs.org".to_string(),
+                    "Quit".to_string(),
+                ))
+                .blocking_show();
+            if open_site {
+                let _ = open_url("https://nodejs.org");
+            }
+            std::process::exit(1);
+        }
+    });
 }
 
 // The console page's last state as the taskbar shows it (attention.rs), and
@@ -146,7 +207,12 @@ fn agent_availability(refresh: Option<bool>) -> serde_json::Value {
 // is an error: the page never names the link itself.
 #[tauri::command]
 fn open_install_page(id: String) -> Result<(), String> {
-    let url = agents::install_page_url(&id)?;
+    open_url(&agents::install_page_url(&id)?)
+}
+
+// Opens a web address in the default browser, with the same switches as the console
+// open-link.mjs.
+fn open_url(url: &str) -> Result<(), String> {
     // The same switches as the console open-link.mjs.
     if std::env::var_os("NO_BROWSER").is_some_and(|v| !v.is_empty())
         || std::env::var_os("PLAN2CODE_NO_BROWSER").is_some_and(|v| !v.is_empty())
@@ -155,11 +221,11 @@ fn open_install_page(id: String) -> Result<(), String> {
     }
     let mut command = if cfg!(windows) {
         let mut c = std::process::Command::new("rundll32.exe");
-        c.args(["url.dll,FileProtocolHandler", &url]);
+        c.args(["url.dll,FileProtocolHandler", url]);
         c
     } else if cfg!(target_os = "macos") {
         let mut c = std::process::Command::new("open");
-        c.arg(&url);
+        c.arg(url);
         c
     } else {
         let browser = std::env::var("BROWSER")
@@ -167,7 +233,7 @@ fn open_install_page(id: String) -> Result<(), String> {
             .filter(|b| !b.is_empty())
             .unwrap_or_else(|| "xdg-open".to_string());
         let mut c = std::process::Command::new(browser);
-        c.arg(&url);
+        c.arg(url);
         c
     };
     command
@@ -480,6 +546,100 @@ struct QuitOpen;
 impl Drop for QuitOpen {
     fn drop(&mut self) {
         QUIT_OPEN.store(false, Ordering::SeqCst);
+        // Stay was the answer (a Quit has already taken the plan): no restart is pending.
+        if let Ok(mut plan) = RESTART_ON_QUIT.lock() {
+            *plan = None;
+        }
+    }
+}
+
+// What an "Update and restart" starts once the app has shut down: the app file to run, the
+// project folder to hand it, and this app's version for the "Updated to vX" note.
+struct RestartPlan {
+    exe: PathBuf,
+    project: Option<PathBuf>,
+    from_version: String,
+}
+
+// Set by `restart_app`, taken by `quit_app`. A Stay answer to the quit check clears it
+// (`QuitOpen`'s drop), so a later ordinary quit never restarts.
+static RESTART_ON_QUIT: Mutex<Option<RestartPlan>> = Mutex::new(None);
+
+// Starts the new app, detached so it outlives this process. The note for its first page goes
+// to app.json first.
+fn spawn_restart(plan: &RestartPlan) -> Result<(), String> {
+    if let Some(file) = settings::settings_file() {
+        let _ = settings::save_updated_from(&file, &plan.from_version);
+    }
+    let mut command = std::process::Command::new(&plan.exe);
+    command
+        .args(versions::restart_args(plan.project.as_deref()))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0000_0008 | 0x0000_0200); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not start {}: {e}", plan.exe.display()))
+}
+
+// Asks through the shell's own modal and waits for the answer: one look for every confirm, with the
+// safe button first and focused. None when the page cannot show it (no window yet, or its modal is
+// not listening): the caller then asks with the OS box. Blocks, so never call it on the event loop.
+fn ask_in_window(
+    app: &tauri::AppHandle,
+    build: impl FnOnce(String) -> ui_confirm::ConfirmRequest,
+) -> Option<bool> {
+    let state = app.state::<AppState>();
+    if !state.confirm_ready.load(Ordering::SeqCst) || app.get_webview_window("main").is_none() {
+        return None;
+    }
+    let (id, rx) = state.confirms.register();
+    let request = build(id.clone());
+    if app.emit("confirm-request", &request).is_err() {
+        state.confirms.forget(&id);
+        return None;
+    }
+    let yes = ui_confirm::wait_for(&rx, ui_confirm::ANSWER_TIMEOUT);
+    state.confirms.forget(&id);
+    // Whatever the page still shows for this request goes away with it.
+    let _ = app.emit("confirm-cancel", &id);
+    Some(yes)
+}
+
+// The modal's answer, by the id the request carried. A stale or invented id changes nothing.
+#[tauri::command]
+fn confirm_answer(state: State<'_, AppState>, id: String, yes: bool) {
+    state.confirms.answer(&id, yes);
+}
+
+// The page is listening for `confirm-request` from now on.
+#[tauri::command]
+fn confirm_ready(state: State<'_, AppState>) {
+    state.confirm_ready.store(true, Ordering::SeqCst);
+    // A page that has only now started listening (a reload) shows no older modal: whatever was
+    // asked before it listened is Cancel, not a thread waiting out the timeout with the quit
+    // check (QUIT_OPEN) held.
+    state.confirms.cancel_all();
+}
+
+// The bar's "..." menu and the macOS menu's Quit: the same quit check as closing the window.
+#[tauri::command]
+fn request_quit(app: tauri::AppHandle) {
+    if agent_is_active(&app) {
+        confirm_quit(&app);
+    } else {
+        quit_app(&app);
     }
 }
 
@@ -523,27 +683,46 @@ fn confirm_quit(app: &tauri::AppHandle) {
         QuitCase::Waiting => MessageDialogKind::Info,
         QuitCase::Working => MessageDialogKind::Warning,
     };
-    // The plugin makes its first button the default, so off Windows Enter
-    // means Quit. Stay first would make Esc quit instead, since the plugin
-    // reads Esc as "not the first button".
+    // Off Windows the shell's own modal asks, with Stay first and focused, so Stay is the default
+    // answer everywhere (the plugin's box makes Quit the default). The OS box is the fallback for a
+    // page that cannot show it. Both wait off the event loop.
     let app = app.clone();
-    app.dialog()
-        .message(prompt.message.clone())
-        .title(prompt.heading.clone())
-        .kind(kind)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            prompt.quit.clone(),
-            prompt.stay.clone(),
-        ))
-        .show({
-            let app = app.clone();
-            move |quit| {
-                let _open = open;
+    std::thread::spawn(move || {
+        let _open = open;
+        #[cfg(not(windows))]
+        {
+            let asked = ask_in_window(&app, |id| {
+                ui_confirm::quit_request(
+                    id,
+                    &prompt.heading,
+                    &prompt.message,
+                    &prompt.quit,
+                    &prompt.stay,
+                )
+            });
+            if let Some(quit) = asked {
                 if quit {
                     quit_app(&app);
                 }
+                return;
             }
-        });
+        }
+        // The plugin makes its first button the default, so here Enter means Quit. Stay first
+        // would make Esc quit instead, since the plugin reads Esc as "not the first button".
+        let quit = app
+            .dialog()
+            .message(prompt.message.clone())
+            .title(prompt.heading.clone())
+            .kind(kind)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                prompt.quit.clone(),
+                prompt.stay.clone(),
+            ))
+            .blocking_show();
+        if quit {
+            quit_app(&app);
+        }
+    });
 }
 
 // A running loop counts even between two phases, when no agent runs for a moment.
@@ -557,6 +736,7 @@ fn agent_is_active(app: &tauri::AppHandle) -> bool {
 // its record is dropped without a word to the page, so its watch thread never
 // takes the ended agent for a crash.
 fn quit_app(app: &tauri::AppHandle) {
+    let restart = RESTART_ON_QUIT.lock().ok().and_then(|mut plan| plan.take());
     let state = app.state::<AppState>();
     loop_driver::abandon(&state.loop_run);
     if let Some(agent) = current_agent(&state) {
@@ -565,6 +745,11 @@ fn quit_app(app: &tauri::AppHandle) {
     if let Ok(mut guard) = state.console.lock() {
         if let Some(mut console) = guard.take() {
             let _ = console.stop();
+        }
+    }
+    if let Some(plan) = restart {
+        if let Err(error) = spawn_restart(&plan) {
+            eprintln!("plan2code: restart failed: {error}");
         }
     }
     app.exit(0);
@@ -723,15 +908,24 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
     let first_run_done = settings_file
         .as_ref()
         .is_some_and(|file| settings::load_first_run_done(file));
+    let node = state.node.lock().map(|n| n.clone()).unwrap_or_default();
+    let terminal_font_size = settings_file
+        .as_ref()
+        .map_or(settings::DEFAULT_TERMINAL_FONT_SIZE, |file| {
+            settings::load_terminal_font_size(file)
+        });
     serde_json::json!({
         "projectDir": project.as_ref().map(|p| p.dir.to_string_lossy().into_owned()),
         "projectDirSource": project.as_ref().map(|p| p.source),
         "lastAgent": last_agent,
         "launchModel": state.launch.model,
-        // Task 1.7 already exits before the window opens on a missing or too-old
-        // Node, so this is always a pass; the checklist's Node row just names it.
-        "nodeVersion": state.node_version,
-        "nodeBinary": state.node_binary,
+        // The Node check runs after the window opens: `nodeChecked` is false
+        // until it finishes, then `node-status` is emitted with the same
+        // fields. A failure shows its dialog and ends the app.
+        "nodeChecked": node.checked,
+        "nodeVersion": node.version,
+        "nodeBinary": node.binary,
+        "nodeProblem": node.problem,
         "skillsVersion": versions::installed_skills_version(),
         "firstRunDone": first_run_done,
         // The launcher always passes `--project` alongside `--agent`, so an
@@ -739,6 +933,14 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
         // or launch card shown.
         "autoStart": state.launch.agent,
         "termPanel": term_panel,
+        "terminalFontSize": terminal_font_size,
+        "copyOnSelect": settings_file.as_ref().map_or_else(
+            settings::default_copy_on_select,
+            |file| settings::load_copy_on_select(file),
+        ),
+        // Set only on the launch right after an "Update and restart": the version the old app
+        // ran. The page says "Updated to v<this app's version>" once.
+        "updatedFrom": state.updated_from,
         // The Desktop app switch, for the page's User Preferences.
         "taskbarSignal": state.attention.lock().map_or(true, |guard| guard.enabled),
     })
@@ -751,6 +953,30 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
 fn save_term_panel(dock: String, fraction: f64, collapsed: bool) -> Result<(), String> {
     let file = settings::settings_file().ok_or("no home folder found")?;
     settings::save_term_panel(&file, &dock, fraction, collapsed)
+}
+
+/// The terminal's font size (Ctrl/Cmd plus, minus and 0), kept in app.json.
+/// A size outside 8 to 32 is refused.
+#[tauri::command]
+fn save_terminal_font_size(size: u32) -> Result<(), String> {
+    let file = settings::settings_file().ok_or("no home folder found")?;
+    settings::save_terminal_font_size(&file, size)
+}
+
+/// Copy-on-select for the terminal (Task 10.6): whether selecting text copies it at once.
+/// The saved choice, or the OS default (on for Linux, off on Windows and macOS).
+#[tauri::command]
+fn get_copy_on_select() -> bool {
+    settings::settings_file().map_or_else(settings::default_copy_on_select, |file| {
+        settings::load_copy_on_select(&file)
+    })
+}
+
+/// Save the copy-on-select choice in app.json.
+#[tauri::command]
+fn set_copy_on_select(on: bool) -> Result<(), String> {
+    let file = settings::settings_file().ok_or("no home folder found")?;
+    settings::save_copy_on_select(&file, on)
 }
 
 /// The first-run checklist passed once: later launches go straight to the
@@ -771,15 +997,19 @@ fn version_status(app: tauri::AppHandle) -> versions::VersionStatus {
     )
 }
 
-/// The newest GitHub release's version when it is newer than this app, else none (also none on
-/// any failure to ask). The page asks once at start and never waits on it.
+/// The release check: `{ latest, problem }`. `latest` is the newest GitHub release's version
+/// when it is newer than this app, else null; `problem` is a short sentence when the check
+/// could not run (git missing, no network), else null. The page asks at start and again every
+/// few hours, and never waits on it.
 #[tauri::command]
-async fn check_new_release(app: tauri::AppHandle) -> Option<String> {
+async fn check_new_release(app: tauri::AppHandle) -> versions::ReleaseCheck {
     let version = app.package_info().version.to_string();
     tauri::async_runtime::spawn_blocking(move || versions::check_new_release(&version))
         .await
-        .ok()
-        .flatten()
+        .unwrap_or_else(|_| versions::ReleaseCheck {
+            latest: None,
+            problem: Some("Could not check for updates: the check did not finish.".to_string()),
+        })
 }
 
 /// What `update_skills` resolves with: the installer's last line, and the version status
@@ -811,6 +1041,60 @@ async fn update_skills(
         versions::installed_skills_version(),
     );
     Ok(UpdateOutcome { message, status })
+}
+
+/// "Update and restart", step one: the installer unpinned (the newest release, not this app's
+/// own tag), with its output live on `progress`. On success the old app keeps running until
+/// `restart_app`; on failure it stays as it was and the error is a readable reason.
+#[tauri::command]
+async fn update_to_newest(
+    app: tauri::AppHandle,
+    progress: Channel<String>,
+) -> Result<UpdateOutcome, String> {
+    let message = tauri::async_runtime::spawn_blocking(move || {
+        versions::run_update_newest(|line| {
+            let _ = progress.send(line.to_string());
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let status = versions::status(
+        &app.package_info().version.to_string(),
+        versions::installed_skills_version(),
+    );
+    Ok(UpdateOutcome { message, status })
+}
+
+/// "Update and restart", step two: start the freshly installed app with this one's `--project`
+/// and end this one. With an agent or loop running it first asks through the existing quit
+/// check (Windows TaskDialog, or the shell's own modal elsewhere; the plugin box only while the page is not listening) and answers "asking"; Stay leaves
+/// everything as it was. `confirmed: true` skips that check, for a page that has already asked
+/// in its own confirm. Answers "restarting" when it goes ahead. Fails, leaving this app
+/// running, when the installed app file is missing.
+#[tauri::command]
+fn restart_app(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    confirmed: bool,
+) -> Result<&'static str, String> {
+    let exe = versions::installed_app_path()
+        .ok_or("the new app file was not found, so Plan2Code was not restarted")?;
+    let project = state
+        .project
+        .lock()
+        .ok()
+        .and_then(|p| p.as_ref().map(|p| p.dir.clone()));
+    *RESTART_ON_QUIT.lock().map_err(|e| e.to_string())? = Some(RestartPlan {
+        exe,
+        project,
+        from_version: app.package_info().version.to_string(),
+    });
+    if !confirmed && agent_is_active(&app) {
+        confirm_quit(&app);
+        return Ok("asking");
+    }
+    quit_app(&app);
+    Ok("restarting")
 }
 
 /// The OS folder picker, the folder picker's Choose a folder row on a bare
@@ -1176,16 +1460,36 @@ async fn start_loop(
                     && last.confirmed_notify == notify
             });
     if !unchanged {
-        let go = app
-            .dialog()
-            .message(loop_driver::confirm_text(&record))
-            .title("Implementation Loop")
-            .kind(MessageDialogKind::Info)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Start".to_string(),
-                "Cancel".to_string(),
-            ))
-            .blocking_show();
+        // The shell's modal: the quick check in a code block, the trunk warning as a callout.
+        let lines = loop_driver::confirm_lines(&record);
+        let asker = app.clone();
+        let asked = tauri::async_runtime::spawn_blocking(move || {
+            ask_in_window(&asker, |id| ui_confirm::ConfirmRequest {
+                id,
+                title: "Start the Implementation Loop?".to_string(),
+                lines,
+                primary: "Start".to_string(),
+                cancel: "Cancel".to_string(),
+                danger: false,
+                safe_first: true,
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let go = match asked {
+            Some(go) => go,
+            // The page cannot show it: the OS box, with the same words as one paragraph.
+            None => app
+                .dialog()
+                .message(loop_driver::confirm_text(&record))
+                .title("Implementation Loop")
+                .kind(MessageDialogKind::Info)
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    "Start".to_string(),
+                    "Cancel".to_string(),
+                ))
+                .blocking_show(),
+        };
         if !go {
             return Ok(false);
         }
@@ -1382,26 +1686,76 @@ fn loop_dashboard(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
     Ok(session)
 }
 
-fn main() {
-    // Without Node 18+ the console and skills cannot run: say so and stop (FR-13).
-    let status = node_check::check_node();
-    let node_problem = node_check::problem_message(&status);
-    let node_version = match &status {
-        node_check::NodeStatus::Ok(version) => Some(version.clone()),
-        _ => None,
-    };
-    let node_binary = node_version
-        .as_ref()
-        .and_then(|_| node_check::node_binary_path());
+/// True when the window-state plugin's file does not exist yet.
+fn first_launch(app: &tauri::AppHandle) -> bool {
+    use tauri_plugin_window_state::AppHandleExt;
+    app.path()
+        .app_config_dir()
+        .map(|dir| !dir.join(app.filename()).exists())
+        .unwrap_or(false)
+}
 
+// macOS gets a real menu bar: Plan2Code (About, Check for Updates, Help, Quit) and the standard Edit
+// menu, so Copy, Paste and Select All work in the page's fields. The three custom items tell the
+// page (the same actions as the bar's "..." menu); Quit is the predefined one, and the exit it asks
+// for goes through the quit check in the run loop below.
+#[cfg(target_os = "macos")]
+fn build_mac_menu(app: &mut tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    let about = MenuItemBuilder::with_id("about", "About Plan2Code").build(app)?;
+    let check = MenuItemBuilder::with_id("check-updates", "Check for Updates...").build(app)?;
+    let help = MenuItemBuilder::with_id("help", "Plan2Code Help").build(app)?;
+    let app_menu = SubmenuBuilder::new(app, "Plan2Code")
+        .item(&about)
+        .item(&check)
+        .separator()
+        .item(&help)
+        .separator()
+        .quit()
+        .build()?;
+    let edit = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let menu = MenuBuilder::new(app).items(&[&app_menu, &edit]).build()?;
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        let id = event.id().as_ref();
+        if matches!(id, "about" | "check-updates" | "help") {
+            let _ = app.emit("app-menu", id);
+        }
+    });
+    Ok(())
+}
+
+fn main() {
     let args = std::env::args().collect::<Vec<_>>();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Opens the terminal's http and https links (the capability scopes it to those).
+        .plugin(tauri_plugin_opener::init())
+        // Size and position come back on the next launch. Not VISIBLE (the
+        // window stays hidden until the page shows it), nor DECORATIONS or
+        // FULLSCREEN (an Activities game's full screen must not stick).
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .manage(AppState {
             project: Mutex::new(project::resolve(&args)),
             launch: project::launch_choice(&args),
-            node_version,
-            node_binary,
+            updated_from: settings::settings_file()
+                .and_then(|file| settings::take_updated_from(&file)),
             attention: Mutex::new(AttentionState {
                 last: None,
                 enabled: settings::settings_file()
@@ -1411,6 +1765,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             platform_info,
+            confirm_answer,
+            confirm_ready,
+            request_quit,
             agent_availability,
             open_install_page,
             agent_start,
@@ -1420,10 +1777,15 @@ fn main() {
             agent_reattach,
             app_state,
             save_term_panel,
+            save_terminal_font_size,
             save_first_run_done,
             version_status,
             check_new_release,
             update_skills,
+            update_to_newest,
+            restart_app,
+            get_copy_on_select,
+            set_copy_on_select,
             pick_project_folder,
             recent_folders,
             open_recent_folder,
@@ -1496,14 +1858,17 @@ fn main() {
                 // Without it the agent opens pages the plain way; nothing else breaks.
                 Err(error) => eprintln!("plan2code: no announce endpoint: {error}"),
             }
-            if let Some(message) = &node_problem {
-                app.dialog()
-                    .message(message)
-                    .title("Plan2Code needs Node.js")
-                    .kind(MessageDialogKind::Error)
-                    .blocking_show();
-                std::process::exit(1);
+            // First launch ever (the window-state plugin has saved nothing yet):
+            // open maximized. Later launches get the saved size, position and
+            // maximized state from the plugin.
+            if first_launch(app.handle()) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.maximize();
+                }
             }
+            #[cfg(target_os = "macos")]
+            build_mac_menu(app)?;
+            spawn_node_check(app.handle().clone());
             Ok(())
         })
         .build(tauri::generate_context!())

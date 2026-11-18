@@ -105,10 +105,32 @@ pub fn newer_release(app: &str, ls_remote: &str) -> Option<String> {
     (parse(&latest)? > parse(app)?).then_some(latest)
 }
 
-/// Ask GitHub for the newest release and return its version when it is newer than `app`.
-/// None on any failure (no git, no network, a login prompt, the timeout): a missing answer
-/// is never a reason to nag. No prompt and no console window.
-pub fn check_new_release(app: &str) -> Option<String> {
+/// What a release check found, as the page reads it: `latest` is the newest release's version
+/// when it is newer than the app; `problem` is a short sentence when the check itself could not
+/// run (no git, no network, a timeout), else none. An app that is simply current has neither.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub struct ReleaseCheck {
+    pub latest: Option<String>,
+    pub problem: Option<String>,
+}
+
+/// The check's result from `git ls-remote --tags` output, or the reason it could not run.
+pub fn release_check_from(app: &str, tags: Result<String, String>) -> ReleaseCheck {
+    match tags {
+        Ok(text) => ReleaseCheck {
+            latest: newer_release(app, &text),
+            problem: None,
+        },
+        Err(reason) => ReleaseCheck {
+            latest: None,
+            problem: Some(format!("Could not check for updates: {reason}.")),
+        },
+    }
+}
+
+/// `git ls-remote --tags` output, or a short reason it could not be had. No prompt and no
+/// console window.
+fn fetch_tags() -> Result<String, String> {
     let mut command = Command::new("git");
     command
         .env("PATH", crate::node_check::resolved_path())
@@ -126,8 +148,14 @@ pub fn check_new_release(app: &str) -> Option<String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW, as the console calls are
     }
-    let mut child = command.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
+    let mut child = command.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "git was not found on PATH".to_string()
+        } else {
+            "git could not be run".to_string()
+        }
+    })?;
+    let mut stdout = child.stdout.take().ok_or("git gave no output")?;
     let (tx, rx) = mpsc::channel::<String>();
     std::thread::spawn(move || {
         let mut text = String::new();
@@ -138,17 +166,70 @@ pub fn check_new_release(app: &str) -> Option<String> {
         Ok(text) => {
             let ok = child.wait().is_ok_and(|status| status.success());
             if ok {
-                newer_release(app, &text)
+                Ok(text)
             } else {
-                None
+                Err("GitHub did not answer".to_string())
             }
         }
         Err(_) => {
             let _ = child.kill();
             let _ = child.wait();
-            None
+            Err("GitHub did not answer in time".to_string())
         }
     }
+}
+
+/// Ask GitHub for the newest release and report it when it is newer than `app`. A failure
+/// (no git, no network, a login prompt, the timeout) comes back as a `problem` sentence, never
+/// as an error: nothing waits on it.
+pub fn check_new_release(app: &str) -> ReleaseCheck {
+    release_check_from(app, fetch_tags())
+}
+
+/// The app file an "Update and restart" starts: `PLAN2CODE_APP` (the launcher's override, also
+/// for tests), else the installer's own place, `~/.plan2code/app/plan2code-app[.exe]`, which an
+/// update has just replaced; else none. Never this process's own path: a running file the
+/// installer renamed aside would still be the old build.
+pub fn installed_app_path() -> Option<PathBuf> {
+    let file = match std::env::var_os("PLAN2CODE_APP").filter(|v| !v.is_empty()) {
+        Some(file) => PathBuf::from(file),
+        None => std::env::home_dir()?
+            .join(".plan2code")
+            .join("app")
+            .join(if cfg!(windows) {
+                "plan2code-app.exe"
+            } else {
+                "plan2code-app"
+            }),
+    };
+    file.is_file().then_some(file)
+}
+
+/// The arguments the restarted app gets: the same `--project` folder, when there is one.
+pub fn restart_args(project: Option<&Path>) -> Vec<std::ffi::OsString> {
+    match project {
+        Some(dir) => vec!["--project".into(), dir.as_os_str().to_owned()],
+        None => Vec::new(),
+    }
+}
+
+/// Which release an installer run installs. `Pinned` is the desktop app's own tag (Update
+/// skills never pulls in work the app does not know about); `Newest` passes no tag, so the
+/// launcher picks the newest published release itself (Update and restart).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateTarget<'a> {
+    Pinned(&'a str),
+    Newest,
+}
+
+/// The launcher's arguments after its script path for `target`.
+pub fn update_args(target: UpdateTarget) -> Vec<String> {
+    let mut args = vec!["update".to_string()];
+    if let UpdateTarget::Pinned(version) = target {
+        args.push("--tag".to_string());
+        args.push(format!("v{version}"));
+    }
+    args
 }
 
 /// Run the existing installer's update (`plan2code update`, through the launcher's own copy),
@@ -161,10 +242,24 @@ pub fn run_update(app_version: &str, on_line: impl FnMut(&str)) -> Result<String
     run_update_within(app_version, UPDATE_TIMEOUT, on_line)
 }
 
+/// "Update and restart"'s install: the same installer and progress readout, unpinned, so the
+/// launcher installs the newest release (the newest-tag rule of `plan2code update`).
+pub fn run_update_newest(on_line: impl FnMut(&str)) -> Result<String, String> {
+    run_installer(UpdateTarget::Newest, UPDATE_TIMEOUT, on_line)
+}
+
 /// `run_update`, with the timeout as a parameter so a test can use a short one instead of
 /// `UPDATE_TIMEOUT`'s real five minutes.
 fn run_update_within(
     app_version: &str,
+    timeout: Duration,
+    on_line: impl FnMut(&str),
+) -> Result<String, String> {
+    run_installer(UpdateTarget::Pinned(app_version), timeout, on_line)
+}
+
+fn run_installer(
+    target: UpdateTarget,
     timeout: Duration,
     mut on_line: impl FnMut(&str),
 ) -> Result<String, String> {
@@ -184,9 +279,7 @@ fn run_update_within(
     command.env("PATH", crate::node_check::resolved_path());
     command
         .arg(&launcher)
-        .arg("update")
-        .arg("--tag")
-        .arg(format!("v{app_version}"))
+        .args(update_args(target))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -407,5 +500,60 @@ mod tests {
             run_update_within("9.9.9", Duration::from_secs(60), |_| {})
         });
         assert!(result.unwrap_err().contains("is missing"));
+    }
+
+    #[test]
+    fn the_target_picks_a_pinned_or_an_unpinned_install() {
+        assert_eq!(
+            update_args(UpdateTarget::Pinned("3.1.0")),
+            vec!["update", "--tag", "v3.1.0"]
+        );
+        assert_eq!(update_args(UpdateTarget::Newest), vec!["update"]);
+    }
+
+    #[test]
+    fn a_restart_hands_over_the_same_project_folder() {
+        assert_eq!(
+            restart_args(Some(Path::new("/work/app"))),
+            vec![
+                std::ffi::OsString::from("--project"),
+                std::ffi::OsString::from("/work/app")
+            ]
+        );
+        assert!(restart_args(None).is_empty());
+    }
+
+    #[test]
+    fn run_update_newest_passes_no_tag() {
+        let result = with_fake_launcher(
+            "newest",
+            "console.log(process.argv.slice(2).join(' '));",
+            || run_update_newest(|_| {}),
+        );
+        assert_eq!(result, Ok("update".to_string()));
+    }
+
+    #[test]
+    fn a_release_check_says_why_it_could_not_run() {
+        assert_eq!(
+            release_check_from("3.0.0", Ok(TAGS.to_string())),
+            ReleaseCheck {
+                latest: Some("3.10.0".into()),
+                problem: None
+            }
+        );
+        assert_eq!(
+            release_check_from("3.10.0", Ok(TAGS.to_string())),
+            ReleaseCheck {
+                latest: None,
+                problem: None
+            }
+        );
+        let failed = release_check_from("3.0.0", Err("git was not found on PATH".into()));
+        assert_eq!(failed.latest, None);
+        assert_eq!(
+            failed.problem.as_deref(),
+            Some("Could not check for updates: git was not found on PATH.")
+        );
     }
 }

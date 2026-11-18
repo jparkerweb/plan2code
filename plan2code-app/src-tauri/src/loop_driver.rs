@@ -1131,14 +1131,17 @@ pub fn prompt_support(agent: &Agent) -> bool {
 
 // -------------------------------------------------------- starting a loop
 
-/// `specs/<name>`: one folder directly under `specs/`, not a link.
+/// `specs/<name>`: one folder directly under `specs/`, not a link. The name may
+/// hold dots (`polish-3.2`) but never start with one, which also refuses `.`
+/// and `..`, matching the page's `isDeletableSpecDir`.
 pub fn validate_spec(project: &Path, spec: &str) -> Result<(), String> {
     let bad = || format!("not a spec folder: {spec}");
     let name = spec.strip_prefix("specs/").ok_or_else(bad)?;
     if name.is_empty()
+        || name.starts_with('.')
         || !name
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
         return Err(bad());
     }
@@ -1388,6 +1391,70 @@ pub fn confirm_text(rec: &RunningRecord) -> String {
         ));
     }
     text
+}
+
+/// The same Start confirm as lines for the shell's modal: the question, the quick check in a code
+/// block, the resume notes as text, and the trunk warning as an amber callout, with no literal
+/// backticks (`confirm_text` stays the plain-text form).
+pub fn confirm_lines(rec: &RunningRecord) -> Vec<crate::ui_confirm::ConfirmLine> {
+    use crate::ui_confirm::ConfirmLine;
+    let name = rec.spec.strip_prefix("specs/").unwrap_or(&rec.spec);
+    let n = rec.phases.len();
+    let phases = if n == 1 {
+        "1 phase".to_string()
+    } else {
+        format!("{n} phases")
+    };
+    let mut lines = vec![ConfirmLine::text(format!("Build {phases} of {name}?"))];
+    let check = rec.setup.quick_check.trim();
+    if check.is_empty() {
+        lines.push(ConfirmLine::text("No quick check is set."));
+    } else {
+        lines.push(ConfirmLine::text(
+            "After each phase the app runs this quick check:",
+        ));
+        lines.push(ConfirmLine::code(check));
+    }
+    if !rec.rebuilt.is_empty() {
+        let list: Vec<String> = rec.rebuilt.iter().map(|n| format!("Phase {n}")).collect();
+        lines.push(ConfirmLine::text(format!(
+            "{} is marked done but has no commit in the log, so it is built again.",
+            list.join(" and ")
+        )));
+    }
+    if let Some(files) = rec.resumed_files {
+        let files = if files == 1 {
+            "1 uncommitted file".to_string()
+        } else {
+            format!("{files} uncommitted files")
+        };
+        lines.push(ConfirmLine::text(format!(
+            "The resumed phase's commit will take {files} already in the tree."
+        )));
+    }
+    if !rec.setup.notify_url.is_empty() {
+        let when = if rec.setup.notify_phases {
+            "after each phase, when the loop needs you, or when it ends"
+        } else {
+            "When the loop needs you or ends"
+        };
+        lines.push(ConfirmLine::text(format!(
+            "{}, {}.",
+            capitalized(when),
+            loop_notify::describe(
+                rec.setup.notify_kind,
+                &rec.setup.notify_url,
+                &rec.setup.notify_param
+            )
+        )));
+    }
+    if commits_to_trunk(rec) {
+        let branch = rec.branch.as_deref().unwrap_or_default();
+        lines.push(ConfirmLine::callout(format!(
+            "You are on {branch}: every phase will commit straight to it. Start only if that is what you want."
+        )));
+    }
+    lines
 }
 
 fn capitalized(text: &str) -> String {
@@ -3779,6 +3846,44 @@ mod tests {
     }
 
     #[test]
+    fn the_start_confirm_as_lines_has_the_check_in_a_code_block_and_the_trunk_warning_as_a_callout()
+    {
+        let mut s = setup();
+        s.quick_check = "npm test".into();
+        s.commit = true;
+        let mut rec = RunningRecord::new("p".into(), "specs/x".into(), s, vec![phase(1), phase(2)]);
+        rec.branch = Some("main".into());
+        let lines = confirm_lines(&rec);
+        assert_eq!(lines[0].text, "Build 2 phases of x?");
+        assert!(lines
+            .iter()
+            .any(|l| l.kind == "code" && l.text == "npm test"));
+        let callout = lines
+            .iter()
+            .find(|l| l.kind == "callout")
+            .expect("a callout");
+        assert!(callout
+            .text
+            .contains("You are on main: every phase will commit straight to it."));
+        assert!(
+            lines.iter().all(|l| !l.text.contains('`')),
+            "no literal backticks"
+        );
+        assert_eq!(
+            lines.last().map(|l| l.kind),
+            Some("callout"),
+            "the warning reads last"
+        );
+        rec.setup.quick_check = String::new();
+        rec.branch = Some("feature/x".into());
+        let plain = confirm_lines(&rec);
+        assert!(plain.iter().any(|l| l.text == "No quick check is set."));
+        assert!(plain
+            .iter()
+            .all(|l| l.kind != "callout" && l.kind != "code"));
+    }
+
+    #[test]
     fn no_web_address_means_no_call_and_an_older_entry_reads_with_none() {
         assert_eq!(notify(&setup(), "x"), None);
         let s: LoopSetup = serde_json::from_value(json!({ "review": true })).unwrap();
@@ -4657,9 +4762,15 @@ second line"
         let dir = std::env::temp_dir().join(format!("plan2code-loop-spec-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("specs").join("lunch-vote")).unwrap();
+        std::fs::create_dir_all(dir.join("specs").join("polish-3.2")).unwrap();
+        std::fs::create_dir_all(dir.join("specs").join(".hidden")).unwrap();
         std::fs::write(dir.join("specs").join("a-file"), "x").unwrap();
         assert!(validate_spec(&dir, "specs/lunch-vote").is_ok());
+        assert!(validate_spec(&dir, "specs/polish-3.2").is_ok());
         for bad in [
+            "specs/.hidden",
+            "specs/.",
+            "specs/..",
             "specs/missing",
             "specs/a-file",
             "specs/../x",

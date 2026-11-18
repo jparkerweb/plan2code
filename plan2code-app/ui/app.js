@@ -3,9 +3,18 @@
 // request) with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, folderPickerRows, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, helloRetryAction, retryLabel, RETRY_AFTER_SECONDS } from './meter.js';
+import { TERMINAL_FONT_DEFAULT, UPDATE_RECHECK_MS, reasonSentence, releaseNotesUrl, confirmButtons, endedView, friendlyError, releaseAfterCheck, shortcutAction, shortcutFromMessage, shortcutLabel, tipWithShortcut, trapTab, waitingView, attentionSignal, barFit, looksFromMessage, splitterAria, splitterFraction, terminalTitle, barNextSteps, commandSegments, continueKeys, defaultRightFraction, folderName, lastAgentNotice, menuStep, pageDetailsLine, pageNotShownView, pickDefaultAgent, plainCommandText, taskbarSwitch, windowTitleFor, deadConsoleAction, folderPickerRows, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, helloRetryAction, retryLabel, RETRY_AFTER_SECONDS } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
+
+// The window opens hidden (tauri.conf.json) and is shown once the first frame
+// has painted, so there is no blank or wrongly colored flash. theme-early.js
+// shows it anyway after a few seconds, should this module never get here.
+function showWindowWhenPainted() {
+  const show = () => window.__TAURI__.window.getCurrentWindow().show().catch(() => {});
+  requestAnimationFrame(() => requestAnimationFrame(show));
+}
+showWindowWhenPainted();
 
 const projectMenuBtn = document.getElementById('project-menu-button');
 const projectNameEl = document.getElementById('project-name');
@@ -14,6 +23,9 @@ const projectMenu = document.getElementById('project-menu');
 const agentMenuBtn = document.getElementById('agent-menu-button');
 const agentMenu = document.getElementById('agent-menu');
 const agentMenuHeadEl = document.getElementById('agent-menu-head');
+const agentMenuMoreEl = document.getElementById('agent-menu-more');
+const moreMenu = document.getElementById('more-menu');
+const termTitleEl = document.getElementById('term-title');
 const agentDotEl = document.getElementById('agent-dot');
 const agentNameEl = document.getElementById('agent-name');
 const agentEndedEl = document.getElementById('agent-ended');
@@ -77,6 +89,8 @@ const statePlannyEl = document.getElementById('dashboard-state-planny');
 const stateText = document.getElementById('dashboard-state-text');
 const stateButton = document.getElementById('dashboard-state-button');
 const stateCancelEl = document.getElementById('dashboard-state-cancel');
+const stateSecondaryEl = document.getElementById('dashboard-state-secondary');
+const stateDetailsEl = document.getElementById('dashboard-state-details');
 const workspaceEl = document.getElementById('workspace');
 const termPanel = document.getElementById('term-panel');
 const termHandle = document.getElementById('term-handle');
@@ -84,6 +98,21 @@ const termDockBtn = document.getElementById('term-dock');
 const termMaximizeBtn = document.getElementById('term-maximize');
 const termCollapseBtn = document.getElementById('term-collapse');
 const termBadgeEl = document.getElementById('term-badge');
+const stateBusyEl = document.getElementById('dashboard-state-busy');
+const stateToggleEl = document.getElementById('dashboard-state-toggle');
+const appMenuBtn = document.getElementById('app-menu-button');
+const appMenu = document.getElementById('app-menu');
+const nextStepNotesEl = document.getElementById('next-step-notes');
+const confirmModalEl = document.getElementById('confirm-modal');
+const confirmPanelEl = document.getElementById('confirm-panel');
+const confirmTitleEl = document.getElementById('confirm-title');
+const confirmBodyEl = document.getElementById('confirm-body');
+const confirmActionsEl = document.getElementById('confirm-actions');
+const confirmCancelBtn = document.getElementById('confirm-cancel');
+const confirmPrimaryBtn = document.getElementById('confirm-primary');
+
+// Cmd on a Mac, Ctrl elsewhere: for the shortcuts and the tooltips that name them.
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
 const STATUS_POLL_MS = 5000;
 const BADGE_POLL_MS = 2000;
@@ -120,7 +149,36 @@ const terminal = await mountTerminal(document.getElementById('term'), {
   onResize: (cols, rows) => {
     if (agentActive()) invoke('agent_resize', { cols, rows });
   },
+  // Ctrl or Cmd with plus, minus or 0: remembered for the next launch.
+  onFontSize: (size) => {
+    invoke('save_terminal_font_size', { size }).catch(() => {
+      // A settings file that cannot be written must not stop the zoom.
+    });
+  },
+  // A link the agent printed, opened in the default browser (http and https only).
+  onLink: (uri) => openLink(uri),
+  // The shell's own shortcuts, typed with the terminal focused: handled here, never typed to the agent.
+  onShortcut: (event) => {
+    const id = shortcutAction(event, { mac: IS_MAC, inTerminal: true });
+    if (!id) return false;
+    runShortcut(id);
+    return true;
+  },
+  onCopyOnSelect: (on) => {
+    invoke('set_copy_on_select', { on }).catch(() => {
+      // Not saved: the choice holds until the app closes.
+    });
+  },
 });
+
+// Opens a web link in the default browser through the opener plugin; anything that is not
+// http or https is refused here as well as by the plugin's own scope.
+function openLink(url) {
+  if (!/^https?:\/\//i.test(String(url))) return;
+  invoke('plugin:opener|open_url', { url }).catch((error) => {
+    setAgentError(error, 'open that link');
+  });
+}
 
 // One channel for the page's life: the agent's output arrives as bytes and its
 // state changes as objects, across restarts too.
@@ -170,8 +228,11 @@ function applyAgentState(next, { skipReset } = {}) {
   agentMenuBtn.hidden = !(active || ended);
   agentNoneEl.hidden = active || ended;
   agentNameEl.textContent = active || ended ? label || 'The agent' : '';
+  termTitleEl.textContent = terminalTitle(active || ended ? label || 'The agent' : '');
   agentDotEl.className = `agent-dot${active ? (bypassActive ? ' is-warn' : ' is-ok') : ''}`;
+  const endedWords = ended ? endedView(agent.reason) : null;
   agentEndedEl.hidden = !ended;
+  if (endedWords) agentEndedEl.textContent = endedWords.bar;
   // The model and effort the app started it with, when it knows them: an agent
   // on its own default model has none to show, and an effort needs a model.
   const modelText = agent.model ? (agent.effort ? `${agent.model} · ${agent.effort}` : agent.model) : '';
@@ -181,7 +242,7 @@ function applyAgentState(next, { skipReset } = {}) {
   agentBypassEl.hidden = !bypassActive;
   renderAgentMenuHead(label || 'The agent', { active, ended, bypassActive });
   if (agentMenu.hidden === false && agentMenuBtn.hidden) closeBarMenus();
-  restartBtn.title = ended ? 'Start a fresh agent on the same brief' : 'Replace the agent with a fresh one, on a fresh context window';
+  restartBtn.title = tipWithShortcut(ended ? 'Start a fresh agent on the same brief' : 'Replace the agent with a fresh one, on a fresh context window', 'new-session', IS_MAC);
   // The agent is back (a fresh generation, running): the restart message stays
   // on screen (restarting() below) until its dashboard page is announced.
   if (restarting && freshScreen && agent.state === 'running') {
@@ -190,10 +251,10 @@ function applyAgentState(next, { skipReset } = {}) {
 
   if (ended) {
     // The why sits beside the agent's menu; the menu says the rest.
-    setAgentStatus(agent.reason);
+    setAgentStatus(endedWords.sentence);
     // A failed Restart clears the screen too, so it says so again.
     if (!wasEnded || freshScreen) {
-      terminal.write(`\r\n[${label || 'The agent'} ended: ${agent.reason}. Press New Session in the bar to start a fresh one.]\r\n`);
+      terminal.write(`\r\n[${label || 'The agent'} ${endedWords.sentence}. Press New Session in the bar to start a fresh one.]\r\n`);
     }
   } else {
     // After a Restart the bar says what it left for the dashboard, if anything.
@@ -204,10 +265,53 @@ function applyAgentState(next, { skipReset } = {}) {
 
 // The short line after the agent's menu: an ended agent's reason or a
 // Restart's brief note (quiet), or something that went wrong (in red).
-function setAgentStatus(text, { error = false } = {}) {
-  agentStatusEl.textContent = text;
-  agentStatusEl.title = text;
+let statusDetails = '';
+
+function setAgentStatus(text, { error = false, details = '' } = {}) {
+  agentStatusEl.replaceChildren(...commandNodes(text));
+  agentStatusEl.title = plainCommandText(text);
   agentStatusEl.classList.toggle('is-error', error && Boolean(text));
+  // A long line is cut at the bar's width: it opens in full (with the raw text, when there is one) on a press.
+  statusDetails = details;
+  const pressable = Boolean(text) && (error || Boolean(details));
+  agentStatusEl.classList.toggle('is-pressable', pressable);
+  if (pressable) {
+    agentStatusEl.setAttribute('role', 'button');
+    agentStatusEl.tabIndex = 0;
+  } else {
+    agentStatusEl.setAttribute('role', 'status');
+    agentStatusEl.removeAttribute('tabindex');
+  }
+}
+
+// An error from the shell or the app's Rust side, in plain words with its next step; the raw
+// text stays behind a press on the line (meter.js friendlyError).
+function setAgentError(raw, action) {
+  const friendly = friendlyError(raw, action);
+  setAgentStatus(friendly.text, { error: true, details: friendly.details });
+}
+
+function openStatusDetails() {
+  if (!agentStatusEl.classList.contains('is-pressable')) return;
+  void confirmModal({ title: 'What the bar said', lines: [{ kind: 'text', text: agentStatusEl.textContent }, ...(statusDetails ? [{ kind: 'code', text: statusDetails }] : [])], cancel: 'Close', primary: null });
+}
+agentStatusEl.addEventListener('click', openStatusDetails);
+agentStatusEl.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openStatusDetails();
+  }
+});
+
+// A message's nodes, each command it marks with backticks in a <code>
+// (meter.js commandSegments): built as text nodes, never parsed as markup.
+function commandNodes(text) {
+  return commandSegments(text).map((part) => {
+    if (!part.code) return part.text;
+    const code = document.createElement('code');
+    code.textContent = part.text;
+    return code;
+  });
 }
 
 // The first key typed in the terminal while a loop runs: a note beside the agent,
@@ -237,24 +341,31 @@ function renderAgentMenuHead(label, { active, ended, bypassActive }) {
     agentMenuHeadEl.replaceChildren(name, ' is running', document.createElement('br'), 'Permission checks are ', mode);
     if (bypassActive) agentMenuHeadEl.append(': it runs commands and changes files without asking');
   } else if (ended) {
-    agentMenuHeadEl.replaceChildren(name, ` ended: ${agent.reason}`, document.createElement('br'), 'Nothing starts until you press New Session.');
+    agentMenuHeadEl.replaceChildren(name, ` ${endedView(agent.reason).sentence}`, document.createElement('br'), 'Nothing starts until you press New Session.');
   } else {
     agentMenuHeadEl.replaceChildren();
   }
 }
 
-// The bar's two menus (project, agent). They hang outside the scrolling bar
-// row, fixed under their trigger, so the row's overflow never clips them.
-// Clicking anywhere else (the console frame and the terminal too), Escape,
-// a resize or a scroll of the row all close them.
+// The bar's three menus (project, agent, and the "+N more" list of pending
+// steps). They hang outside the bar row, fixed under their trigger, so the
+// row's overflow never clips them. Clicking anywhere else (the console frame
+// and the terminal too), Escape or a resize closes them.
 let openBarMenu = null;
 
+const barMenus = () => [[projectMenuBtn, projectMenu], [agentMenuBtn, agentMenu], [nextStepMoreEl, moreMenu], [appMenuBtn, appMenu]];
+
 function closeBarMenus() {
-  for (const [button, menu] of [[projectMenuBtn, projectMenu], [agentMenuBtn, agentMenu]]) {
+  for (const [button, menu] of barMenus()) {
     menu.hidden = true;
     button.setAttribute('aria-expanded', 'false');
   }
   openBarMenu = null;
+}
+
+// A menu's items that can take focus now: shown and not off.
+function barMenuItems(menu) {
+  return [...menu.querySelectorAll('[role="menuitem"]')].filter((item) => !item.hidden && !item.disabled);
 }
 
 function toggleBarMenu(button, menu) {
@@ -268,24 +379,74 @@ function toggleBarMenu(button, menu) {
   menu.style.top = `${at.bottom + 4}px`;
   button.setAttribute('aria-expanded', 'true');
   openBarMenu = menu;
+  // Focus goes into the menu: its first item, or the menu itself (tabindex
+  // -1) when every item is hidden or off, so Escape still hears the keyboard.
+  const [first] = barMenuItems(menu);
+  (first || menu).focus();
+}
+
+// Up, Down, Home and End move between a menu's items (meter.js menuStep).
+function onBarMenuKey(event) {
+  const items = barMenuItems(event.currentTarget);
+  const next = menuStep(event.key, items.indexOf(document.activeElement), items.length);
+  if (next === null) return;
+  event.preventDefault();
+  items[next].focus();
 }
 
 projectMenuBtn.onclick = () => toggleBarMenu(projectMenuBtn, projectMenu);
 agentMenuBtn.onclick = () => toggleBarMenu(agentMenuBtn, agentMenu);
+nextStepMoreEl.onclick = () => toggleBarMenu(nextStepMoreEl, moreMenu);
+appMenuBtn.onclick = () => toggleBarMenu(appMenuBtn, appMenu);
+appMenu.addEventListener('keydown', onBarMenuKey);
+projectMenu.addEventListener('keydown', onBarMenuKey);
+agentMenu.addEventListener('keydown', onBarMenuKey);
+moreMenu.addEventListener('keydown', onBarMenuKey);
 document.addEventListener('pointerdown', (event) => {
   if (!openBarMenu) return;
-  if (openBarMenu.contains(event.target) || projectMenuBtn.contains(event.target) || agentMenuBtn.contains(event.target)) return;
+  if (barMenus().some(([button, menu]) => menu.contains(event.target) || button.contains(event.target))) return;
   closeBarMenus();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape' || !openBarMenu) return;
-  const trigger = openBarMenu === projectMenu ? projectMenuBtn : agentMenuBtn;
+  const [trigger] = barMenus().find(([, menu]) => menu === openBarMenu);
   closeBarMenus();
   trigger.focus();
 });
 window.addEventListener('blur', closeBarMenus);
 window.addEventListener('resize', closeBarMenus);
-barRowEl.addEventListener('scroll', closeBarMenus);
+
+// A narrow window drops parts of the bar instead of scrolling it: the model
+// text first, then the status line (meter.js barFit), each moving into the
+// agent menu. Measured with everything showing, so a wider window brings them
+// back; redone when the row's size or its parts change.
+let fitQueued = false;
+
+function fitBar() {
+  fitQueued = false;
+  barRowEl.classList.remove('no-model', 'no-status');
+  const model = agentModelEl.hidden ? 0 : agentModelEl.offsetWidth;
+  const status = agentStatusEl.textContent ? agentStatusEl.offsetWidth : 0;
+  // Only an agent's menu can hold them, so with none the row keeps everything.
+  const fit = agentMenuBtn.hidden ? { model: true, status: true } : barFit({ available: barRowEl.clientWidth, needed: barRowEl.scrollWidth, model, status });
+  const dropModel = !fit.model && model > 0;
+  const dropStatus = !fit.status && status > 0;
+  barRowEl.classList.toggle('no-model', dropModel);
+  barRowEl.classList.toggle('no-status', dropStatus);
+  const lines = [];
+  if (dropModel) lines.push(`Started on ${agentModelEl.textContent}`);
+  if (dropStatus) lines.push(agentStatusEl.textContent);
+  agentMenuMoreEl.replaceChildren(...lines.flatMap((line, i) => (i ? [document.createElement('br'), line] : [line])));
+}
+
+function scheduleFitBar() {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(fitBar);
+}
+
+new ResizeObserver(scheduleFitBar).observe(barRowEl);
+new MutationObserver(scheduleFitBar).observe(barRowEl, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
 
 // True from a confirmed Restart until the fresh agent's dashboard page is
 // announced (showAnnounced below): the frame stays blanked with a message the
@@ -293,24 +454,30 @@ barRowEl.addEventListener('scroll', closeBarMenus);
 // before anything can show.
 let restarting = false;
 
-function confirmRestart(onYes) {
+async function confirmRestart(onYes) {
   if (agent.state !== 'running') {
     onYes();
     return;
   }
-  showState(
-    'Restart the agent on a fresh context window?',
-    'New Session',
-    () => {
-      restarting = true;
-      currentUrl = null;
-      frameReady = false;
-      showState('The agent is restarting on a fresh context window. Please wait for the dashboard to load.');
-      onYes();
-    },
-    () => (frameReady ? hideState() : showState('No dashboard has loaded yet.')),
-    { tired: true }
-  );
+  const yes = await confirmModal({
+    title: 'Restart the agent on a fresh context window?',
+    lines: [{ kind: 'text', text: 'What the agent was doing is not saved.' }],
+    primary: 'New Session',
+    danger: true,
+  });
+  if (!yes) return;
+  restarting = true;
+  currentUrl = null;
+  frameReady = false;
+  showState('The agent is restarting on a fresh context window. Please wait for the dashboard to load.');
+  onYes();
+}
+
+// Shows the agent's terminal: expands a collapsed pane (its own button, so
+// focus and the saved setting come too), else just gives it the keyboard.
+function showTerminal() {
+  if (paneCollapsed) termCollapseBtn.click();
+  else terminal.focus();
 }
 
 // What the launch card offers for each agent: whether its CLI was found on
@@ -371,7 +538,7 @@ function installPageButton(id) {
   button.textContent = 'Install page';
   button.onclick = () => {
     invoke('open_install_page', { id }).catch((error) => {
-      setAgentStatus(`Could not open the install page: ${error}`, { error: true });
+      setAgentError(error, 'open the install page');
     });
   };
   return button;
@@ -406,14 +573,9 @@ async function openAgentSetup(returnTo) {
     setupCloseBtn.hidden = false;
     loadFrame(session.url);
   } catch (error) {
+    // A missing console.mjs means the skills install itself is gone (FR-16): friendlyError says so.
     const text = String(error);
-    // A missing console.mjs means the skills install itself is gone (FR-16).
-    setAgentStatus(
-      text.includes('not installed') || text.includes('console.mjs')
-        ? "Plan2Code's skills are missing: run `plan2code update`."
-        : `Could not open the setup page: ${text}`,
-      { error: true }
-    );
+    setAgentError(text.includes('console.mjs') ? `the web console is not installed: ${text}` : text, 'open the setup page');
   }
 }
 
@@ -529,6 +691,9 @@ function firstRunRow(pass, title, detail) {
   const mark = document.createElement('span');
   mark.className = 'first-run-mark';
   mark.textContent = pass ? '✓' : '!';
+  // Read out as words: a bare check or exclamation mark says nothing to a screen reader.
+  mark.setAttribute('role', 'img');
+  mark.setAttribute('aria-label', pass ? 'Ready' : 'Needs attention');
   const body = document.createElement('div');
   body.className = 'first-run-body';
   const titleEl = document.createElement('div');
@@ -538,7 +703,7 @@ function firstRunRow(pass, title, detail) {
   if (detail) {
     const detailEl = document.createElement('div');
     detailEl.className = 'first-run-detail';
-    if (typeof detail === 'string') detailEl.textContent = detail;
+    if (typeof detail === 'string') detailEl.append(...commandNodes(detail));
     else detailEl.append(detail);
     body.append(detailEl);
   }
@@ -551,7 +716,7 @@ function firstRunRow(pass, title, detail) {
 // never a way to recover from a real failure.
 function renderFirstRun(state) {
   firstRunListEl.replaceChildren();
-  const nodeDetail = `${state.nodeVersion || 'found'} (18 or newer)${state.nodeBinary ? ` — ${state.nodeBinary}` : ''}`;
+  const nodeDetail = `${state.nodeVersion || 'found'} (18 or newer)${state.nodeBinary ? `: ${state.nodeBinary}` : ''}`;
   firstRunListEl.append(firstRunRow(true, 'Node.js', nodeDetail));
 
   const agentsKnown = agentList;
@@ -607,13 +772,14 @@ async function startAgent(event) {
   const effort = !(info && info.custom) && (EFFORT_OPTIONS[kind] || []).length > 0 ? launchEffortEl.value || null : null;
   const mode = launchBypassEl.checked ? 'bypass' : 'checked';
   setAgentStatus('');
-  showState('Waiting for the agent to open the dashboard');
+  beginWait('Waiting for the agent to open the dashboard...');
   const { cols, rows } = terminal.size();
   try {
     await invoke('agent_start', { kind, model, effort, mode, cols, rows });
     terminal.focus();
   } catch (error) {
-    setAgentStatus(`Could not start the agent: ${error}`, { error: true });
+    endWait();
+    setAgentError(error, 'start the agent');
     showLaunchCard();
   }
 }
@@ -623,7 +789,7 @@ async function agentAction(command) {
     await invoke(command);
     terminal.focus();
   } catch (error) {
-    setAgentStatus(String(error), { error: true });
+    setAgentError(error, 'do that');
   }
 }
 
@@ -648,6 +814,15 @@ let paneMaximized = false;
 
 const paneExtent = () => (paneDock === 'right' ? window.innerWidth : window.innerHeight);
 
+function setButtonLabel(button, label, tip) {
+  button.setAttribute('aria-label', label);
+  button.title = tip;
+}
+
+// What a double-click on the splitter returns to: the share a first run starts
+// with (docked right, wide enough to keep the console's aside beside it).
+const defaultPaneFraction = () => (paneDock === 'right' ? defaultRightFraction(window.innerWidth, { minFraction: MIN_PANE, maxFraction: MAX_PANE }) : 0.25);
+
 function applyPaneLayout() {
   workspaceEl.classList.toggle('dock-right', paneDock === 'right');
   termPanel.classList.toggle('collapsed', paneCollapsed);
@@ -661,11 +836,20 @@ function applyPaneLayout() {
     const fraction = paneMaximized ? MAXIMIZED_PANE : paneFraction;
     termPanel.style[sizeProp] = `${Math.round(paneExtent() * fraction)}px`;
   }
-  termDockBtn.textContent = paneDock === 'right' ? 'Dock bottom' : 'Dock right';
-  termMaximizeBtn.textContent = paneMaximized ? 'Restore' : 'Maximize';
+  // Icon buttons: what each does, in words, for a screen reader and a tooltip.
+  termDockBtn.dataset.dock = paneDock;
+  setButtonLabel(termDockBtn, paneDock === 'right' ? 'Dock the terminal at the bottom' : 'Dock the terminal on the right', paneDock === 'right' ? 'Dock at the bottom' : 'Dock on the right');
+  setButtonLabel(termMaximizeBtn, paneMaximized ? 'Restore the terminal size' : 'Make the terminal larger', paneMaximized ? 'Restore the size' : 'Make it larger');
   termMaximizeBtn.setAttribute('aria-pressed', String(paneMaximized));
-  termCollapseBtn.textContent = paneCollapsed ? 'View Agent Terminal' : 'Collapse';
+  setButtonLabel(termCollapseBtn, paneCollapsed ? 'Show the terminal' : 'Collapse the terminal', tipWithShortcut(paneCollapsed ? 'Show the terminal' : 'Collapse', 'toggle-terminal', IS_MAC));
   termCollapseBtn.setAttribute('aria-pressed', String(paneCollapsed));
+  // The splitter reads as a slider of the panel's share of the window.
+  termHandle.setAttribute('aria-orientation', paneDock === 'right' ? 'vertical' : 'horizontal');
+  const aria = splitterAria(paneMaximized ? MAXIMIZED_PANE : paneFraction, { min: MIN_PANE, max: paneMaximized ? MAXIMIZED_PANE : MAX_PANE });
+  termHandle.setAttribute('aria-valuenow', String(aria.now));
+  termHandle.setAttribute('aria-valuemin', String(aria.min));
+  termHandle.setAttribute('aria-valuemax', String(aria.max));
+  termHandle.setAttribute('aria-valuetext', `${aria.now}% of the window`);
   updateBadge();
   tellTerminalState();
 }
@@ -708,6 +892,8 @@ termCollapseBtn.onclick = () => {
 termHandle.addEventListener('pointerdown', (event) => {
   event.preventDefault();
   termHandle.setPointerCapture(event.pointerId);
+  termHandle.classList.add('is-dragging');
+  termHandle.focus();
 });
 termHandle.addEventListener('pointermove', (event) => {
   if (!termHandle.hasPointerCapture(event.pointerId)) return;
@@ -718,8 +904,29 @@ termHandle.addEventListener('pointermove', (event) => {
   paneMaximized = false;
   applyPaneLayout();
 });
-termHandle.addEventListener('pointerup', (event) => {
+function endHandleDrag(event) {
   if (termHandle.hasPointerCapture(event.pointerId)) termHandle.releasePointerCapture(event.pointerId);
+  termHandle.classList.remove('is-dragging');
+  savePaneSettings();
+}
+termHandle.addEventListener('pointerup', endHandleDrag);
+termHandle.addEventListener('pointercancel', endHandleDrag);
+// Keyboard: arrows resize in 2% steps, Home and End go to the smallest and
+// largest share (meter.js splitterFraction).
+termHandle.addEventListener('keydown', (event) => {
+  const next = splitterFraction(event.key, paneMaximized ? MAXIMIZED_PANE : paneFraction, paneDock, { min: MIN_PANE, max: MAX_PANE });
+  if (next === null) return;
+  event.preventDefault();
+  paneFraction = next;
+  paneMaximized = false;
+  applyPaneLayout();
+  savePaneSettings();
+});
+// Double-click: back to the default share.
+termHandle.addEventListener('dblclick', () => {
+  paneFraction = defaultPaneFraction();
+  paneMaximized = false;
+  applyPaneLayout();
   savePaneSettings();
 });
 
@@ -727,6 +934,23 @@ termHandle.addEventListener('pointerup', (event) => {
 // redrawing while it is really waiting on a prompt no one is watching: a
 // stretch of no new output at all is the giveaway.
 let lastOutputAt = Date.now();
+
+// The pill's press: show the terminal and put the keyboard in it. A pane that
+// was only small (not collapsed) grows to a share where a prompt can be read.
+termBadgeEl.onclick = () => {
+  if (paneCollapsed) {
+    // The click lays the pane out before it returns, so the terminal can take focus after it.
+    termCollapseBtn.click();
+    terminal.focus();
+    return;
+  }
+  if (!paneMaximized && paneFraction < SMALL_PANE * 2) {
+    paneFraction = Math.max(paneFraction, defaultPaneFraction());
+    applyPaneLayout();
+    savePaneSettings();
+  }
+  terminal.focus();
+};
 
 function updateBadge() {
   const small = paneCollapsed || (!paneMaximized && paneFraction < SMALL_PANE);
@@ -770,6 +994,7 @@ window.addEventListener('message', (event) => {
   const kind = event.data && event.data.plan2code;
   if (kind === 'console-ready') {
     frameReady = true;
+    pageFailures = 0;
     clearTimeout(helloTimer);
     hideState();
     // The Desktop app switch in its User Preferences shows what app.json holds.
@@ -790,6 +1015,10 @@ window.addEventListener('message', (event) => {
   } else if (kind === 'activities-full') {
     const on = taskbarSwitch(event.data);
     if (on !== null) setGameFull(on);
+  } else if (kind === 'shortcut') {
+    // A key the page swallowed (the console's frame has the keyboard): only an id from the table.
+    const id = shortcutFromMessage(event.data);
+    if (id) runShortcut(id);
   } else if (kind === 'agent-continue') {
     typeContinue();
   } else if (kind === 'terminal-open') {
@@ -800,7 +1029,8 @@ window.addEventListener('message', (event) => {
     // The bar's own button, so the press is confirmed exactly the same way.
     if (!restartBtn.hidden) restartBtn.click();
   } else if (kind === 'looks') {
-    applyAccent(event.data.accent, { save: true });
+    const looks = looksFromMessage(event.data);
+    if (looks) applyLooks(looks, { save: true });
   } else if (kind === 'loop-facts') {
     // The setup screen asks what agent a loop would use. The answer is facts
     // only; the page never sends the app any setup value.
@@ -822,7 +1052,7 @@ window.addEventListener('message', (event) => {
       .then((info) => {
         source.postMessage({ plan2code: 'loop-dashboard-result', ok: true, error: null }, '*');
         if (info && info.url) {
-          showState('Opening the dashboard');
+          showState('Opening the dashboard...');
           loadFrame(info.url);
         }
       })
@@ -889,33 +1119,53 @@ function typeContinue() {
       Promise.resolve()
     )
     .catch((error) => {
-      setAgentStatus(`Could not type continue: ${error}`, { error: true });
+      setAgentError(error, 'type continue');
     });
 }
 
-// The person's highlight color, as the console page last sent it (its dark
-// shades: fill, soft, ink, line), so the bar's buttons light in it too. Kept
-// here for the next launch, which paints the bar before any page has loaded.
+// The theme and highlight color, as the console page last sent them (the
+// resolved theme, and the four shades fill, soft, ink, line for each theme).
+// The shell wears them: data-theme on <html> picks the tokens' light or dark
+// set, the accent custom properties are the person's own, the xterm theme and
+// the OS title bar follow. Both are kept for the next launch, which theme-early.js
+// reads before the first paint.
+const THEME_KEY = 'p2c-app:theme';
 const ACCENT_KEY = 'p2c-app:accent';
 const ACCENT_VARS = ['--accent', '--accent-soft', '--accent-ink', '--accent-line'];
 
-function applyAccent(shades, { save = false } = {}) {
-  if (!Array.isArray(shades) || shades.length !== ACCENT_VARS.length) return;
-  if (!shades.every((c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c))) return;
-  ACCENT_VARS.forEach((name, i) => document.documentElement.style.setProperty(name, shades[i]));
-  if (!save) return;
+function applyLooks({ theme, light, dark }, { save = false } = {}) {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', theme);
+  root.style.colorScheme = theme;
+  const shades = theme === 'light' && light ? light : dark;
+  ACCENT_VARS.forEach((name, i) => root.style.setProperty(name, shades[i]));
+  if (save) {
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+      localStorage.setItem(ACCENT_KEY, JSON.stringify({ light, dark }));
+    } catch {
+      // Not remembered is fine: the stylesheet's defaults show until a page loads.
+    }
+  }
+  // The terminal reads the tokens, so it goes last.
+  terminal.applyTheme();
+  setWindowTheme(theme);
+}
+
+// The OS title bar follows the shell's theme (Tauri's window theme). A platform
+// that ignores it leaves the bar as it was.
+function setWindowTheme(theme) {
   try {
-    localStorage.setItem(ACCENT_KEY, JSON.stringify(shades));
+    window.__TAURI__.window.getCurrentWindow().setTheme(theme).catch(() => {});
   } catch {
-    // Not remembered is fine: the stylesheet's default shows until a page loads.
+    // An older runtime without setTheme: the title bar keeps the system's look.
   }
 }
 
-try {
-  applyAccent(JSON.parse(localStorage.getItem(ACCENT_KEY)));
-} catch {
-  // Nothing saved, or storage is blocked: the stylesheet's default stands.
-}
+// A relaunch: theme-early.js already put the saved theme on <html> before the
+// first paint; the terminal and the title bar catch up here.
+terminal.applyTheme();
+setWindowTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
 
 // No hello in time: ask the console why, and say so with a way forward.
 async function onNoHello() {
@@ -938,11 +1188,33 @@ async function onNoHello() {
   if (!status || status.state !== 'running') {
     showState('The console stopped, so the page could not show.', 'Reconnect the console', reconnectConsole);
   } else {
-    showState('The console is running but its page did not show in this window.', 'Reload the page', () => {
-      showState('Reloading the page');
-      loadFrame(currentUrl);
-    });
+    // Counted per run of trouble: a hello or a new page starts it again.
+    pageFailures += 1;
+    const view = pageNotShownView(pageFailures);
+    const actions = { reload: reloadPage, reconnect: stopAndReconnect };
+    const secondary = view.secondary ? { label: view.secondary.label, onClick: actions[view.secondary.action] } : null;
+    const details = pageDetailsLine({ url: currentUrl || status.url, health: status.state });
+    showState(view.text, view.primary.label, actions[view.primary.action], undefined, { secondary, details });
   }
+}
+
+// Times in a row the console ran but its page did not show (pageNotShownView).
+let pageFailures = 0;
+
+function reloadPage() {
+  showState('Reloading the page...');
+  loadFrame(currentUrl);
+}
+
+// Stop, then start: a console that runs but serves no page is started fresh
+// on the same session, not just asked again.
+async function stopAndReconnect() {
+  try {
+    await invoke('console_stop');
+  } catch {
+    // Nothing to stop is fine: reconnectConsole starts a fresh one either way.
+  }
+  await reconnectConsole();
 }
 
 // A waiting message that offers a way out after a countdown: the button shows
@@ -958,10 +1230,20 @@ function stopRetryCountdown() {
 // One automatic Try reconnecting per run of trouble (cleared when a new page is announced).
 let autoReconnected = false;
 
-function showState(text, buttonLabel, onButton, onCancel, { tired = false, retryAfter = 0, autoRetry = false } = {}) {
+// What the message box shows now, as showState was asked for it (null once
+// hidden).
+let shownState = null;
+
+// `secondary` is a second, plain button ({ label, onClick }); `details` a
+// muted line under the buttons.
+function showState(text, buttonLabel, onButton, onCancel, options = {}) {
+  const { tired = false, retryAfter = 0, autoRetry = false, secondary = null, details = '', rawDetails = '' } = options;
+  // One busy style for every wait: a spinner over the words when nothing can be pressed yet.
+  const busy = options.busy !== undefined ? options.busy : !buttonLabel && !onCancel;
   // The poll repeats the same waiting message every tick: that must not
   // restart a countdown that is already running (or its button).
   if (retryAfter > 0 && !stateBox.hidden && stateText.textContent === text && stateButton.textContent.startsWith('Try reconnecting')) return;
+  shownState = { text, buttonLabel, onButton, onCancel, options };
   stopRetryCountdown();
   hideLaunchCard();
   hideFirstRun();
@@ -969,12 +1251,24 @@ function showState(text, buttonLabel, onButton, onCancel, { tired = false, retry
   // `.hidden` property to the attribute, so toggling the property alone left
   // `hidden` in the markup forever. The attribute itself always works.
   statePlannyEl.toggleAttribute('hidden', !tired);
+  // Plain Planny is the first frame's "Starting Plan2Code"; the coffee break adds the mug.
+  statePlannyEl.classList.toggle('is-plain', !tired);
+  statePlannyEl.setAttribute('viewBox', tired ? '0 7 29 23' : '0 7 22 23');
   stateText.textContent = text;
   stateButton.hidden = !buttonLabel;
   stateButton.textContent = buttonLabel || '';
   stateButton.onclick = onButton || null;
   stateCancelEl.hidden = !onCancel;
   stateCancelEl.onclick = onCancel || null;
+  stateSecondaryEl.hidden = !secondary;
+  stateSecondaryEl.textContent = secondary ? secondary.label : '';
+  stateSecondaryEl.onclick = secondary ? secondary.onClick : null;
+  stateBusyEl.hidden = !busy;
+  // A friendly error keeps its raw text behind Details; a bug-report line (details) shows as it is.
+  stateDetailsEl.hidden = !details;
+  stateDetailsEl.textContent = details || rawDetails;
+  stateToggleEl.hidden = !rawDetails || Boolean(details);
+  stateToggleEl.setAttribute('aria-expanded', 'false');
   stateBox.hidden = false;
   if (retryAfter > 0 && buttonLabel) {
     let left = retryAfter;
@@ -996,9 +1290,60 @@ function showState(text, buttonLabel, onButton, onCancel, { tired = false, retry
   }
 }
 
+// A raw error as a sentence with its next step and a Details link (meter.js friendlyError).
+function showErrorState(raw, action, buttonLabel, onButton, onCancel) {
+  const friendly = friendlyError(raw, action);
+  showState(friendly.text, buttonLabel, onButton, onCancel, { rawDetails: friendly.details });
+}
+
+stateToggleEl.onclick = () => {
+  const open = stateDetailsEl.hidden;
+  stateDetailsEl.hidden = !open;
+  stateToggleEl.setAttribute('aria-expanded', String(open));
+};
+
+// While the agent starts and the dashboard has not opened: after ~12 s the pane stops saying
+// "waiting" alone and says where to look (meter.js waitingView), and an agent that ended gets
+// Change agent beside it.
+let waitStartedAt = 0;
+let waitTimer = null;
+let waitKey = '';
+
+function beginWait(text) {
+  waitStartedAt = Date.now();
+  waitKey = '';
+  showState(text, undefined, undefined, undefined, { waiting: true });
+  clearInterval(waitTimer);
+  waitTimer = setInterval(tickWait, 1000);
+}
+
+function endWait() {
+  clearInterval(waitTimer);
+  waitTimer = null;
+}
+
+function tickWait() {
+  // Gone from the screen (the dashboard came, or something else spoke): nothing left to time.
+  if (stateBox.hidden || !shownState || !shownState.options.waiting) {
+    endWait();
+    return;
+  }
+  const view = waitingView({ waitedMs: Date.now() - waitStartedAt, agentState: agent.state });
+  const key = view.still ? `${view.text}|${view.changeAgent}` : '';
+  if (!view.still || key === waitKey) return;
+  waitKey = key;
+  showState(view.text, 'Show the terminal', showTerminal, undefined, {
+    waiting: true,
+    busy: !view.changeAgent,
+    secondary: view.changeAgent ? { label: 'Change agent', onClick: showLaunchCard } : null,
+  });
+}
+
 function hideState() {
+  endWait();
   stopRetryCountdown();
   stateBox.hidden = true;
+  shownState = null;
 }
 
 let pollTimer = null;
@@ -1008,12 +1353,12 @@ let pollTimer = null;
 // does, by running the skill), so there is nothing to start before that.
 async function reconnectConsole() {
   markConsoleAlive();
-  showState('Reconnecting to the console');
+  showState('Reconnecting to the console...');
   try {
     const info = await invoke('console_start');
     loadFrame(info.url);
   } catch (error) {
-    showState(`The console could not be reached: ${error}`, 'Retry', reconnectConsole);
+    showErrorState(error, 'reach the console', 'Retry', reconnectConsole);
     // An old console cannot be framed: the fix is the skills update, so offer it.
     if (String(error).includes('too old')) setVersionState({ kind: 'too-old' });
   }
@@ -1042,7 +1387,7 @@ async function pollConsole() {
     markConsoleDead();
     if (action === 'reconnect') {
       reconnects += 1;
-      showState('The console stopped. Reconnecting');
+      showState('The console stopped. Reconnecting...');
       await reconnectConsole();
     } else if (action === 'no-hello') {
       onNoHello();
@@ -1066,27 +1411,103 @@ async function checkVersions() {
   }
 }
 
-// Once, at start, and never waited on: is a newer Plan2Code release out on GitHub? The Rust
-// side asks (the same tag lookup the web console uses) and answers with the newer version, or
-// nothing when the app is current or the lookup failed.
+// At start, and again every few hours (the app stays open for days), never waited on: is a newer
+// Plan2Code release out on GitHub? The Rust side asks (the same tag lookup the web console uses) and
+// answers `{ latest, problem }`: the newer version, or a sentence when the check could not run (git
+// missing), or neither when the app is current. An update already running is never replaced.
 async function checkNewRelease() {
   try {
-    const latest = await invoke('check_new_release');
-    if (latest) setNewRelease({ latest, copied: false });
+    setNewRelease(releaseAfterCheck(newRelease, await invoke('check_new_release')));
   } catch {
     // No answer is no reason to nag.
   }
 }
 
-async function copyUpdateCommand() {
-  if (!newRelease) return;
+// "Update and restart": the installer runs unpinned (the newest release) through the same progress
+// line as Update skills, then the app restarts itself, guarded by the quit check. A failure leaves
+// this app running, with the reason in the bar and the old command as the fallback.
+async function updateAndRestart() {
+  if (!newRelease || !newRelease.latest) return;
+  const latest = newRelease.latest;
+  setNewRelease({ latest, updating: '' });
+  const progress = new Channel();
+  progress.onmessage = (line) => {
+    if (line && newRelease && newRelease.updating !== undefined) setNewRelease({ latest, updating: line });
+  };
   try {
-    await navigator.clipboard.writeText(NEW_RELEASE_COMMAND);
-    setNewRelease({ ...newRelease, copied: true });
-  } catch {
-    // The webview refused the clipboard: the bar spells the command out instead.
-    setNewRelease({ ...newRelease, manual: true });
+    await invoke('update_to_newest', { progress });
+  } catch (error) {
+    setNewRelease({ latest, failed: reasonSentence(error) });
+    return;
   }
+  await restartApp(latest);
+}
+
+// The respawn itself. With an agent or a loop running the person is asked first (the quit check):
+// "asking" leaves the app up, so the bar then offers Restart Plan2Code for when they are ready.
+async function restartApp(latest = newRelease && newRelease.latest) {
+  if (latest) setNewRelease({ latest, updating: 'Restarting Plan2Code...' });
+  try {
+    const outcome = await invoke('restart_app', { confirmed: false });
+    if (outcome === 'asking' && latest) setNewRelease({ latest, restartNeeded: true });
+  } catch (error) {
+    if (latest) setNewRelease({ latest, failed: reasonSentence(error) });
+    else setAgentError(error, 'restart Plan2Code');
+  }
+}
+
+// After the restart: "Updated to vX", once, for a short while.
+async function showUpdatedTo() {
+  try {
+    const status = await invoke('version_status');
+    const now = status.app || null;
+    // The same version after the restart: the installer kept the old app (no desktop app file in
+    // that release yet), so it is not "Updated to".
+    if (now && appState && appState.updatedFrom && now === appState.updatedFrom) {
+      notReplaced = now;
+      updatedTo = null;
+    } else {
+      updatedTo = now;
+      notReplaced = null;
+    }
+  } catch {
+    updatedTo = null;
+    notReplaced = null;
+  }
+  renderNextStep();
+  setTimeout(() => {
+    updatedTo = null;
+    notReplaced = null;
+    renderNextStep();
+  }, UPDATED_NOTE_MS);
+}
+
+// The About dialog and Check for updates, from the bar's menu.
+async function showAbout() {
+  let status = null;
+  try {
+    status = await invoke('version_status');
+  } catch {
+    // The dialog still opens, with what it can say.
+  }
+  const lines = [{ kind: 'text', text: status && status.app ? `This is Plan2Code v${status.app}.` : 'Plan2Code desktop app.' }];
+  if (status && status.skills) lines.push({ kind: 'text', text: `The installed skills are v${status.skills}.` });
+  const notes = status && status.app && (await confirmModal({ title: 'About Plan2Code', lines, primary: 'Release notes', cancel: 'Close', safeFirst: true }));
+  if (notes) openLink(releaseNotesUrl(status.app));
+  else if (!status || !status.app) void confirmModal({ title: 'About Plan2Code', lines, cancel: 'Close', primary: null });
+}
+
+async function checkUpdatesNow() {
+  let result = null;
+  try {
+    result = await invoke('check_new_release');
+  } catch {
+    // Said below.
+  }
+  setNewRelease(releaseAfterCheck(newRelease, result));
+  if (result && result.latest) return;
+  const text = result ? result.problem || 'Plan2Code is up to date.' : 'Could not check for updates.';
+  void confirmModal({ title: 'Check for updates', lines: [{ kind: 'text', text }], cancel: 'Close', primary: null });
 }
 
 async function updateSkills() {
@@ -1123,6 +1544,7 @@ async function restartConsole() {
 // it is shows inside the frame itself (the console's own badge and title),
 // not repeated here.
 function showAnnounced(notice) {
+  endWait();
   restarting = false;
   // A new page is a new start: the budget is per run of trouble, not per launch.
   reconnects = 0;
@@ -1133,7 +1555,9 @@ function showAnnounced(notice) {
   }
   markConsoleAlive();
   if (notice.url !== currentUrl) {
-    showState('Opening the page');
+    // A new page gets its own Reload the page before "still did not load".
+    pageFailures = 0;
+    showState('Opening the page...');
     loadFrame(notice.url);
   }
 }
@@ -1182,7 +1606,7 @@ function applyLoopLocks(state) {
   const { locked, reason } = loopLocks(state);
   for (const button of [changeProjectBtn, changeAgentBtn]) {
     button.disabled = locked;
-    button.title = locked ? reason : '';
+    button.title = locked ? reason : button === changeProjectBtn ? tipWithShortcut('Change project', 'change-project', IS_MAC) : '';
   }
 }
 
@@ -1270,16 +1694,33 @@ window.__TAURI__.event
 
 // A press that fails shows why next to the buttons, with a Retry for the same press.
 let loopRetryAction = null;
+let loopErrorRaw = '';
+loopErrorEl.tabIndex = 0;
+const openLoopError = () => {
+  void confirmModal({ title: 'What went wrong', lines: [{ kind: 'text', text: loopErrorEl.textContent }, ...(loopErrorRaw ? [{ kind: 'code', text: loopErrorRaw }] : [])], cancel: 'Close', primary: null });
+};
+loopErrorEl.addEventListener('click', openLoopError);
+loopErrorEl.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openLoopError();
+  }
+});
 function hideLoopError() {
   loopErrorEl.hidden = true;
   loopErrorEl.textContent = '';
+  loopErrorRaw = '';
   loopRetryBtn.hidden = true;
   loopRetryAction = null;
 }
 function pressLoop(command, args) {
   const press = () =>
     invoke(command, args).then(hideLoopError, (e) => {
-      loopErrorEl.textContent = `Could not do that: ${String(e && e.message ? e.message : e)}`;
+      // In plain words, with the raw text behind a press on the line.
+      const friendly = friendlyError(String(e && e.message ? e.message : e), 'do that');
+      loopErrorEl.textContent = friendly.text;
+      loopErrorEl.title = friendly.details;
+      loopErrorRaw = friendly.details;
       loopErrorEl.hidden = false;
       loopRetryBtn.hidden = false;
       loopRetryAction = press;
@@ -1290,17 +1731,15 @@ loopRetryBtn.onclick = () => {
   if (loopRetryAction) loopRetryAction();
 };
 loopStopAfterBtn.onclick = () => pressLoop('loop_stop_after_phase', { on: !loopStopAfterOn });
-loopStopNowBtn.onclick = () =>
-  showState(
-    "End the agent now? This phase's changes stay uncommitted.",
-    'Stop now',
-    () => {
-      frameReady ? hideState() : showState('No dashboard has loaded yet.');
-      pressLoop('loop_stop_now');
-    },
-    () => (frameReady ? hideState() : showState('No dashboard has loaded yet.')),
-    { tired: true }
-  );
+loopStopNowBtn.onclick = async () => {
+  const yes = await confirmModal({
+    title: 'End the agent now?',
+    lines: [{ kind: 'text', text: "This phase's changes stay uncommitted." }],
+    primary: 'Stop now',
+    danger: true,
+  });
+  if (yes) pressLoop('loop_stop_now');
+};
 
 // The right end of the bar: whether the console stopped answering and where
 // the skills stand against this app, drawn as one next step (meter.js
@@ -1308,23 +1747,71 @@ loopStopNowBtn.onclick = () =>
 let consoleDead = false;
 let versionState = null;
 let newRelease = null;
-const NEXT_STEP_ACTIONS = { reconnect: reconnectConsole, 'restart-console': restartConsole, update: updateSkills, 'copy-update': copyUpdateCommand };
+const NEXT_STEP_ACTIONS = { reconnect: reconnectConsole, 'restart-console': restartConsole, update: updateSkills, 'update-restart': () => updateAndRestart(), 'restart-app': () => restartApp() };
+const UPDATED_NOTE_MS = 20000;
+let updatedTo = null;
+let notReplaced = null;
 let nextStepAction = null;
 
 function renderNextStep() {
-  const steps = barNextSteps({ consoleDead, version: versionState, newRelease });
+  const steps = barNextSteps({ consoleDead, version: versionState, newRelease, updatedTo, notReplaced });
   nextStepEl.hidden = steps.length === 0;
   const [first, ...rest] = steps;
-  nextStepTextEl.textContent = first ? first.text : '';
-  nextStepTextEl.title = first ? first.title : '';
+  nextStepTextEl.replaceChildren(...commandNodes(first ? first.text : ''));
+  nextStepTextEl.title = first ? plainCommandText(first.title) : '';
   nextStepTextEl.className = first ? `is-${first.tone}${first.busy ? ' is-busy' : ''}` : '';
   nextStepAction = first && first.action ? NEXT_STEP_ACTIONS[first.action] : null;
   nextStepBtn.hidden = !nextStepAction;
   nextStepBtn.disabled = false;
   nextStepBtn.textContent = first && first.label ? first.label : '';
+  // "What's new": the release page, in the default browser.
+  const notes = first && first.link ? first.link : null;
+  nextStepNotesEl.hidden = !notes;
+  nextStepNotesEl.onclick = notes ? () => openLink(notes.url) : null;
   nextStepMoreEl.hidden = rest.length === 0;
   nextStepMoreEl.textContent = `+${rest.length} more`;
-  nextStepMoreEl.title = rest.map((step) => step.title).join('\n');
+  nextStepMoreEl.setAttribute('aria-label', `${rest.length} more ${rest.length === 1 ? 'step' : 'steps'}`);
+  renderMoreMenu(rest);
+}
+
+// The other pending steps, each with its full sentence (a failed update's
+// last line included) and its own action, when it has one.
+function renderMoreMenu(rest) {
+  moreMenu.replaceChildren(
+    ...rest.map((step) => {
+      const row = document.createElement('div');
+      row.className = 'more-step';
+      const text = document.createElement('p');
+      text.className = `is-${step.tone}`;
+      text.replaceChildren(...commandNodes(step.title));
+      row.append(text);
+      const action = step.action ? NEXT_STEP_ACTIONS[step.action] : null;
+      if (action && step.label) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('role', 'menuitem');
+        button.textContent = step.label;
+        button.onclick = () => {
+          closeBarMenus();
+          action();
+        };
+        row.append(button);
+      }
+      if (step.link) {
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.setAttribute('role', 'menuitem');
+        link.textContent = step.link.label;
+        link.onclick = () => {
+          closeBarMenus();
+          openLink(step.link.url);
+        };
+        row.append(link);
+      }
+      return row;
+    })
+  );
+  if (rest.length === 0 && openBarMenu === moreMenu) closeBarMenus();
 }
 
 function setVersionState(next) {
@@ -1386,9 +1873,12 @@ function closeFolderPicker(dir) {
   if (resolve) resolve(dir);
 }
 
-function setFolderPickerError(text) {
-  folderPickerErrorEl.textContent = text || '';
-  folderPickerErrorEl.hidden = !text;
+// The picker's error in plain words; the raw text stays as its tooltip (meter.js friendlyError).
+function setFolderPickerError(raw, action) {
+  const friendly = raw ? friendlyError(raw, action) : { text: '', details: '' };
+  folderPickerErrorEl.textContent = friendly.text;
+  folderPickerErrorEl.title = friendly.details;
+  folderPickerErrorEl.hidden = !friendly.text;
 }
 
 function folderPickerButtons() {
@@ -1418,7 +1908,7 @@ async function showFolderPicker({ dialog }) {
   try {
     recent = (await invoke('recent_folders')) || [];
   } catch (error) {
-    setFolderPickerError(`Could not read the recent folders: ${error}`);
+    setFolderPickerError(error, 'read the recent folders');
   }
   folderPickerListEl.replaceChildren(
     ...folderPickerRows(recent).map((row) => {
@@ -1461,7 +1951,7 @@ async function chooseFolderRow(row, button, dialog) {
     if (row.kind === 'browse') dir = await invoke(dialog ? 'change_project' : 'pick_project_folder');
     else dir = await invoke('open_recent_folder', { dir: row.dir });
   } catch (error) {
-    setFolderPickerError(row.kind === 'browse' ? `Could not open the folder picker: ${error}` : `Could not open ${row.dir}: ${error}`);
+    setFolderPickerError(error, row.kind === 'browse' ? 'open the folder picker' : `open ${row.dir}`);
   }
   buttons.forEach((b) => { b.disabled = false; });
   folderPickerCancelBtn.disabled = false;
@@ -1476,7 +1966,7 @@ folderPickerCancelBtn.onclick = () => closeFolderPicker(null);
 // Escape is heard on the document: a click on the backdrop or the heading
 // leaves focus on the page, where a listener on the picker never sees it.
 document.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape' || folderPickerEl.hidden) return;
+  if (event.defaultPrevented || event.key !== 'Escape' || folderPickerEl.hidden) return;
   if (folderPickerCancelBtn.hidden || folderPickerCancelBtn.disabled) return;
   event.preventDefault();
   closeFolderPicker(null);
@@ -1532,19 +2022,19 @@ async function doChangeProject() {
     frameReady = false;
     afterProjectKnown();
   } catch (error) {
-    showState(`Could not switch project: ${error}`, 'Try again', doChangeProject);
+    showErrorState(error, 'switch project', 'Try again', doChangeProject);
   }
 }
 
-function changeProject() {
+async function changeProject() {
   if (agentActive()) {
-    showState(
-      'Stop the running agent and switch to a different project? What it was doing is not saved.',
-      'Change project',
-      doChangeProject,
-      () => (frameReady ? hideState() : showLaunchCard())
-    );
-    return;
+    const yes = await confirmModal({
+      title: 'Stop the running agent and switch to a different project?',
+      lines: [{ kind: 'text', text: 'What the agent was doing is not saved.' }],
+      primary: 'Change project',
+      danger: true,
+    });
+    if (!yes) return;
   }
   doChangeProject();
 }
@@ -1561,7 +2051,7 @@ async function autoStartAgent(state) {
   launchAgentEl.value = state.autoStart;
   if (typeof state.launchModel === 'string' && state.launchModel) launchModelEl.value = state.launchModel;
   setAgentStatus('');
-  showState('Starting the agent...');
+  beginWait('Starting the agent...');
   const { cols, rows } = terminal.size();
   try {
     await invoke('agent_start', {
@@ -1574,7 +2064,8 @@ async function autoStartAgent(state) {
     });
     terminal.focus();
   } catch (error) {
-    setAgentStatus(`Could not start the agent: ${error}`, { error: true });
+    endWait();
+    setAgentError(error, 'start the agent');
     showLaunchCard();
   }
 }
@@ -1601,12 +2092,180 @@ async function recoverAfterReload(snapshot) {
   }
 }
 
+// --- The one confirm dialog (A10) -------------------------------------------------------------
+// Drawn here, outside the page's frame, so the page can never fake one. `lines` are
+// { kind: 'text' | 'code' | 'callout', text }; the safe button comes first and has focus, the
+// named danger verb last (meter.js confirmButtons). Resolves true for the primary, false for
+// Cancel or Escape. A null `primary` makes it a plain notice with one Close button.
+let confirmResolve = null;
+let confirmReturnFocus = null;
+// The id of the Rust request on screen ('' for the shell's own), so the Rust side can take it back.
+let confirmShownId = '';
+const shellParts = () => ['bar', 'loop-banner', 'workspace'].map((id) => document.getElementById(id)).filter(Boolean);
+
+function confirmModal({ title, lines = [], primary = 'OK', cancel = 'Cancel', danger = false, safeFirst = true, id = '' }) {
+  if (confirmResolve) closeConfirm(false);
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    confirmShownId = id;
+    confirmReturnFocus = document.activeElement;
+    confirmTitleEl.textContent = title;
+    confirmBodyEl.replaceChildren(
+      ...lines.map((line) => {
+        const item = typeof line === 'string' ? { kind: 'text', text: line } : line;
+        if (item.kind === 'code') {
+          const pre = document.createElement('pre');
+          pre.textContent = item.text;
+          return pre;
+        }
+        const p = document.createElement('p');
+        if (item.kind === 'callout') p.className = 'confirm-callout';
+        p.replaceChildren(...commandNodes(item.text));
+        return p;
+      })
+    );
+    confirmCancelBtn.textContent = cancel;
+    confirmPrimaryBtn.hidden = !primary;
+    confirmPrimaryBtn.textContent = primary || '';
+    confirmPrimaryBtn.classList.toggle('is-danger', Boolean(danger));
+    const layout = confirmButtons({ safeFirst: primary ? safeFirst : true });
+    confirmActionsEl.replaceChildren(...layout.order.map((which) => (which === 'cancel' ? confirmCancelBtn : confirmPrimaryBtn)));
+    // The rest of the shell is out of reach while it asks.
+    for (const part of shellParts()) part.inert = true;
+    confirmModalEl.hidden = false;
+    (layout.focus === 'cancel' ? confirmCancelBtn : confirmPrimaryBtn).focus();
+  });
+}
+
+function closeConfirm(answer) {
+  const resolve = confirmResolve;
+  confirmResolve = null;
+  confirmShownId = '';
+  confirmModalEl.hidden = true;
+  for (const part of shellParts()) part.inert = false;
+  const back = confirmReturnFocus;
+  confirmReturnFocus = null;
+  if (back && back.isConnected && typeof back.focus === 'function') back.focus();
+  if (resolve) resolve(answer);
+}
+
+confirmCancelBtn.onclick = () => closeConfirm(false);
+confirmPrimaryBtn.onclick = () => closeConfirm(true);
+// Escape is heard on the document, in the capture phase, while the modal is up: a click on the scrim
+// leaves focus on the page, where a listener on the modal never sees it, and nothing behind the modal
+// (the folder picker, a bar menu) may take the same key.
+document.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key !== 'Escape' || confirmModalEl.hidden) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeConfirm(false);
+  },
+  true
+);
+confirmModalEl.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') {
+    const buttons = [...confirmActionsEl.querySelectorAll('button')].filter((b) => !b.hidden);
+    const next = trapTab(event.shiftKey, buttons.indexOf(document.activeElement), buttons.length);
+    if (next === null) return;
+    event.preventDefault();
+    buttons[next].focus();
+  }
+});
+
+// The Rust side asks for a confirm too (the loop start, and the quit check outside Windows): it sends
+// the same fields and waits for confirm_answer. Only the fields below are read. When it gives up
+// waiting (confirm-cancel) the modal it asked for goes away too.
+window.__TAURI__.event.listen('confirm-cancel', (event) => {
+  if (typeof event.payload === 'string' && event.payload && event.payload === confirmShownId) closeConfirm(false);
+});
+window.__TAURI__.event
+  .listen('confirm-request', async (event) => {
+  const req = event.payload || {};
+  if (typeof req.id !== 'string' || typeof req.title !== 'string') return;
+  const lines = Array.isArray(req.lines) ? req.lines.filter((l) => l && typeof l.text === 'string').map((l) => ({ kind: ['code', 'callout'].includes(l.kind) ? l.kind : 'text', text: l.text })) : [];
+  const yes = await confirmModal({
+    id: req.id,
+    title: req.title,
+    lines,
+    primary: typeof req.primary === 'string' ? req.primary : 'OK',
+    cancel: typeof req.cancel === 'string' ? req.cancel : 'Cancel',
+    danger: req.danger === true,
+    safeFirst: req.safeFirst !== false,
+  });
+  invoke('confirm_answer', { id: req.id, yes }).catch(() => {});
+  })
+  // Rust asks through the OS box until the page says it is listening.
+  .then(() => invoke('confirm_ready').catch(() => {}), () => {});
+
+// --- Shortcuts and the bar's "..." menu (A11) -----------------------------------------------
+function runShortcut(id) {
+  if (!confirmModalEl.hidden) return;
+  closeBarMenus();
+  if (id === 'toggle-terminal') {
+    termCollapseBtn.click();
+    if (paneCollapsed) frame.focus();
+  } else if (id === 'focus-console') {
+    frame.focus();
+  } else if (id === 'focus-terminal') {
+    showTerminal();
+  } else if (id === 'new-session') {
+    if (!restartBtn.hidden) restartBtn.click();
+  } else if (id === 'change-project') {
+    // Not over the bare start's own folder picker: Cancel there would leave no project at all.
+    if (!changeProjectBtn.disabled && folderPickerEl.hidden) changeProjectBtn.click();
+  } else if (id === 'preferences') {
+    // The console's own dialog: it opens when a page is showing.
+    if (frameReady && frame.contentWindow) frame.contentWindow.postMessage({ plan2code: 'open-preferences' }, '*');
+  }
+}
+
+// Keys pressed anywhere in the shell itself (the bar, the panes' edges). The terminal's own go through
+// its key handler (and have the default prevented by then), the console frame's through a message.
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented) return;
+  const inTerminal = Boolean(event.target && event.target.closest && event.target.closest('#term'));
+  const id = shortcutAction(event, { mac: IS_MAC, inTerminal });
+  if (!id) return;
+  event.preventDefault();
+  runShortcut(id);
+});
+
+document.getElementById('app-about').onclick = () => {
+  closeBarMenus();
+  void showAbout();
+};
+document.getElementById('app-check-updates').onclick = () => {
+  closeBarMenus();
+  void checkUpdatesNow();
+};
+// Help is the console's own dialog, so it needs a page on screen.
+function openHelp() {
+  if (frameReady && frame.contentWindow) frame.contentWindow.postMessage({ plan2code: 'open-help' }, '*');
+  else void confirmModal({ title: 'Help', lines: [{ kind: 'text', text: 'Help opens with the dashboard. Start an agent first, then press ? in the dashboard.' }], cancel: 'Close', primary: null });
+}
+document.getElementById('app-help').onclick = () => {
+  closeBarMenus();
+  openHelp();
+};
+// The macOS menu bar's own items (main.rs build_mac_menu) do the same as the "..." menu.
+window.__TAURI__.event.listen('app-menu', (event) => {
+  if (event.payload === 'about') void showAbout();
+  else if (event.payload === 'check-updates') void checkUpdatesNow();
+  else if (event.payload === 'help') openHelp();
+});
+document.getElementById('app-quit').onclick = () => {
+  closeBarMenus();
+  invoke('request_quit').catch((error) => setAgentError(error, 'quit'));
+};
+
 async function main() {
   let state;
   try {
     state = await invoke('app_state');
   } catch (error) {
-    showState(`Could not read the app state: ${error}`, 'Retry', main);
+    showErrorState(error, 'read the app state', 'Retry', main);
     return;
   }
   appState = state;
@@ -1624,11 +2283,16 @@ async function main() {
     savePaneSettings();
   }
   applyPaneLayout();
+  terminal.setFontSize(Number.isInteger(state.terminalFontSize) ? state.terminalFontSize : TERMINAL_FONT_DEFAULT);
+  terminal.setCopyOnSelect(Boolean(state.copyOnSelect));
+  termTitleEl.title = `Focus the terminal (${shortcutLabel('focus-terminal', IS_MAC)}); focus the dashboard (${shortcutLabel('focus-console', IS_MAC)})`;
+  if (state.updatedFrom) void showUpdatedTo();
   await loadAgentAvailability();
   applyDefaultAgent(state.lastAgent);
   setInterval(updateBadge, BADGE_POLL_MS);
   checkVersions();
   checkNewRelease();
+  setInterval(checkNewRelease, UPDATE_RECHECK_MS);
 
   let reattach = null;
   try {
@@ -1651,10 +2315,44 @@ async function main() {
   }
   if (state.projectDir) {
     setProjectDir(state.projectDir);
+    // The checklist's Node.js row needs the check's result, which the app now
+    // runs after the window opens.
+    if (!state.firstRunDone) await awaitNodeStatus(state);
     afterProjectKnown();
   } else {
     chooseStartFolder();
   }
+}
+
+// The Node.js check runs in the background so the window opens at once:
+// `nodeChecked` is false until it finishes, and a `node-status` event carries
+// the same fields. Waits for it (at most NODE_WAIT_MS) and folds it into `state`.
+const NODE_WAIT_MS = 15000;
+
+async function awaitNodeStatus(state) {
+  if (state.nodeChecked) return;
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = (report) => {
+      if (done) return;
+      done = true;
+      if (report && typeof report === 'object') {
+        state.nodeChecked = true;
+        state.nodeVersion = report.version || null;
+        state.nodeBinary = report.binary || null;
+        state.nodeProblem = report.problem || null;
+      }
+      resolve();
+    };
+    window.__TAURI__.event.listen('node-status', (event) => finish(event.payload)).catch(() => finish(null));
+    setTimeout(() => finish(null), NODE_WAIT_MS);
+    // The check may have finished between the first read and the listener.
+    invoke('app_state')
+      .then((again) => {
+        if (again.nodeChecked) finish({ version: again.nodeVersion, binary: again.nodeBinary, problem: again.nodeProblem });
+      })
+      .catch(() => {});
+  });
 }
 
 main();

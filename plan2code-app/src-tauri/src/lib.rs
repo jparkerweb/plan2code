@@ -22,4 +22,5 @@ pub mod session_reader;
 pub mod settings;
 #[cfg(windows)]
 pub mod task_dialog;
+pub mod ui_confirm;
 pub mod versions;

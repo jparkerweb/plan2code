@@ -9,13 +9,38 @@ export const NEXT_STEP_LABELS = {
   reconnect: 'Reconnect the console',
   'restart-console': 'Reconnect the console',
   update: 'Update skills',
-  'copy-update': 'Copy update command',
+  'update-restart': 'Update and restart',
+  'restart-app': 'Restart Plan2Code',
 };
 
-// What a person runs in a terminal to move to the newest release: the same line the web
-// console's banner gives. The app cannot replace itself, and Update skills is pinned to the
-// app's own version, so only this brings the app, the skills and the launcher up together.
+// What a person can still run in a terminal to move to the newest release, the same line the
+// web console's banner gives. The app updates itself ("Update and restart"); Update skills
+// stays pinned to the app's own version, so this line is the fallback when that fails.
 export const NEW_RELEASE_COMMAND = 'plan2code update';
+
+/** The release notes page of a version, opened through the shell's link opener. */
+export function releaseNotesUrl(version) {
+  return `https://github.com/jparkerweb/plan2code/releases/tag/v${String(version).replace(/^v/, '')}`;
+}
+
+// How often the app asks again whether a newer release is out: it stays open for days.
+export const UPDATE_RECHECK_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * What the release check's answer (`{ latest, problem }`, from `check_new_release`) does to the
+ * bar's release state `current` (the shape barNextSteps reads). An update that is running, or
+ * done and waiting for its restart, is never replaced by a later check; a version found shows
+ * "Update available"; a check that could not run (git missing) says so, once; current and no
+ * problem clears an old "available" or "could not check" state.
+ */
+export function releaseAfterCheck(current, result) {
+  if (current && (current.updating !== undefined || current.restartNeeded)) return current;
+  const latest = result && typeof result.latest === 'string' && result.latest ? result.latest : '';
+  const problem = result && typeof result.problem === 'string' && result.problem ? result.problem : '';
+  if (latest) return { latest };
+  if (problem) return { problem };
+  return null;
+}
 
 /**
  * What the console page's **continue** button types into the agent's
@@ -82,7 +107,7 @@ export function lastAgentNotice(list, remembered) {
  * update, its Reconnect (which stops the old console first, so the new skills
  * are really picked up) covers a console that has also stopped.
  */
-export function barNextSteps({ consoleDead = false, version = null, newRelease = null } = {}) {
+export function barNextSteps({ consoleDead = false, version = null, newRelease = null, updatedTo = null, notReplaced = null } = {}) {
   const v = version || {};
   const steps = [];
   if (v.kind === 'updated') {
@@ -115,15 +140,34 @@ export function barNextSteps({ consoleDead = false, version = null, newRelease =
       break;
   }
   // Last: the pending fix for a mismatch or a stopped console comes before a release that is
-  // merely out. `newRelease` is `{ latest, copied, manual }`.
-  if (newRelease && newRelease.latest) {
-    steps.push(
-      newRelease.manual
-        ? { id: 'new-release', text: `Run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app`, title: `Plan2Code v${newRelease.latest} is out. Run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app.`, tone: 'warn', action: null }
-        : newRelease.copied
-        ? { id: 'new-release', text: `Copied: run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app`, title: `Plan2Code v${newRelease.latest} is out. Run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app.`, tone: 'ok', action: null }
-        : { id: 'new-release', text: `Update available: v${newRelease.latest}`, title: `Plan2Code v${newRelease.latest} is out. Copy the command, run it in a terminal, then reopen the app.`, tone: 'warn', action: 'copy-update' }
-    );
+  // merely out. `newRelease` is one of `{ latest }` (out), `{ latest, updating: line }`,
+  // `{ latest, failed: reason }`, `{ latest, restartNeeded: true }` (installed, waiting for the
+  // restart) or `{ problem }` (the check could not run); `updatedTo` is the version the app
+  // restarted into, shown once.
+  const rel = newRelease || {};
+  const notes = rel.latest ? { label: "What's new", url: releaseNotesUrl(rel.latest) } : null;
+  if (rel.latest) {
+    const latest = rel.latest;
+    if (rel.restartNeeded) {
+      steps.push({ id: 'new-release', text: `Updated to v${latest}`, title: `Plan2Code v${latest} is installed. Restart Plan2Code to use it.`, tone: 'ok', action: 'restart-app', link: notes });
+    } else if (rel.updating !== undefined) {
+      const line = rel.updating || `Updating to v${latest}...`;
+      steps.push({ id: 'new-release', text: line, title: line, tone: 'warn', busy: true, action: null });
+    } else if (rel.failed) {
+      steps.push({ id: 'new-release', text: 'Update failed', title: `${rel.failed} Plan2Code is still running as it was. You can try again, or run \`${NEW_RELEASE_COMMAND}\` in a terminal.`, tone: 'err', action: 'update-restart', link: notes });
+    } else {
+      steps.push({ id: 'new-release', text: `Update available: v${latest}`, title: `Plan2Code v${latest} is out. Update and restart installs it; nothing needs a terminal.`, tone: 'warn', action: 'update-restart', link: notes });
+    }
+  } else if (rel.problem) {
+    steps.push({ id: 'update-check', text: 'Could not check for updates', title: String(rel.problem), tone: 'warn', action: null });
+  }
+  if (updatedTo) {
+    steps.push({ id: 'updated-to', text: `Updated to v${updatedTo}`, title: `Plan2Code was updated to v${updatedTo}.`, tone: 'ok', action: null });
+  }
+  // The restart came back on the same version: the release has no desktop app file for this system
+  // yet, so the installer kept the old one. Said once, instead of "Updated to" the unchanged version.
+  if (notReplaced) {
+    steps.push({ id: 'not-replaced', text: 'App not replaced', title: `The skills were updated, but this release has no desktop app for this system yet, so Plan2Code is still on v${notReplaced}.`, tone: 'warn', action: null });
   }
   return steps.map((step) => ({ ...step, label: step.action ? NEXT_STEP_LABELS[step.action] : null }));
 }
@@ -263,6 +307,95 @@ export function helloRetryAction({ loopRunning, loopStep }) {
   return loopRunning && loopStep === "Starting" ? "rearm" : "check";
 }
 
+/**
+ * A shell message that names a command marks it with backticks ("run
+ * `plan2code update`"), and the shell draws each marked command in a <code>
+ * instead of showing the backticks: the pieces, in order, each plain text or
+ * a command. A backtick with no partner stays as it is.
+ */
+export function commandSegments(text) {
+  const s = String(text ?? "");
+  const parts = [];
+  const marked = /`([^`]+)`/g;
+  let last = 0;
+  let m;
+  while ((m = marked.exec(s))) {
+    if (m.index > last) parts.push({ text: s.slice(last, m.index), code: false });
+    parts.push({ text: m[1], code: true });
+    last = marked.lastIndex;
+  }
+  if (last < s.length) parts.push({ text: s.slice(last), code: false });
+  return parts;
+}
+
+/**
+ * The same message for a place that can only hold plain text (a tooltip):
+ * each marked command in double quotes instead of backticks.
+ */
+export function plainCommandText(text) {
+  return String(text ?? "").replace(/`([^`]+)`/g, '"$1"');
+}
+
+/**
+ * Where Up, Down, Home and End move focus in one of the bar's menus of
+ * `count` items, from item `at` (-1 when focus is on none of them): Up and
+ * Down wrap around, Home and End go to the ends. Null for any other key, or
+ * a menu with nothing to move to.
+ */
+export function menuStep(key, at, count) {
+  if (!(count > 0)) return null;
+  switch (key) {
+    case "ArrowDown":
+      return at < 0 ? 0 : (at + 1) % count;
+    case "ArrowUp":
+      return at < 0 ? count - 1 : (at - 1 + count) % count;
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+    default:
+      return null;
+  }
+}
+
+/**
+ * What the window says when the console runs but its page sent no hello in
+ * time, by how many times in a row that has happened: the first time, Reload
+ * the page; from the second on, "still" with Reconnect the console (stop,
+ * then start) first and Reload the page beside it, since reloading alone
+ * could land on the same message forever.
+ */
+export function pageNotShownView(failures) {
+  const reload = { action: "reload", label: "Reload the page" };
+  if (failures >= 2) {
+    return {
+      text: "The page still did not load.",
+      primary: { action: "reconnect", label: NEXT_STEP_LABELS.reconnect },
+      secondary: reload,
+    };
+  }
+  return { text: "The console is running but its page did not show in this window.", primary: reload, secondary: null };
+}
+
+/**
+ * The session URL with its sign-in key hidden: the address and port are what
+ * a bug report needs, and the key opens the session.
+ */
+export function redactSessionUrl(url) {
+  return String(url || "").replace(/\/s\/[^/?#]+/, "/s/...");
+}
+
+/**
+ * The muted Details line under that message, for bug reports: the session
+ * URL (its key hidden) and what the last health check said, which is a
+ * `console_status` state ("running", "dead", "none") or null when the check
+ * itself failed.
+ */
+export function pageDetailsLine({ url, health }) {
+  const where = redactSessionUrl(url) || "none";
+  return `Details: session ${where}; health check: ${health || "no answer"}`;
+}
+
 /** Seconds a waiting message stays before it offers Try reconnecting. */
 export const RETRY_AFTER_SECONDS = 10;
 
@@ -319,4 +452,296 @@ export function attentionSignal(data) {
 export function taskbarSwitch(data) {
   const on = data && data.on;
   return typeof on === 'boolean' ? on : null;
+}
+
+// The hex shapes the shell takes from the console's `looks` message: four
+// #rrggbb shades (fill, soft, ink, line) per theme.
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const isShadeSet = (shades) => Array.isArray(shades) && shades.length === 4 && shades.every((c) => typeof c === 'string' && HEX_COLOR.test(c));
+
+/**
+ * What the shell takes from a `looks` message: `{ theme, light, dark }`, the
+ * resolved theme ("light" or "dark") with both shade sets, or null for
+ * anything that does not match those shapes (nothing is applied then). The
+ * page's own sends carry them; a page that predates the theme sends only
+ * `accent` (the dark shades), which keeps the shell dark with that highlight.
+ */
+export function looksFromMessage(data) {
+  if (!data || typeof data !== 'object') return null;
+  if (data.theme === undefined && data.light === undefined && data.dark === undefined) {
+    return isShadeSet(data.accent) ? { theme: 'dark', light: null, dark: data.accent } : null;
+  }
+  if (data.theme !== 'light' && data.theme !== 'dark') return null;
+  if (!isShadeSet(data.light) || !isShadeSet(data.dark)) return null;
+  return { theme: data.theme, light: [...data.light], dark: [...data.dark] };
+}
+
+// The terminal font's size steps, in px (Ctrl or Cmd with plus, minus, 0).
+export const TERMINAL_FONT_DEFAULT = 13;
+export const TERMINAL_FONT_MIN = 8;
+export const TERMINAL_FONT_MAX = 32;
+
+/**
+ * The font size after a terminal zoom key, or null when the key is not one.
+ * `+` and `=` (the unshifted plus) grow it, `-` shrinks it, `0` returns to the
+ * default; the result stays within the saved setting's range. `_` is not one:
+ * Ctrl+Shift+minus is the control-underscore undo of a readline prompt.
+
+ */
+export function terminalFontStep(key, size) {
+  const current = Number.isFinite(size) ? size : TERMINAL_FONT_DEFAULT;
+  let next;
+  if (key === '+' || key === '=') next = current + 1;
+  else if (key === '-') next = current - 1;
+  else if (key === '0') next = TERMINAL_FONT_DEFAULT;
+  else return null;
+  return Math.min(TERMINAL_FONT_MAX, Math.max(TERMINAL_FONT_MIN, next));
+}
+
+// One arrow-key step of the splitter: 2% of the window.
+export const SPLITTER_STEP = 0.02;
+
+/**
+ * The terminal panel's share of the window after a key on the splitter, or
+ * null when the key is not one it uses. The arrow that points away from the
+ * panel grows it (Up when docked at the bottom, Left when docked right), the
+ * other shrinks it; Home goes to the smallest share and End to the largest.
+ * Always within [min, max].
+ */
+export function splitterFraction(key, fraction, dock, { min, max, step = SPLITTER_STEP }) {
+  const grow = dock === 'right' ? 'ArrowLeft' : 'ArrowUp';
+  const shrink = dock === 'right' ? 'ArrowRight' : 'ArrowDown';
+  let next;
+  if (key === grow) next = fraction + step;
+  else if (key === shrink) next = fraction - step;
+  else if (key === 'Home') next = min;
+  else if (key === 'End') next = max;
+  else return null;
+  return Math.min(max, Math.max(min, next));
+}
+
+/** The splitter's aria-valuenow, min and max as whole percents of the window. */
+export function splitterAria(fraction, { min, max }) {
+  return { now: Math.round(fraction * 100), min: Math.round(min * 100), max: Math.round(max * 100) };
+}
+
+/**
+ * The terminal toolbar's title: "Terminal" and, when an agent is known, its
+ * name after a middle dot.
+ */
+export function terminalTitle(agentName) {
+  return agentName ? `Terminal · ${agentName}` : 'Terminal';
+}
+
+/**
+ * Which optional parts of the top bar still fit. `needed` is the row's width
+ * with everything showing, `available` the room it has, and `model` and `status`
+ * the widths of the two parts that can leave. The model text goes first, then
+ * the status line; both then live in the agent menu's head.
+ */
+export function barFit({ available, needed, model = 0, status = 0 }) {
+  if (needed <= available) return { model: true, status: true };
+  if (needed - model <= available) return { model: false, status: true };
+  return { model: false, status: false };
+}
+
+// The terminal's ANSI palettes, one per theme, tuned against the panel color
+// each sits on (--panel: #201d1a dark, #ffffff light): every color keeps at
+// least 3:1 against it (the dim "bright black" 4.4:1 and up), and the light
+// set is the dark set turned darker, since an agent's greens and yellows
+// written for a dark screen wash out on white. The console's own state
+// colors (--ok, --stage, --warn, --focus) are the green, yellow, red and blue.
+export const TERMINAL_ANSI = Object.freeze({
+  dark: Object.freeze({
+    black: '#3a3632', red: '#f0897a', green: '#74c28f', yellow: '#e0ab4c', blue: '#6aa3ff', magenta: '#c49bea', cyan: '#6cc4b8', white: '#d9d3c8',
+    brightBlack: '#8b8376', brightRed: '#f6a89c', brightGreen: '#93d6a9', brightYellow: '#edc578', brightBlue: '#8fb9ff', brightMagenta: '#d6b6f2', brightCyan: '#8fd8ce', brightWhite: '#f0ece5',
+  }),
+  light: Object.freeze({
+    black: '#1d1a17', red: '#b3261e', green: '#2f6b45', yellow: '#8f620f', blue: '#1f5fbf', magenta: '#7a3fa8', cyan: '#1d6f68', white: '#6b645a',
+    brightBlack: '#756e62', brightRed: '#c9372c', brightGreen: '#2f7d4f', brightYellow: '#9c6c10', brightBlue: '#2a74d6', brightMagenta: '#8d4fc0', brightCyan: '#237e77', brightWhite: '#4a443c',
+  }),
+});
+
+/** The ANSI palette for a theme ("light" or "dark"; anything else is dark). */
+export function terminalAnsi(theme) {
+  return theme === 'light' ? TERMINAL_ANSI.light : TERMINAL_ANSI.dark;
+}
+
+/** `#rrggbb` as an `rgba()` string at `alpha`, for the terminal's selection color. */
+export function hexToRgba(hex, alpha) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex).trim());
+  if (!m) return `rgba(128, 128, 128, ${alpha})`;
+  return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})`;
+}
+
+// --- Waits (A1) -------------------------------------------------------------
+
+/** Milliseconds of waiting for the dashboard before the pane admits it is slow. */
+export const STILL_WAITING_MS = 12000;
+export const STILL_WAITING_TEXT = 'Still waiting. The agent may be asking you something in its terminal.';
+
+/**
+ * What the pane says while it waits for the agent to open the dashboard: nothing new for the
+ * first ~12 s; after that, the "still waiting" line with a way to the terminal (an agent can
+ * sit on its own prompt: trust this folder, a login, an update notice). An agent that already
+ * ended gets its own line at once, with Change agent beside the terminal button.
+ */
+export function waitingView({ waitedMs = 0, agentState = 'running' } = {}) {
+  if (agentState === 'ended') {
+    return { still: true, text: 'The agent ended before it opened the dashboard.', showTerminal: true, changeAgent: true };
+  }
+  if (waitedMs >= STILL_WAITING_MS) return { still: true, text: STILL_WAITING_TEXT, showTerminal: true, changeAgent: false };
+  return { still: false, text: null, showTerminal: false, changeAgent: false };
+}
+
+// --- Friendly errors (A9) ---------------------------------------------------
+
+// Known raw messages (the handoff's A9 list and the Rust side's own texts), each a
+// case-insensitive substring and the sentence that replaces it: what happened, then the
+// next step. The raw text is kept for a Details view.
+const FRIENDLY_ERRORS = [
+  ['console open printed no json', 'The console did not start properly. Try Reconnect the console; if it keeps failing, run `plan2code update` in a terminal.'],
+  ['console open failed', 'The console could not be opened. Try Reconnect the console; if it keeps failing, run `plan2code update` in a terminal.'],
+  ['console stop failed', 'The console did not stop cleanly. Try Reconnect the console.'],
+  ['the web console is not installed', "Plan2Code's skills are missing. Run `plan2code update` in a terminal, then reopen the app."],
+  ['too old to show inside the app', 'The installed Plan2Code console is too old for this app. Press Update skills, then try again.'],
+  ['no agent has been started', 'There is no agent to restart yet. Start one from the launch card first.'],
+  ['no project folder chosen', 'Choose a project folder first: use Change project in the bar.'],
+  ['an agent is already running for this project', 'An agent is already running for this project. Use New Session to replace it.'],
+  ['not a folder', 'That is not a folder. Choose a folder instead.'],
+  ['could not start the agent', 'The agent could not start. Check that it is installed (Set up an agent) and try again.'],
+];
+
+/**
+ * The shell's error text as a sentence with a next step: `{ text, details }`. `details` is the raw
+ * message, kept behind a "Details" link. `action` ("start the agent") words an unknown error:
+ * "Could not start the agent. Try again." A "Could not do that: ..." wrapper is looked through to
+ * the message inside. An empty input gives an empty text.
+ */
+export function friendlyError(raw, action = '') {
+  const rawText = String(raw ?? '').trim();
+  if (!rawText) return { text: '', details: '' };
+  const inner = rawText.replace(/^could not do that:\s*/i, '');
+  const lower = inner.toLowerCase();
+  const hit = FRIENDLY_ERRORS.find(([needle]) => lower.includes(needle));
+  if (hit) return { text: hit[1], details: rawText };
+  if (lower === 'busy') return { text: 'The console is busy. Try again in a moment.', details: rawText };
+  const sentence = action ? `Could not ${action}. Try again.` : 'That did not work. Try again.';
+  return { text: sentence, details: rawText };
+}
+
+/**
+ * How the bar and the terminal word an agent that ended, from the host's `reason`: exit code 0
+ * is a normal close ("closed normally", bar word "closed"), anything else keeps "ended" with its
+ * reason in plain words.
+ */
+export function endedView(reason) {
+  const text = String(reason ?? '').trim();
+  if (/^exited with code 0$/i.test(text)) return { bar: 'closed', sentence: 'closed normally', normal: true };
+  const code = /^exited with code (\d+)$/i.exec(text);
+  if (code) return { bar: 'ended', sentence: `stopped with an error (exit code ${code[1]})`, normal: false };
+  const signal = /^was ended by a signal \((.+)\)$/i.exec(text);
+  if (signal) return { bar: 'ended', sentence: `was ended from outside the app (${signal[1]})`, normal: false };
+  return { bar: 'ended', sentence: text ? `ended: ${text}` : 'ended', normal: false };
+}
+
+// --- The confirm modal (A10) ------------------------------------------------
+
+/**
+ * The confirm modal's buttons: the safe button (Cancel, or "Stay" on the quit check) comes first
+ * and takes focus, the named danger verb comes last. `safeFirst: false` is for a confirm whose
+ * primary is the harmless one.
+ */
+export function confirmButtons({ safeFirst = true } = {}) {
+  return safeFirst ? { order: ['cancel', 'primary'], focus: 'cancel' } : { order: ['primary', 'cancel'], focus: 'primary' };
+}
+
+/** Where Tab goes inside the modal: it wraps, so focus never leaves it. `at` is -1 when focus is outside. */
+export function trapTab(shift, at, count) {
+  if (!(count > 0)) return null;
+  if (at < 0) return shift ? count - 1 : 0;
+  return shift ? (at - 1 + count) % count : (at + 1) % count;
+}
+
+// --- Shortcuts (A11) --------------------------------------------------------
+
+// The key-to-action table. `shift` is whether Shift is part of the chord.
+export const SHORTCUTS = Object.freeze([
+  { id: 'toggle-terminal', key: '`', shift: false, tip: 'Show or hide the terminal' },
+  { id: 'focus-console', key: '1', shift: false, tip: 'Focus the dashboard' },
+  { id: 'focus-terminal', key: '2', shift: false, tip: 'Focus the terminal' },
+  { id: 'new-session', key: 'n', shift: true, tip: 'New Session' },
+  { id: 'change-project', key: 'o', shift: false, tip: 'Change project' },
+  { id: 'preferences', key: ',', shift: false, tip: 'Open User Preferences' },
+]);
+
+/**
+ * The shell action a key press stands for, or null. The chord is Cmd on macOS and Ctrl elsewhere,
+ * with no Alt. One exception: with the terminal focused on Windows and Linux, Ctrl+O is left to
+ * the agent (Claude Code uses it for its transcript view); Change project stays in the menu.
+ */
+export function shortcutAction(event, { mac = false, inTerminal = false } = {}) {
+  if (!event || event.altKey) return null;
+  const chord = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  if (!chord) return null;
+  const key = String(event.key || '').toLowerCase();
+  const hit = SHORTCUTS.find((s) => s.key === key && s.shift === Boolean(event.shiftKey));
+  if (!hit) return null;
+  if (hit.id === 'change-project' && inTerminal && !mac) return null;
+  return hit.id;
+}
+
+/** A shortcut as the tooltip writes it: "Ctrl+Shift+N", or "Cmd+Shift+N" on a Mac. */
+export function shortcutLabel(id, mac = false) {
+  const hit = SHORTCUTS.find((s) => s.id === id);
+  if (!hit) return '';
+  const key = /^[a-z]$/.test(hit.key) ? hit.key.toUpperCase() : hit.key;
+  return `${mac ? 'Cmd' : 'Ctrl'}+${hit.shift ? 'Shift+' : ''}${key}`;
+}
+
+/** A tooltip: the plain words, then the shortcut in parentheses. */
+export function tipWithShortcut(text, id, mac = false) {
+  const label = shortcutLabel(id, mac);
+  return label ? `${text} (${label})` : text;
+}
+
+/**
+ * The console page forwards the keys it swallows as `{ plan2code: 'shortcut', id }`; the shell takes
+ * the id only when it is one of the table's, so the page can ask for nothing else.
+ */
+export function shortcutFromMessage(data) {
+  const id = data && data.id;
+  return typeof id === 'string' && SHORTCUTS.some((s) => s.id === id) ? id : null;
+}
+
+// --- Copy and paste (A5) ----------------------------------------------------
+
+/**
+ * What a key press does in the terminal's clipboard handling: "copy" (Ctrl+Shift+C, Cmd+C, and
+ * Ctrl+C while text is selected, the Windows Terminal rule: with nothing selected Ctrl+C is the
+ * interrupt and returns null), "paste" (Ctrl+V, Ctrl+Shift+V, Cmd+V), or null. With `mac`, a plain
+ * Ctrl+C is always the interrupt, as in every macOS terminal: copy there is Cmd+C.
+ */
+export function clipboardAction(event, hasSelection, { mac = false } = {}) {
+  if (!event || event.altKey) return null;
+  const key = String(event.key || '').toLowerCase();
+  if (key === 'c') {
+    if (event.metaKey && !event.ctrlKey) return 'copy';
+    if (event.ctrlKey && !event.metaKey) return event.shiftKey || (hasSelection && !mac) ? 'copy' : null;
+    return null;
+  }
+  if (key === 'v' && (event.ctrlKey || event.metaKey)) return 'paste';
+  return null;
+}
+
+/**
+ * A raw failure as one sentence for the bar: the first letter capitalized and a full stop at the end
+ * ("the update did not finish: npm exited with code 1" becomes "The update did not finish: npm exited
+ * with code 1."), so the reason itself stays readable where friendlyError's generic line would hide it.
+ */
+export function reasonSentence(raw) {
+  const text = String(raw ?? '').trim().replace(/\s+/g, ' ');
+  if (!text) return 'The update did not finish.';
+  const cap = text[0].toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(cap) ? cap : cap + '.';
 }

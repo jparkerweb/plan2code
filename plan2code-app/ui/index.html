@@ -5,62 +5,75 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'">
   <title>Plan2Code</title>
+  <script src="theme-early.js"></script>
   <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="vendor/tokens.css">
   <style>
-    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; }
-    body { display: flex; flex-direction: column; overflow: hidden; }
+    /* The colors, type, radii and layers come from the console's own
+       tokens.css (copied into vendor/ by scripts/vendor.mjs), so the shell and the
+       page cannot drift apart. That file also sets a few global rules (box
+       sizing and thin scrollbars on everything, text selection, a focus ring):
+       the shell keeps those and sets its own body below. data-theme on <html>
+       is set by theme-early.js before the first paint and by app.js when the
+       console says the theme changed; the accent custom properties are set the
+       same way. */
+    html, body { margin: 0; height: 100%; }
+    body { display: flex; flex-direction: column; overflow: hidden; min-height: 0; background: var(--bg); color: var(--ink); font: var(--fs-sm)/var(--lh-ui) var(--sans); }
+    /* The one keyboard focus ring for the whole shell, in the highlight color.
+       A part that wears another color (the loop banner) sets --focus-ring. */
+    :is(button, select, input, [role="menu"], [role="separator"]):focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: 2px; }
+    /* A command named in a message (meter.js commandSegments). */
+    :is(#agent-status, #next-step-text, .first-run-detail, #launch-missing) code { color: var(--ink); font-size: 0.95em; }
 
-    /* The console's dark tokens and its default highlight (Ocean). app.js sets
-       the four accent ones to the person's own highlight once the console page
-       says which it is, and keeps them for the next launch. */
-    :root {
-      --panel: #201d1a; --panel-2: #262220; --ink: #f0ece5; --ink-2: #b6afa3; --ink-3: #8b8376; --rule-2: #46403a;
-      --accent: #619fe5; --accent-soft: #1a2533; --accent-ink: #0c1117; --accent-line: #3d5978;
-    }
-
-    #bar { flex: none; border-bottom: 1px solid #444; }
-    /* The console's top bar buttons (.btn small ghost), sized to this bar:
+    #bar { flex: none; border-bottom: 1px solid var(--rule); }
+    /* The console's top bar buttons (.btn sm ghost), sized to this bar:
        quiet until hovered, then in the highlight color. New Session is the
        one that is often the next step, so it wears the highlight outline at
        rest, like the console's standby buttons. */
     #bar button {
       appearance: none; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.2;
-      padding: 4px 10px; border-radius: 8px; cursor: pointer;
+      padding: 4px 10px; border-radius: var(--radius-md); cursor: pointer;
       border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink-2);
-      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      transition: background var(--dur-1), border-color var(--dur-1), color var(--dur-1);
     }
     #bar button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-line); background: var(--panel-2); }
     #bar button:disabled { opacity: 0.45; cursor: not-allowed; }
-    #bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #bar #agent-restart { background: transparent; border-color: var(--accent-line); color: var(--accent); }
     #bar #agent-restart:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
-    #bar-row { height: 34px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 12px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
+    #bar-row { height: 34px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 12px; white-space: nowrap; overflow: hidden; }
+    #bar-row > * { flex: none; }
     #bar [hidden] { display: none !important; }
+    /* A narrow window drops parts instead of scrolling (app.js fitBar, meter.js
+       barFit): the model text first, then the status line; the agent menu holds
+       both then. */
+    #bar-row.no-model #agent-model, #bar-row.no-status #agent-status { display: none; }
+    #agent-menu-more { margin: 0; padding: 0 8px 6px; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
+    #agent-menu-more:empty { display: none; }
     /* The project and agent menus' triggers: plain text until hovered, a
        caret saying there is more behind them. */
     #bar .bar-menu { display: inline-flex; align-items: center; gap: 6px; flex: none; border-color: transparent; background: transparent; color: var(--ink); padding: 4px 8px; }
     #bar .bar-menu:hover:not(:disabled), #bar .bar-menu[aria-expanded="true"] { background: var(--panel-2); border-color: transparent; color: var(--ink); }
     .bar-caret { color: var(--ink-3); font-size: 10px; }
     #project-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-    .agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #666; }
-    .agent-dot.is-ok { background: #6a9955; }
-    .agent-dot.is-warn { background: #d7ba7d; }
+    .agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+    .agent-dot.is-ok { background: var(--ok); }
+    .agent-dot.is-warn { background: var(--stage); }
     #agent-ended, #agent-model { color: var(--ink-3); font-weight: 400; }
     #agent-model { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #agent-bypass { flex: none; font-size: 11px; font-weight: 600; line-height: 1.3; padding: 0 7px; border-radius: 999px; border: 1px solid #d7ba7d; color: #d7ba7d; }
+    #agent-bypass { flex: none; font-size: 11px; font-weight: 600; line-height: 1.3; padding: 0 7px; border-radius: var(--radius-pill); border: 1px solid var(--stage); color: var(--stage); }
     #agent-none { color: var(--ink-3); }
     #agent-status { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; }
-    #agent-status.is-error { color: #f48771; }
+    #agent-status.is-error { color: var(--warn); }
     /* The Implementation Loop, for as long as one runs: the loudest thing in the
        window on purpose. The accent says it is working; amber says it needs you. */
     #loop-banner {
-      --banner-color: var(--accent); --banner-bg: var(--accent-soft); --banner-line: var(--accent-line);
+      --banner-color: var(--accent); --banner-bg: var(--accent-soft); --banner-line: var(--accent-line); --focus-ring: var(--banner-color);
       flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
       padding: 10px 14px 10px 16px; font-size: 13px; color: var(--ink);
       background: var(--banner-bg); border-bottom: 1px solid var(--banner-line); box-shadow: inset 4px 0 0 var(--banner-color);
     }
     #loop-banner[hidden] { display: none; }
-    #loop-banner[data-tone="waiting"] { --banner-color: #e5a93c; --banner-bg: #3a2b10; --banner-line: #7a5a1e; }
+    #loop-banner[data-tone="waiting"] { --banner-color: var(--stage); --banner-bg: var(--stage-soft); --banner-line: color-mix(in srgb, var(--stage) 45%, var(--panel)); }
     #loop-now { flex: 1 1 320px; min-width: 0; display: grid; gap: 3px; }
     #loop-headline { display: flex; align-items: center; gap: 9px; }
     #loop-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--banner-color); animation: loop-pulse 1.8s ease-in-out infinite; }
@@ -76,28 +89,27 @@
     @keyframes loop-pip { 50% { opacity: 0.4; } }
     #loop-spec { color: var(--ink-2); font-weight: 600; }
     #loop-elapsed { font-variant-numeric: tabular-nums; }
-    #loop-retries { color: #f48771; }
+    #loop-retries { color: var(--warn); }
     #loop-actions { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
     #loop-actions button {
       appearance: none; font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2;
-      padding: 6px 12px; border-radius: 8px; cursor: pointer;
+      padding: 6px 12px; border-radius: var(--radius-md); cursor: pointer;
       border: 1px solid var(--banner-line); background: var(--panel); color: var(--ink);
     }
     #loop-actions button:hover:not(:disabled) { border-color: var(--banner-color); background: var(--panel-2); }
     #loop-actions button:disabled { cursor: default; opacity: 0.65; }
-    #loop-actions button:focus-visible { outline: 2px solid var(--banner-color); outline-offset: 2px; }
-    #loop-actions #loop-error { align-self: center; max-width: 320px; color: #f48771; font-size: 12.5px; overflow-wrap: anywhere; }
+    #loop-actions #loop-error { align-self: center; max-width: 320px; color: var(--warn); font-size: 12.5px; overflow-wrap: anywhere; }
     #loop-actions [hidden] { display: none; }
-    #loop-actions #loop-stop-now { color: #f48771; }
-    #loop-actions #loop-stop-now:hover:not(:disabled) { border-color: #f48771; }
+    #loop-actions #loop-stop-now { color: var(--warn); }
+    #loop-actions #loop-stop-now:hover:not(:disabled) { border-color: var(--warn); }
     @media (prefers-reduced-motion: reduce) { #loop-dot, .loop-pip.current { animation: none; } }
     #bar-grow { flex: 1; min-width: 0; }
     /* The one next step for the console or the skills, at the right end. */
     #next-step { display: flex; align-items: center; gap: 8px; flex: none; }
     #next-step-text { overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
-    #next-step-text.is-ok { color: #6a9955; }
-    #next-step-text.is-warn { color: #d7ba7d; }
-    #next-step-text.is-err { color: #f48771; }
+    #next-step-text.is-ok { color: var(--ok); }
+    #next-step-text.is-warn { color: var(--stage); }
+    #next-step-text.is-err { color: var(--warn); }
     #next-step-text.is-busy::before {
       content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: -1px;
       border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: bar-spin 0.8s linear infinite;
@@ -105,18 +117,27 @@
     @keyframes bar-spin { to { transform: rotate(360deg); } }
     #bar #next-step-button { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     #bar #next-step-button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); filter: brightness(1.12); }
-    #next-step-more { color: var(--ink-3); font-size: 11px; border-bottom: 1px dotted var(--ink-3); cursor: help; }
+    /* "+N more": a button that opens the list of the other pending steps. */
+    #bar #next-step-more { font-size: var(--fs-2xs); font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); color: var(--ink-2); }
+    #more-menu { min-width: 280px; }
+    .more-step { padding: 6px 8px; display: grid; gap: 4px; }
+    .more-step + .more-step { border-top: 1px solid var(--rule); }
+    .more-step p { margin: 0; color: var(--ink-2); line-height: 1.45; overflow-wrap: anywhere; }
+    .more-step p.is-ok { color: var(--ok); }
+    .more-step p.is-warn { color: var(--stage); }
+    .more-step p.is-err { color: var(--warn); }
+    #bar .more-step button { justify-self: start; width: auto; padding: 4px 10px; border: 1px solid var(--rule-2); background: var(--panel); }
     /* The menus sit outside the scrolling row (fixed, placed under their
        trigger by app.js), so the row's overflow never clips them. */
     .bar-dropdown {
-      position: fixed; z-index: 20; min-width: 240px; max-width: 380px; padding: 6px; box-sizing: border-box;
-      font-size: 12px; background: var(--panel); border: 1px solid var(--rule-2); border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+      position: fixed; z-index: var(--z-menu); min-width: 240px; max-width: 380px; padding: 6px; box-sizing: border-box;
+      font-size: 12px; background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--radius-md); box-shadow: var(--shadow-2);
     }
     .bar-dropdown-head { margin: 0; padding: 4px 8px 8px; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
     .bar-dropdown-head b { color: var(--ink); font-weight: 600; }
-    .bar-dropdown-head .is-warn { color: #d7ba7d; }
+    .bar-dropdown-head .is-warn { color: var(--stage); }
     #bar .bar-dropdown button {
-      display: block; width: 100%; text-align: left; font-weight: 400; padding: 6px 8px; border: 0; border-radius: 6px;
+      display: block; width: 100%; text-align: left; font-weight: 400; padding: 6px 8px; border: 0; border-radius: var(--radius-sm);
       background: transparent; color: var(--ink);
     }
     #bar .bar-dropdown button:hover:not(:disabled), #bar .bar-dropdown button:focus-visible { background: var(--panel-2); color: var(--accent); }
@@ -127,12 +148,14 @@
     #dashboard { flex: 1; min-height: 0; min-width: 0; position: relative; }
     /* An Activities game in full screen: the console's frame over the whole
        window, the bar and the terminal left as they are underneath. */
-    body.console-full #console-frame { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1000; }
-    #console-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #1e1e1e; }
-    #dashboard-state { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #1e1e1e; text-align: center; padding: 16px; box-sizing: border-box; }
+    body.console-full #console-frame { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: var(--z-overlay); }
+    #console-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
+    #dashboard-state { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--bg); text-align: center; padding: 16px; box-sizing: border-box; }
     #dashboard-state[hidden] { display: none; }
-    #dashboard-state-text { margin: 0; max-width: 60ch; overflow-wrap: anywhere; color: #bbb; }
+    #dashboard-state-text { margin: 0; max-width: 60ch; overflow-wrap: anywhere; color: var(--ink-2); }
     #dashboard-state-planny[hidden] { display: none; }
+    /* The plain Planny (no mug) is the first frame's "Starting Plan2Code"; the coffee break adds the mug and the reaching arm. */
+    #dashboard-state-planny.is-plain .ps-reach, #dashboard-state-planny:not(.is-plain) .ps-rest { display: none; }
     /* Drawn and colored like the console's own Planny (styles/planny.css):
        an outlined shell, the star eye, a lip of a smile, round hands. */
     #dashboard-state-planny { width: 104px; height: auto; overflow: visible; }
@@ -146,7 +169,7 @@
     #dashboard-state-planny .ps-eye { fill: var(--ink); }
     #dashboard-state-planny .ps-mug { fill: var(--panel-2); stroke-width: 1; }
     #dashboard-state-planny .ps-handle { stroke-width: 0.9; }
-    #dashboard-state-planny .ps-coffee { fill: #9a6b47; }
+    #dashboard-state-planny .ps-coffee { fill: var(--stage); }
     #dashboard-state-planny .ps-steam path {
       fill: none; stroke: var(--ink-3); stroke-width: 0.7; stroke-linecap: round;
       animation: ps-steam 2.4s ease-in-out infinite; opacity: 0;
@@ -166,95 +189,132 @@
     #dashboard-state-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
     #dashboard-state-actions button {
       appearance: none; font: inherit; font-size: 13.5px; font-weight: 600; line-height: 1.2;
-      padding: 7px 13px; border-radius: 8px; cursor: pointer;
+      padding: 7px 13px; border-radius: var(--radius-md); cursor: pointer;
       border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink);
-      transition: filter 0.12s, background 0.12s;
+      transition: filter var(--dur-1), background var(--dur-1);
     }
     #dashboard-state-actions button:hover { background: var(--panel-2); }
-    #dashboard-state-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #dashboard-state-actions #dashboard-state-button { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     #dashboard-state-actions #dashboard-state-button:hover { background: var(--accent); filter: brightness(1.08); }
     #dashboard-state-actions button[hidden] { display: none; }
+    /* What a bug report needs (the session URL, the last health check), quiet under the buttons. */
+    #dashboard-state-details { margin: 0; max-width: 60ch; font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; user-select: text; }
+    #dashboard-state-details[hidden] { display: none; }
+    /* "Details": the raw text of an error, behind a plain link-style button. */
+    #dashboard-state-toggle { appearance: none; border: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink-3); text-decoration: underline; cursor: pointer; padding: 2px 4px; }
+    #dashboard-state-toggle:hover { color: var(--ink); }
+    #dashboard-state-toggle[hidden] { display: none; }
+    /* One busy style for every wait: the bar's spinner, above the words. */
+    #dashboard-state-busy { width: 18px; height: 18px; border: 2px solid var(--ink-3); border-right-color: transparent; border-radius: 50%; animation: bar-spin 0.8s linear infinite; }
+    #dashboard-state-busy[hidden] { display: none; }
+    @media (prefers-reduced-motion: reduce) { #dashboard-state-busy { animation: none; border-right-color: var(--ink-3); opacity: 0.6; } }
+
+    /* The one confirm modal, drawn here and not in the page, so the page cannot spoof it. */
+    #confirm-modal { position: fixed; inset: 0; z-index: var(--z-overlay); display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--scrim); }
+    #confirm-modal[hidden] { display: none; }
+    #confirm-panel { width: min(460px, 100%); max-height: 100%; overflow: auto; box-sizing: border-box; padding: 18px 20px; background: var(--panel); color: var(--ink); border: 1px solid var(--rule-2); border-radius: var(--radius); box-shadow: var(--shadow-3); }
+    #confirm-panel:focus { outline: none; }
+    #confirm-title { margin: 0 0 10px; font-size: 16px; line-height: 1.3; }
+    #confirm-body { display: grid; gap: 8px; color: var(--ink-2); font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+    #confirm-body p { margin: 0; }
+    #confirm-body pre { margin: 0; padding: 8px 10px; background: var(--field); border: 1px solid var(--rule); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: pre-wrap; user-select: text; }
+    #confirm-body .confirm-callout { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent); background: var(--stage-soft); color: var(--ink); }
+    #confirm-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
+    #confirm-actions button { appearance: none; font: inherit; font-size: 13.5px; font-weight: 600; line-height: 1.2; padding: 7px 14px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink); }
+    #confirm-actions button:hover { background: var(--panel-2); }
+    #confirm-actions button.is-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    #confirm-actions button.is-danger { border-color: var(--warn); color: var(--warn); }
+    #confirm-actions button.is-primary.is-danger { background: var(--warn); color: var(--panel); }
+
+    /* The terminal's right-click menu: Copy, Paste, Clear, and the copy-on-select switch. */
+    #term-menu { position: fixed; z-index: var(--z-menu); min-width: 210px; padding: 4px; box-sizing: border-box; font-size: 12.5px; background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--radius-md); box-shadow: var(--shadow-2); }
+    #term-menu[hidden] { display: none; }
+    #term-menu button { appearance: none; display: flex; justify-content: space-between; gap: 18px; width: 100%; text-align: left; font: inherit; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink); cursor: pointer; }
+    #term-menu button:hover:not(:disabled), #term-menu button:focus-visible { background: var(--panel-2); color: var(--accent); }
+    #term-menu button:disabled { color: var(--ink-3); cursor: default; }
+    #term-menu .term-menu-key { color: var(--ink-3); }
+    #term-menu hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 0; }
+    /* The bar's "..." menu, at the right. */
+    #bar #app-menu-button { flex: none; font-weight: 700; letter-spacing: 1px; padding: 2px 9px; }
+    #app-menu-button[hidden] { display: none; }
+    #app-menu .menu-key { float: right; margin-left: 18px; color: var(--ink-3); }
 
     #launch-card {
       position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
-      align-items: stretch; justify-content: center; gap: 10px; background: #1e1e1e;
+      align-items: stretch; justify-content: center; gap: 10px; background: var(--bg);
       padding: 24px; box-sizing: border-box; width: min(360px, 100%); margin: 0 auto;
     }
     #launch-card[hidden] { display: none; }
     #launch-card h2 { margin: 0 0 6px; font-size: 17px; text-align: center; }
-    #launch-card label { font-size: 12px; color: #9ab; }
+    #launch-card label { font-size: 12px; color: var(--ink-2); }
     #launch-card select, #launch-card input[type="text"] {
       width: 100%; box-sizing: border-box; margin: 4px 0 2px; padding: 6px 8px;
-      background: #2a2a2a; color: #ddd; border: 1px solid #555; border-radius: 4px; font: inherit;
+      background: var(--field); color: var(--ink); border: 1px solid var(--rule-2); border-radius: var(--radius-sm); font: inherit;
     }
-    #launch-missing { margin: 0; font-size: 12px; color: #d7ba7d; }
-    #launch-notice { margin: 0; font-size: 12px; color: #9ab; }
+    #launch-missing { margin: 0; font-size: 12px; color: var(--stage); }
+    #launch-notice { margin: 0; font-size: 12px; color: var(--ink-2); }
     #launch-notice[hidden] { display: none; }
     /* Set up an agent, shown wherever the app says "no agent". */
     .setup-agent-btn { font: inherit; font-size: 12px; margin-top: 4px; padding: 3px 10px; cursor: pointer;
-      background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); border-radius: 4px; }
+      background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); border-radius: var(--radius-sm); }
     /* The way out of the setup page: a bar button, so it never covers the page. */
     #setup-close[hidden] { display: none; }
-    #launch-missing code { color: #ddd; }
-    #launch-agents-warning { margin: 0; font-size: 12px; color: #d7ba7d; white-space: pre-line; }
+    #launch-agents-warning { margin: 0; font-size: 12px; color: var(--stage); white-space: pre-line; }
     #launch-agents-warning[hidden] { display: none; }
     .agent-explainer { margin: 0; font-size: 12px; line-height: 1.5; }
     .agent-explainer ul { margin: 4px 0; padding-left: 18px; }
-    .agent-explainer code { color: #ddd; }
+    .agent-explainer code { color: var(--ink); }
     .agent-explainer button, #launch-missing button { font: inherit; font-size: 12px; margin-left: 6px; padding: 1px 8px; cursor: pointer; }
-    .agent-explainer .agent-link, #launch-missing .agent-link { background: none; border: 0; padding: 0; color: #75beff; text-decoration: underline; }
+    .agent-explainer .agent-link, #launch-missing .agent-link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; }
     #launch-effort-row[hidden], #launch-model-row[hidden] { display: none; }
-    #launch-bypass-row { display: flex; align-items: center; gap: 8px; color: #ccc; font-size: 13px; cursor: pointer; }
+    #launch-bypass-row { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; cursor: pointer; }
     #launch-bypass-row input { margin: 0; }
-    #launch-bypass-warning { margin: 0; font-size: 12px; color: #d7ba7d; }
+    #launch-bypass-warning { margin: 0; font-size: 12px; color: var(--stage); }
     #launch-bypass-warning[hidden] { display: none; }
     #launch-start {
-      margin-top: 6px; padding: 8px; background: #2d6a4f; color: #fff; border: 0; border-radius: 4px;
+      margin-top: 6px; padding: 8px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: var(--radius-sm);
       font: inherit; font-weight: 600; cursor: pointer;
     }
-    #launch-start:hover { background: #357a5c; }
-    #launch-start:disabled { background: #444; color: #888; cursor: not-allowed; }
+    #launch-start:hover:not(:disabled) { filter: brightness(1.08); }
+    #launch-start:disabled { background: var(--rule); color: var(--ink-3); cursor: not-allowed; }
 
     /* The folder picker: full screen on a bare start, a dialog over the page
        (with Cancel) from Change project. Choose a folder comes first; each
        recent folder shows its name with the full path muted under it. */
     #folder-picker {
       position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
-      background: #1e1e1e; padding: 24px; box-sizing: border-box;
+      background: var(--bg); padding: 24px; box-sizing: border-box;
     }
     #folder-picker[hidden] { display: none; }
-    #folder-picker.is-dialog { background: rgba(0, 0, 0, 0.55); }
+    #folder-picker.is-dialog { background: var(--scrim); }
     #folder-picker-panel { display: flex; flex-direction: column; gap: 12px; width: min(440px, 100%); max-height: 100%; }
     #folder-picker.is-dialog #folder-picker-panel {
-      background: var(--panel); border: 1px solid var(--rule-2); border-radius: 10px; padding: 18px; box-sizing: border-box;
+      background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--radius); padding: 18px; box-sizing: border-box;
     }
     #folder-picker h2 { margin: 0; font-size: 17px; text-align: center; }
     #folder-picker-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
     .folder-picker-row {
       appearance: none; width: 100%; text-align: left; font: inherit; cursor: pointer;
-      display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 8px;
+      display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: var(--radius-md);
       border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink);
     }
     .folder-picker-row:hover:not(:disabled) { background: var(--panel-2); border-color: var(--accent-line); }
-    .folder-picker-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .folder-picker-row:disabled { opacity: 0.6; cursor: default; }
     .folder-picker-row.is-browse { font-weight: 600; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .folder-picker-row.is-browse:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); filter: brightness(1.08); }
     .folder-picker-label { font-size: 13.5px; }
     .folder-picker-detail { font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
-    #folder-picker-error { margin: 0; font-size: 12px; color: #d7ba7d; }
+    #folder-picker-error { margin: 0; font-size: 12px; color: var(--stage); }
     #folder-picker-error[hidden], #folder-picker-cancel[hidden] { display: none; }
     #folder-picker-cancel {
       align-self: center; appearance: none; font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 13px;
-      border-radius: 8px; cursor: pointer; border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink);
+      border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink);
     }
     #folder-picker-cancel:hover { background: var(--panel-2); }
-    #folder-picker-cancel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     #first-run {
       position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
-      align-items: stretch; justify-content: center; gap: 14px; background: #1e1e1e;
+      align-items: stretch; justify-content: center; gap: 14px; background: var(--bg);
       padding: 24px; box-sizing: border-box; width: min(420px, 100%); margin: 0 auto;
     }
     #first-run[hidden] { display: none; }
@@ -262,54 +322,78 @@
     #first-run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
     .first-run-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
     .first-run-mark { flex: none; width: 16px; text-align: center; font-weight: 700; }
-    .first-run-row.is-pass .first-run-mark { color: #6a9955; }
-    .first-run-row.is-fail .first-run-mark { color: #d7ba7d; }
+    .first-run-row.is-pass .first-run-mark { color: var(--ok); }
+    .first-run-row.is-fail .first-run-mark { color: var(--stage); }
     .first-run-body { flex: 1; min-width: 0; }
-    .first-run-title { color: #ddd; }
-    .first-run-detail { color: #9ab; font-size: 12px; margin-top: 2px; }
-    .first-run-detail code { color: #ddd; }
+    .first-run-title { color: var(--ink); }
+    .first-run-detail { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
     .first-run-row button {
-      margin-top: 4px; background: none; border: 1px solid #555; color: #ccc; border-radius: 3px;
+      margin-top: 4px; background: none; border: 1px solid var(--rule-2); color: var(--ink); border-radius: var(--radius-xs);
       font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
     }
-    .first-run-row button:hover { background: #333; }
+    .first-run-row button:hover { background: var(--panel-2); }
     #first-run-start {
-      margin-top: 6px; padding: 8px; background: #2d6a4f; color: #fff; border: 0; border-radius: 4px;
+      margin-top: 6px; padding: 8px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: var(--radius-sm);
       font: inherit; font-weight: 600; cursor: pointer;
     }
-    #first-run-start:hover { background: #357a5c; }
-    #first-run-start:disabled { background: #444; color: #888; cursor: not-allowed; }
+    #first-run-start:hover:not(:disabled) { filter: brightness(1.08); }
+    #first-run-start:disabled { background: var(--rule); color: var(--ink-3); cursor: not-allowed; }
 
-    #term-handle { flex: none; background: #2a2a2a; }
-    #term-handle:hover { background: #3d3d3d; }
+    /* The splitter between the console and the terminal: a 6px hit area with a
+       1px line, in the highlight color on hover, keyboard focus and drag (and the
+       shell's one focus ring, above, on keyboard focus). */
+    #term-handle { flex: none; position: relative; touch-action: none; }
+    #term-handle::after { content: ""; position: absolute; background: var(--rule); transition: background var(--dur-1); }
+    #term-handle:hover::after, #term-handle:focus-visible::after, #term-handle.is-dragging::after { background: var(--accent); }
     #term-handle[hidden] { display: none; }
     #workspace:not(.dock-right) #term-handle { height: 6px; cursor: row-resize; }
+    #workspace:not(.dock-right) #term-handle::after { left: 0; right: 0; top: 2px; height: 1px; }
     #workspace.dock-right #term-handle { width: 6px; cursor: col-resize; }
+    #workspace.dock-right #term-handle::after { top: 0; bottom: 0; left: 2px; width: 1px; }
 
-    #term-panel { flex: none; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-    #workspace:not(.dock-right) #term-panel { border-top: 1px solid #444; }
-    #workspace.dock-right #term-panel { border-left: 1px solid #444; }
+    #term-panel { flex: none; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); }
+    #workspace:not(.dock-right) #term-panel.collapsed { border-top: 1px solid var(--rule); }
+    #workspace.dock-right #term-panel.collapsed { border-left: 1px solid var(--rule); }
     #term-panel.collapsed { height: 28px !important; }
     #workspace.dock-right #term-panel.collapsed { width: 28px !important; height: auto !important; }
     #term-panel.collapsed #term { display: none; }
-    #term-toolbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 3px 6px; background: #252525; font-size: 11px; }
-    #workspace.dock-right #term-toolbar { flex-direction: column; align-items: stretch; }
+    /* The terminal's own bar: a title on the left, the quiet pill, then three
+       icon buttons (dock, maximize, collapse) that name themselves by label. */
+    #term-toolbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 6px; min-height: 28px; box-sizing: border-box; background: var(--panel-2); border-bottom: 1px solid var(--rule); font-size: var(--fs-xs); }
+    #term-title { color: var(--ink-2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 3 auto; }
     #term-toolbar-spacer { flex: 1; min-height: 0; }
-    #term-toolbar button {
-      background: none; border: 1px solid #555; color: #ccc; border-radius: 3px;
-      font-size: 11px; padding: 2px 6px; cursor: pointer; font-family: inherit;
+    #term-toolbar .term-icon {
+      appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none;
+      width: 24px; height: 24px; padding: 0; border-radius: var(--radius-sm); cursor: pointer;
+      border: 1px solid transparent; background: transparent; color: var(--ink-2); font: inherit;
+      transition: background var(--dur-1), color var(--dur-1), border-color var(--dur-1);
     }
-    #term-toolbar button:hover { background: #333; }
-    #term-toolbar button[aria-pressed="true"] { color: #fff; border-color: #888; }
+    #term-toolbar .term-icon:hover { background: var(--panel); border-color: var(--rule-2); color: var(--ink); }
+    #term-toolbar .term-icon[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+    #term-toolbar .term-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    /* One icon per state, shown by the button's own attributes. */
+    #term-dock .ic-bottom, #term-dock[data-dock="right"] .ic-right { display: none; }
+    #term-dock[data-dock="right"] .ic-bottom { display: block; }
+    #term-maximize .ic-restore, #term-maximize[aria-pressed="true"] .ic-max { display: none; }
+    #term-maximize[aria-pressed="true"] .ic-restore { display: block; }
+    #term-collapse svg { transition: transform var(--dur-2) var(--ease-out); }
+    #workspace.dock-right #term-collapse svg { transform: rotate(-90deg); }
+    #term-collapse[aria-pressed="true"] svg { transform: rotate(180deg); }
+    #workspace.dock-right #term-collapse[aria-pressed="true"] svg { transform: rotate(90deg); }
     #term-panel.collapsed #term-dock, #term-panel.collapsed #term-maximize { display: none; }
-    /* Docked right and collapsed, the panel is a 28px-wide strip: "View Agent
-       Terminal" does not fit sideways, so it reads top-to-bottom instead, rotated the
-       same way a reader would turn the panel to read it. */
-    #workspace.dock-right #term-panel.collapsed #term-toolbar { padding: 6px 2px; align-items: center; }
-    #workspace.dock-right #term-panel.collapsed #term-collapse {
-      writing-mode: vertical-rl; text-orientation: mixed; padding: 6px 2px;
+    /* Docked right and collapsed, the panel is a 28px-wide strip: only the
+       expand button and the pill fit, the pill reading top to bottom. */
+    #workspace.dock-right #term-panel.collapsed #term-toolbar { flex-direction: column; padding: 4px 2px; align-items: center; border-bottom: 0; }
+    #workspace.dock-right #term-panel.collapsed #term-title { display: none; }
+    #workspace.dock-right #term-panel.collapsed #term-badge { writing-mode: vertical-rl; padding: 6px 2px; }
+    /* A pill in words where a bare dot sat: the agent has been quiet while the
+       panel is small or collapsed. Pressing it opens the terminal. */
+    #term-badge {
+      appearance: none; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font: inherit; font-size: var(--fs-2xs); font-weight: 600; line-height: 1.3; white-space: nowrap;
+      padding: 1px 9px; border-radius: var(--radius-pill); cursor: pointer;
+      border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent); background: var(--stage-soft); color: var(--stage);
     }
-    #term-badge { color: #d7ba7d; font-size: 14px; line-height: 1; }
+    #term-badge:hover { border-color: var(--stage); }
     #term-badge[hidden] { display: none; }
     #term { flex: 1; min-height: 0; min-width: 0; padding: 4px; }
   </style>
@@ -330,17 +414,28 @@
       <span id="next-step" role="status" hidden>
         <span id="next-step-text"></span>
         <button id="next-step-button" hidden></button>
-        <span id="next-step-more" hidden></span>
+        <button id="next-step-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" hidden></button>
+        <button id="next-step-notes" type="button" hidden>What's new</button>
       </span>
+      <!-- The compact menu at the right end: About, Check for updates, Help, Quit. -->
+      <button id="app-menu-button" class="bar-menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu" aria-label="Plan2Code menu" title="Plan2Code menu">&#8943;</button>
     </div>
-    <div id="project-menu" class="bar-dropdown" role="menu" aria-label="Project" hidden>
+    <div id="project-menu" class="bar-dropdown" role="menu" aria-label="Project" tabindex="-1" hidden>
       <p class="bar-dropdown-head">Project<br><b id="project-path"></b></p>
       <button id="change-project" role="menuitem">Change project...</button>
     </div>
-    <div id="agent-menu" class="bar-dropdown" role="menu" aria-label="Agent" hidden>
+    <div id="agent-menu" class="bar-dropdown" role="menu" aria-label="Agent" tabindex="-1" hidden>
       <p id="agent-menu-head" class="bar-dropdown-head"></p>
+      <p id="agent-menu-more"></p>
       <button id="change-agent" role="menuitem" hidden>Change agent...</button>
     </div>
+    <div id="app-menu" class="bar-dropdown" role="menu" aria-label="Plan2Code" tabindex="-1" hidden>
+      <button id="app-about" role="menuitem">About Plan2Code</button>
+      <button id="app-check-updates" role="menuitem">Check for updates</button>
+      <button id="app-help" role="menuitem">Help</button>
+      <button id="app-quit" role="menuitem">Quit</button>
+    </div>
+    <div id="more-menu" class="bar-dropdown" role="menu" aria-label="More steps" tabindex="-1" hidden></div>
   </header>
   <!-- The Implementation Loop, while one runs (app.js loop-state, meter.js loopBanner). -->
   <section id="loop-banner" aria-label="Implementation Loop" hidden>
@@ -367,33 +462,38 @@
   <div id="workspace">
     <main id="dashboard">
       <iframe id="console-frame" title="Plan2Code console dashboard" allow="clipboard-write"></iframe>
-      <div id="dashboard-state" hidden>
+      <div id="dashboard-state">
         <!-- Planny on a coffee break: shown only before a New Session press,
              the one state here that is a question rather than a status. The
              console's own Planny (shell, star eye, smile, feet, resting left
              arm) with the right arm reaching out to a steaming mug. -->
-        <svg id="dashboard-state-planny" viewBox="0 7 29 23" aria-hidden="true" focusable="false" hidden>
+        <svg id="dashboard-state-planny" class="is-plain" viewBox="0 7 22 23" aria-hidden="true" focusable="false">
           <rect class="ps-foot" x="5.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
           <rect class="ps-foot" x="12.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
           <rect class="ps-shell" x="3" y="7" width="16" height="20" rx="3.2" />
           <path class="ps-eye" d="M11 10.95 L11.79 12.91 L13.9 13.06 L12.28 14.42 L12.79 16.47 L11 15.35 L9.21 16.47 L9.72 14.42 L8.1 13.06 L10.21 12.91 Z" />
           <path class="ps-smile" d="M8.3 18.4 Q11 21 13.7 18.4" />
           <g class="ps-arm"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g>
-          <g class="ps-steam">
+          <g class="ps-steam ps-reach">
             <path d="M23 17.3 q-0.6 -0.9 0 -1.8 t0 -1.8" />
             <path d="M24.4 17.1 q0.6 -0.9 0 -1.8 t0 -1.8" />
             <path d="M25.8 17.3 q-0.6 -0.9 0 -1.8 t0 -1.8" />
           </g>
-          <g class="ps-arm"><path d="M19 18 L21.6 20.6" /><circle cx="21.6" cy="20.6" r="0.85" /></g>
-          <path class="ps-handle" d="M26.7 19.6 h0.3 a1.15 1.15 0 0 1 0 2.3 h-0.3" />
-          <rect class="ps-mug" x="22.4" y="18.4" width="4.3" height="4.6" rx="0.8" />
-          <rect class="ps-coffee" x="23" y="19" width="3.1" height="0.8" rx="0.35" />
+          <g class="ps-arm ps-rest"><path d="M19 18 L20.7 21" /><circle cx="20.7" cy="21" r="0.85" /></g>
+          <g class="ps-arm ps-reach"><path d="M19 18 L21.6 20.6" /><circle cx="21.6" cy="20.6" r="0.85" /></g>
+          <path class="ps-handle ps-reach" d="M26.7 19.6 h0.3 a1.15 1.15 0 0 1 0 2.3 h-0.3" />
+          <rect class="ps-mug ps-reach" x="22.4" y="18.4" width="4.3" height="4.6" rx="0.8" />
+          <rect class="ps-coffee ps-reach" x="23" y="19" width="3.1" height="0.8" rx="0.35" />
         </svg>
-        <p id="dashboard-state-text"></p>
+        <span id="dashboard-state-busy" role="presentation" hidden></span>
+        <p id="dashboard-state-text">Starting Plan2Code</p>
         <span id="dashboard-state-actions">
           <button id="dashboard-state-button" hidden></button>
+          <button id="dashboard-state-secondary" hidden></button>
           <button id="dashboard-state-cancel" hidden>Cancel</button>
         </span>
+        <button id="dashboard-state-toggle" type="button" aria-expanded="false" aria-controls="dashboard-state-details" hidden>Details</button>
+        <p id="dashboard-state-details" hidden></p>
       </div>
       <div id="folder-picker" hidden>
         <div id="folder-picker-panel" role="dialog" aria-labelledby="folder-picker-title">
@@ -435,20 +535,43 @@
         <button id="launch-start" type="submit">Start agent</button>
       </form>
     </main>
-    <div id="term-handle" title="Drag to resize the terminal panel"></div>
-    <section id="term-panel">
+    <!-- The splitter: arrow keys, Home and End, and a double-click that returns it to the default (app.js). -->
+    <div id="term-handle" role="separator" aria-orientation="horizontal" aria-label="Terminal size" aria-controls="term-panel" aria-valuemin="10" aria-valuemax="60" aria-valuenow="25" tabindex="0" title="Drag to resize the terminal. Arrow keys also work; double-click resets it."></div>
+    <section id="term-panel" aria-label="Terminal">
       <div id="term-toolbar">
-        <span id="term-badge" title="The agent has been quiet a while" hidden>●</span>
+        <span id="term-title">Terminal</span>
+        <button id="term-badge" type="button" title="The agent has been quiet a while. Open the terminal to check." hidden>Agent may need you</button>
         <span id="term-toolbar-spacer"></span>
-        <button id="term-dock" type="button">Dock right</button>
-        <button id="term-maximize" type="button" aria-pressed="false">Maximize</button>
-        <button id="term-collapse" type="button" aria-pressed="false">Collapse</button>
+        <button id="term-dock" class="term-icon" type="button" data-dock="bottom" aria-label="Dock the terminal on the right" title="Dock on the right">
+          <svg class="ic-right" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg>
+          <svg class="ic-bottom" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 9h12"/></svg>
+        </button>
+        <button id="term-maximize" class="term-icon" type="button" aria-pressed="false" aria-label="Make the terminal larger" title="Make it larger">
+          <svg class="ic-max" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
+          <svg class="ic-restore" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3" y="5.5" width="7.5" height="7.5" rx="1.2"/><path d="M6 5.5V4.2c0-.7.5-1.2 1.2-1.2h5.1c.7 0 1.2.5 1.2 1.2v5.1c0 .7-.5 1.2-1.2 1.2h-1.8"/></svg>
+        </button>
+        <button id="term-collapse" class="term-icon" type="button" aria-pressed="false" aria-label="Collapse the terminal" title="Collapse">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
       </div>
       <div id="term"></div>
     </section>
   </div>
+  <div id="term-menu" role="menu" aria-label="Terminal" hidden></div>
+  <!-- The one confirm dialog (app.js confirmModal): outside the page's frame, so the page cannot spoof it. -->
+  <div id="confirm-modal" hidden>
+    <div id="confirm-panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body" tabindex="-1">
+      <h2 id="confirm-title"></h2>
+      <div id="confirm-body"></div>
+      <div id="confirm-actions">
+        <button id="confirm-cancel" type="button"></button>
+        <button id="confirm-primary" type="button" class="is-primary"></button>
+      </div>
+    </div>
+  </div>
   <script src="vendor/xterm.js"></script>
   <script src="vendor/addon-fit.js"></script>
+  <script src="vendor/addon-web-links.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
