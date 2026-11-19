@@ -64,10 +64,10 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4.4.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -121,7 +121,7 @@ jobs:
           VERSION="$(node -p "require('./plan2code-app/src-tauri/tauri.conf.json').version")"
           mkdir -p dist
           cp "plan2code-app/target/release/${{ matrix.built }}" "dist/plan2code-app-${VERSION}-${{ matrix.label }}${{ matrix.suffix }}"
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: app-${{ matrix.label }}
           path: dist/*
@@ -136,8 +136,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/download-artifact@v4.3.0
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: dist
           pattern: app-*
