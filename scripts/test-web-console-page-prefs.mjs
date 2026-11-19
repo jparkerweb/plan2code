@@ -973,6 +973,9 @@ test("the Subagents dialog looks as it did before Preferences moved to tabs", as
     second: await stylesOf(modal.locator("fieldset.modal-ranges").nth(1), ["margin-top"]),
     actions: await stylesOf(modal.locator(".modal-actions"), ["display", "justify-content"]),
   };
+  // Chrome 158 reads `justify-content: flex-end` back as "flow-end"; older Chrome and Edge
+  // say "flex-end". The stylesheet is the same either way, so count them as one.
+  if (got.actions["justify-content"] === "flow-end") got.actions["justify-content"] = "flex-end";
   if (process.env.P2C_PRINT_SUBAGENTS) console.log("SUBAGENTS " + JSON.stringify(got));
   assert.deepEqual(got, SUBAGENTS_BEFORE);
 });
