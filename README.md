@@ -13,7 +13,7 @@
 
 Plan2Code is a spec-driven workflow for AI coding agents. You work through it on a page in your browser: the dashboard lists every step as a card, and each step's questions, progress and sign-offs arrive on that same page while your agent does the work. An approved plan becomes phase documents, and the agent builds to them one phase at a time.
 
-Version 3.1.2 · Apache 2.0 · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 3.1.3 · Apache 2.0 · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 

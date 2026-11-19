@@ -4,6 +4,16 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
+## v3.1.3 (2026-11-18)
+
+### 🔧 Changed
+
+- **For contributors**: the CI workflows use the Node.js 24 versions of the checkout, setup-node and artifact actions, two tests that always failed on macOS are fixed, and four page tests no longer depend on redraw timing.
+
+### 🐛 Fixed
+
+- **web console**: on a finished screen, a press that nothing ever collects now shows its way out (Start a New Session in the app, or the command to run in a browser) together with the "Plan2Code is not running" line; before, it appeared only if something else happened to redraw the card.
+
 ## v3.1.2 (2026-11-18)
 
 ### 🔧 Changed
