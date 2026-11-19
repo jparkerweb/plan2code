@@ -544,7 +544,7 @@ test("each tab keeps its own text and pictures, and switching never saves into t
   const notes = idOf(s, "Notes");
   const ideas = idOf(s, "Ideas");
   // The new tab opens with its heading and the editor focused: clear it to start from empty.
-  await s.page.keyboard.press("Control+a");
+  await s.page.keyboard.press("ControlOrMeta+a");
   await s.page.keyboard.press("Delete");
   await until(() => readNotepad(s.project, notes).text === "notes text" && readNotepad(s.project, ideas).text === "", 4000);
   await typeInto(s, "ideas text");

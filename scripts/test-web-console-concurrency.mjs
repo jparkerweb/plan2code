@@ -374,7 +374,8 @@ test("wait reads --seconds 6s as six seconds, not as nothing", () => {
 });
 
 test("only an installed console's open leaves the console-dir pointer; status, help, a bad command and a source checkout's open do not", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pointer-"));
+  // macOS hands out a temp folder under the /var link, and the console writes the real path.
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pointer-")));
   const env = { PLAN2CODE_CONSOLE_HOME: home, PLAN2CODE_MODELS_DIR: path.join(home, "plan2code") };
   const pointer = path.join(home, "console-dir");
   fs.writeFileSync(path.join(home, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));
