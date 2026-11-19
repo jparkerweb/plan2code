@@ -4,6 +4,16 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
+## v3.1.2 (2026-11-18)
+
+### 🔧 Changed
+
+- **web console**: the git board now walks you through four steps, Save, Share, Review and Tidy, with one task card for the step you are on; the Changes, Branches and Sync tabs are folded into **All branches and tools**.
+
+### 🐛 Fixed
+
+- **installer**: an install, update or uninstall started by a launcher older than the release channel, or by an install command copied from an older README, no longer gets unfinished work from `main`: the installer notices, says so and switches to the newest release. `plan2code update --main` still takes `main`.
+
 ## v3.1.1 (2026-11-17)
 
 ### ✨ Added
