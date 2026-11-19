@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue, sendAsk, styleOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue, sendAsk, styleOf, quiet } from "./page-test-helpers.mjs";
 import { cli, until, HOME } from "./web-console-test-helpers.mjs";
 import { STOP_HANDOFF_REPLY, HOME_REPLY } from "../src/web-console/public/answers.js";
 import { CHAT_OFFLINE_TEXT } from "../src/web-console/public/chat.js";
@@ -1156,6 +1156,9 @@ async function strandedFinish(t, opts) {
   const main = s.page.locator("#main");
   await main.getByRole("button", { name: "Review it now" }).click();
   await main.getByRole("button", { name: "Review requested…" }).waitFor();
+  // Let the page hear the press is saved while it is still fresh, as it does for a person:
+  // the way out then has to appear by time alone, with no frame to draw it.
+  await quiet(s.page, { quietMs: 1000 });
   await s.page.clock.fastForward(200_000);
   await s.page.waitForFunction(() => document.body.innerText.includes("Plan2Code is not running"));
   return { s, main };

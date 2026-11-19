@@ -2616,6 +2616,7 @@ export function wireChrome() {
 // render and nothing was triggering one. Watch the flip and draw the rest.
 let wasAdrift = false;
 let wasPastGrace = false;
+let wasPressStranded = false;
 
 export function startClock() {
   setInterval(checkIn, 5000);
@@ -2636,6 +2637,14 @@ export function startClock() {
     if (past !== wasPastGrace) {
       wasPastGrace = past;
       if (page.S) renderFooter();
+    }
+    // A finished screen's press goes stranded by time alone, with no frame to say so: draw
+    // the card again so its way out (Start a New Session, or the command) appears with the
+    // status line that names it.
+    const strandedNow = pressStranded();
+    if (strandedNow !== wasPressStranded) {
+      wasPressStranded = strandedNow;
+      if (page.S) render();
     }
     // The agent coming or going changes whether the chat can be used, with no
     // frame to say so: redraw the Ask pane when that flips. Even mid-typing:
