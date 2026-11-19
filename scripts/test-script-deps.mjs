@@ -27,6 +27,17 @@ const FIXTURES = path.join(ROOT, "scripts", "fixtures", "deps");
 const MANIFESTS = path.join(FIXTURES, "manifests");
 const readJson = (...p) => JSON.parse(fs.readFileSync(path.join(FIXTURES, ...p), "utf8"));
 
+// Recorded npm projects keep their lockfile as package-lock.fixture.json, so
+// dependency scanners never read the old versions the recordings pin as the
+// repository's own. A copy gets the real name back.
+const FIXTURE_LOCK = "package-lock.fixture.json";
+function copyFixture(src, dir) {
+  fs.cpSync(src, dir, { recursive: true });
+  for (const rel of fs.readdirSync(dir, { recursive: true })) {
+    if (path.basename(rel) === FIXTURE_LOCK) fs.renameSync(path.join(dir, rel), path.join(dir, path.dirname(rel), "package-lock.json"));
+  }
+}
+
 const runDeps = (args, opts) => runScript("plan2code-deps", "deps.mjs", args, opts);
 
 const made = [];
@@ -849,7 +860,7 @@ function runStubbed(args, pathDir) {
 /** The recorded project copied into a temp folder (extra files on top), so a run never touches the fixture. */
 function project(extra = {}) {
   const dir = tmp("deps-project");
-  fs.cpSync(path.join(NPM, "project"), dir, { recursive: true });
+  copyFixture(path.join(NPM, "project"), dir);
   for (const [rel, content] of Object.entries(extra)) write(dir, rel, typeof content === "string" ? content : JSON.stringify(content, null, 2) + "\n");
   return dir;
 }
@@ -1206,7 +1217,7 @@ test("apply refuses a batch with no backup (exit 5) and reports a pick that neve
 test("backup then restore --verify puts an untracked CRLF lockfile and a tracked one back byte for byte", () => {
   const root = project({
     "web/package.json": fs.readFileSync(path.join(NPM, "project", "package.json"), "utf8"),
-    "web/package-lock.json": fs.readFileSync(path.join(NPM, "project", "package-lock.json"), "utf8"),
+    "web/package-lock.json": fs.readFileSync(path.join(NPM, "project", FIXTURE_LOCK), "utf8"),
   });
   // The root lockfile is untracked and written with CRLF, as some Windows tools leave one: put back exactly as found.
   const lockPath = path.join(root, "package-lock.json");
@@ -1534,7 +1545,7 @@ const UV = fx("uv-0.13.7");
 /** A recorded project folder copied into a temp folder, extra files on top. */
 function copyFrom(src, extra = {}) {
   const dir = tmp("deps-eco");
-  fs.cpSync(src, dir, { recursive: true });
+  copyFixture(src, dir);
   for (const [rel, content] of Object.entries(extra)) write(dir, rel, content);
   return dir;
 }
@@ -2564,7 +2575,7 @@ const PINS = fx("pins", "project");
 /** The pins fixture project copied into a temp folder, with extra files on top. */
 function pinsProject(extra = {}) {
   const dir = tmp("deps-pins");
-  fs.cpSync(PINS, dir, { recursive: true });
+  copyFixture(PINS, dir);
   for (const [rel, content] of Object.entries(extra)) write(dir, rel, content);
   return dir;
 }
