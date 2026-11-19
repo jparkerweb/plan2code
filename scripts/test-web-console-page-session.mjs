@@ -818,6 +818,10 @@ test("the quiet, not running and not connected lines offer What to check, openin
   // Answered and sent, never collected, and nobody listening: the saved line.
   await s.page.clock.setSystemTime(Date.now());
   s.post({ agent: { status: "waiting" } });
+  // The post redraws the question: an answer typed before that redraw lands is lost with the
+  // old box, and Send then stays off. Wait for the page to show the post and go quiet.
+  await lineSays(s, /^Your turn: 1 question waiting\./);
+  await quiet(s.page);
   await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
