@@ -91,6 +91,14 @@ test("each git tab keeps its own scroll place, across a tab switch and an agent 
   await tab("Changes").click();
   await page.getByRole("tabpanel").getByText(/in the Save step above/).waitFor();
   await scrollCard(page.locator("#main"), 120);
+  // The tabs sit below this short window, so a click on one scrolls the column to it first:
+  // a scroll like the person's own, which the board notes. Make it now and give the page a
+  // moment to note it, so the place Changes is left at is known before the switch.
+  // Done in the page in one step: a redraw may swap the tab for a new one at any moment.
+  await page.evaluate(() => {
+    document.getElementById("git-tab-branches").scrollIntoView({ block: "center" });
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
   const changesAt = await column();
   assert.ok(changesAt > 0, "the board's column scrolls");
   // Another tab opens at its own place, not where Changes was left.
