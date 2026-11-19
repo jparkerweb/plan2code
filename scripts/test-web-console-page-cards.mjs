@@ -96,7 +96,7 @@ test("a press in the empty part of the answer box selects like a textarea: Shift
   const range = () => host.evaluate((el) => [el.field.selectionStart, el.field.selectionEnd]);
   const box = await host.boundingBox();
   const low = { x: box.x + box.width / 2, y: box.y + box.height - 12 };
-  assert.equal(await host.evaluate((el) => getComputedStyle(el).cursor), "text", "the whole box shows the text pointer");
+  assert.equal(await styleOf(host, "cursor"), "text", "the whole box shows the text pointer");
 
   await s.page.keyboard.press("Home");
   // page.mouse takes no modifiers option: hold Shift on the keyboard.
@@ -621,7 +621,7 @@ test("a note box over the git board grows no box, and the card flows at its own 
     project: dir,
     payload: { reread: true, board: { describe: "export-more" }, items: [confirm] },
   });
-  await git.page.getByRole("tablist").waitFor();
+  await git.page.locator(".git-step").first().waitFor();
   const gitCard = itemCard(git.page, "y1");
   await gitCard.waitFor();
   const note = gitCard.locator(".md-host").first();
