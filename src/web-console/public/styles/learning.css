@@ -116,6 +116,10 @@
 /* Open the lessons: each file under its own name. */
 .learn-lessons-file + .learn-lessons-file { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
 .learn-lessons-name { margin: 0 0 6px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink-3); }
+/* Each file's own .md block would keep the page-wide 68ch cap; let it fill the dialog.
+   A lesson's title is a long heading: balanced wrapping (tokens.css) halves it, so fill each line. */
+.learn-lessons-file .md { max-width: none; }
+.learn-lessons-file .md-h { text-wrap: wrap; }
 
 /* The lessons card (cards.js buildLessons): one block per item, none chosen at first. */
 .lessons-opening { margin: 14px 0 0; font-size: var(--fs-md); color: var(--ink-3); }

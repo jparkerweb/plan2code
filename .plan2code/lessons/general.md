@@ -38,6 +38,11 @@
 - About: install.js
 - Noted: 2026-11-17, implement-review
 
+### Every heading and .md-h gets text-wrap: balance from tokens.css, so a long heading such as a lesson title splits into two even halves; set text-wrap: wrap where a heading runs longer than a line.
+- Kind: how-it-works
+- About: src/web-console/public/styles/tokens.css, src/web-console/public/styles/learning.css
+- Noted: 2026-11-19, quick-task
+
 ### In a Markdown field (md-field.js), CodeMirror's scroller and content are only as tall as the text, not the bordered host: code that hit-tests the scroller must not assume it fills the box.
 - Kind: how-it-works
 - About: src/web-console/public/md-field.js
