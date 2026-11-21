@@ -7,6 +7,7 @@ Which checks cover which files, read by PR Prep and Test (`test-map.mjs read` ch
 |---|---|---|---|
 | Activities games | `src/web-console/public/activities/**`, `src/web-console/public/tones.js`, `src/web-console/public/music.js` | `node --test scripts/test-web-console-tones.mjs scripts/test-web-console-activities.mjs` | no |
 | Launcher | `src/launcher/**` | `node --test scripts/test-launcher.mjs` | no |
+| Installer update | `scripts/test-install-update.mjs` | `node --test scripts/test-install-update.mjs` | no |
 | Dead Code script | `src/plan2code-dead-code-scripts/**`, `scripts/fixtures/dead-code/**` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-dead-code.mjs` | no |
 | Update Dependencies script | `src/plan2code-deps-scripts/**`, `scripts/fixtures/deps/**` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-deps.mjs` | no |
 | UI Prototype script and shell | `src/skill-scripts/ui-prototype*.mjs`, `src/plan2code-ui-prototype-references/**`, `scripts/fixtures/ui-prototype/**` | `npm run build:skills && node scripts/node-test.mjs scripts/test-script-ui-prototype.mjs scripts/test-ui-prototype-page.mjs` | no |

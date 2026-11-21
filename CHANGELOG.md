@@ -4,6 +4,17 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
+## v3.1.4 (2026-11-20)
+
+### 🔧 Changed
+
+- **launcher**: the model menu offers Claude Fable 5.2 in place of 5.1, Gemini 4 Hydrogen and Gemini 4 Neon for Devin, and GPT-6.2 Astra and GPT-6.2 Sol for Codex; Gemini 3.8 Flash, GLM-5.3 Low and SWE-2 Flash Medium leave Devin's list, and Claude's `haiku` and `fable` labels follow the Claude Code docs.
+- **launcher**: Claude Code's install options add the Windows CMD installer and install `@latest` through npm, the OpenCode starter template opens with `@plan2code`, and the Gemini CLI note also names Gemini Code Assist for GitHub.
+
+### 🐛 Fixed
+
+- **launcher**: `plan2code update` no longer stops at "Already on" after an earlier update stopped partway and left the `plan2code` command on the old version; the install record keeps the old version until every piece is in.
+
 ## v3.1.3 (2026-11-18)
 
 ### 🔧 Changed

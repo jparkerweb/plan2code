@@ -2569,8 +2569,13 @@ function readInstallRecord() {
   return null;
 }
 
+// While update() runs, every record write keeps the version the update started from (`{ version }`),
+// so an update stopped partway (Ctrl+C, a closed window, a killed child) never leaves the record
+// claiming the new version over pieces that are still old. update() stamps the new one at the end.
+let recordVersionHold = null;
+
 /** Temp file, then rename, so a crash never leaves a half-written record. A failure only skips the record. */
-function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skipped || [], version = projectVersion.version) {
+function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skipped || [], version = recordVersionHold ? recordVersionHold.version : projectVersion.version) {
   const record = {
     version,
     scope: 'global',
@@ -2591,13 +2596,23 @@ function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skippe
 }
 
 /**
- * Put `version` back in the record (null when none was known) without touching its pieces: every
- * recordInstalled() stamps the version being installed, so an update that failed uses this to
- * stay behind, and the next `plan2code update` does not answer "Already on".
+ * Write `version` on the record without touching its pieces: update() uses it to stamp the new
+ * version once every piece is in, and to keep the old one (null when none was known) after a
+ * failure or a kept app, so the next `plan2code update` does not answer "Already on".
  */
 function setRecordVersion(version) {
   const record = readInstallRecord();
   if (record) writeInstallRecord(record.pieces, record.skipped || [], version);
+}
+
+/** The version in the installed plan2code command's version.json, or null when it is missing or unreadable. */
+function installedLauncherVersion() {
+  try {
+    const { version } = JSON.parse(fs.readFileSync(LAUNCHER_VERSION_DEST, 'utf8'));
+    return typeof version === 'string' ? version : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Add a piece after a successful global install. */
@@ -3725,7 +3740,8 @@ function releaseNotesUrl(version) {
 /**
  * Reinstall whatever ~/.plan2code/install.json lists, without the menu or any prompt, and print
  * one compact summary: `Updating <old> -> <new>` (or `Already on <new>`, which stops early unless
- * `force`), one line per piece by its human name, then the release notes link and the restart
+ * `force`, and only when the installed command's bin/version.json agrees with the record whenever
+ * the record lists `launcher`), one line per piece by its human name, then the release notes link and the restart
  * hint. Each piece's own output is held back and shown only when that piece warns or fails.
  * Returns the exit code: 0 when every piece updated, 1 naming the pieces that failed.
  */
@@ -3733,14 +3749,32 @@ async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims
   const record = readInstallRecord();
   const version = projectVersion.version;
   const before = record && typeof record.version === 'string' ? record.version : null;
-  if (before === version && !force) {
+  const pieces = record ? record.pieces : ['skills', 'launcher'];
+  // The record alone is not proof: an update stopped before its launcher step (or one run by a
+  // launcher too old to pass --force on) left the record new and the command old, and every later
+  // update stopped here. The command's own version.json says what is really in place.
+  const launcherVersion = pieces.includes('launcher') ? installedLauncherVersion() : version;
+  if (before === version && launcherVersion === version && !force) {
     console.log(`${COLORS.GREEN}${MARKS.DONE}${COLORS.RESET} Already on ${version}`);
     console.log(`${COLORS.DIM}Run plan2code update --force to install it again.${COLORS.RESET}`);
     return 0;
   }
   console.log(`${COLORS.BRIGHT}${before ? `Updating ${before} -> ${version}` : `Updating to ${version}`}${COLORS.RESET}`);
-  const pieces = record ? record.pieces : ['skills', 'launcher'];
+  if (before === version && launcherVersion !== version && !force) {
+    console.log(`${COLORS.DIM}The plan2code command is still on ${launcherVersion || 'an unknown version'}, so everything is installed again.${COLORS.RESET}`);
+  }
   if (!record) console.log(`${COLORS.DIM}No install record found; updating the skills and the plan2code command.${COLORS.RESET}`);
+
+  recordVersionHold = { version: before };
+  try {
+    return await updatePieces({ steps, cleanShims, pieces, before, version });
+  } finally {
+    recordVersionHold = null;
+  }
+}
+
+/** update()'s body once it has decided to install: the pieces, the summary, and the version stamp. */
+async function updatePieces({ steps, cleanShims, pieces, before, version }) {
 
   await captureOutput(async () => cleanShims());
 
@@ -3798,7 +3832,7 @@ async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims
   console.log('');
   if (failed.length > 0) {
     console.log(`${COLORS.RED}${MARKS.FAIL} Update failed for: ${failed.join(', ')}${COLORS.RESET}`);
-    // The pieces that did install stamped the new version on the record: take it back, so running
+    // Keep the old version on the record (writes during the update already held it), so running
     // plan2code update again retries instead of stopping at "Already on".
     setRecordVersion(before);
     console.log(`To try again, run: ${COLORS.CYAN}plan2code update${COLORS.RESET}`);
@@ -3809,7 +3843,9 @@ async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims
   // The release had no desktop app file yet, so the installed app is still the old one: keep the
   // old version on the record, or the next update (the app's Update and restart among them) stops
   // at "Already on" and never fetches the app once the file is attached.
-  if (before && typeof results.app === 'string' && results.app.startsWith('kept')) setRecordVersion(before);
+  // Otherwise every piece is in: only now does the record name the new version.
+  const appKept = typeof results.app === 'string' && results.app.startsWith('kept');
+  setRecordVersion(before && appKept ? before : version);
   console.log(`${COLORS.GREEN}${MARKS.DONE} Plan2Code is up to date (v${version})${COLORS.RESET}`);
   console.log(`What's new: ${releaseNotesUrl(version)}`);
   console.log('Close any open Plan2Code console or app and start `plan2code` again.');

@@ -15,7 +15,7 @@
     },
     {
       "id": "haiku",
-      "label": "latest Haiku"
+      "label": "fast and efficient Haiku"
     },
     {
       "id": "opusplan",
@@ -23,7 +23,7 @@
     },
     {
       "id": "fable",
-      "label": "latest Fable"
+      "label": "Fable for your hardest tasks"
     },
     {
       "id": "best",
@@ -80,22 +80,6 @@
       "label": "GPT-6 Luna High Thinking"
     },
     {
-      "id": "gemini-3-8-flash-low",
-      "label": "Gemini 3.8 Flash Low"
-    },
-    {
-      "id": "gemini-3-8-flash-medium",
-      "label": "Gemini 3.8 Flash Medium"
-    },
-    {
-      "id": "gemini-3-8-flash-high",
-      "label": "Gemini 3.8 Flash High"
-    },
-    {
-      "id": "glm-5-3-low",
-      "label": "GLM-5.3 Low"
-    },
-    {
       "id": "glm-5-3-high",
       "label": "GLM-5.3 High"
     },
@@ -116,18 +100,6 @@
       "label": "Claude Haiku 5.5 High"
     },
     {
-      "id": "claude-fable-5-1-low",
-      "label": "Claude Fable 5.1 Low"
-    },
-    {
-      "id": "claude-fable-5-1-medium",
-      "label": "Claude Fable 5.1 Medium"
-    },
-    {
-      "id": "claude-fable-5-1-high",
-      "label": "Claude Fable 5.1 High"
-    },
-    {
       "id": "gpt-6-astra-low",
       "label": "GPT-6 Astra Low Thinking"
     },
@@ -140,12 +112,44 @@
       "label": "GPT-6 Astra High Thinking"
     },
     {
-      "id": "swe-2-flash-medium",
-      "label": "SWE-2 Flash Medium"
-    },
-    {
       "id": "swe-2-flash-high",
       "label": "SWE-2 Flash High"
+    },
+    {
+      "id": "claude-fable-5-2-low",
+      "label": "Claude Fable 5.2 Low"
+    },
+    {
+      "id": "claude-fable-5-2-medium",
+      "label": "Claude Fable 5.2 Medium"
+    },
+    {
+      "id": "claude-fable-5-2-high",
+      "label": "Claude Fable 5.2 High"
+    },
+    {
+      "id": "gemini-4-hydrogen-low",
+      "label": "Gemini 4 Hydrogen Low"
+    },
+    {
+      "id": "gemini-4-hydrogen-medium",
+      "label": "Gemini 4 Hydrogen Medium"
+    },
+    {
+      "id": "gemini-4-hydrogen-high",
+      "label": "Gemini 4 Hydrogen High"
+    },
+    {
+      "id": "gemini-4-neon-low",
+      "label": "Gemini 4 Neon Low"
+    },
+    {
+      "id": "gemini-4-neon-medium",
+      "label": "Gemini 4 Neon Medium"
+    },
+    {
+      "id": "gemini-4-neon-high",
+      "label": "Gemini 4 Neon High"
     }
   ],
   "codex": [
@@ -164,6 +168,14 @@
     {
       "id": "gpt-6-luna",
       "label": "GPT-6 Luna"
+    },
+    {
+      "id": "gpt-6.2-astra",
+      "label": "GPT-6.2 Astra"
+    },
+    {
+      "id": "gpt-6.2-sol",
+      "label": "GPT-6.2 Sol"
     }
   ],
   "strengths": {

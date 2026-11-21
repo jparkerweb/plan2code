@@ -175,9 +175,18 @@ test("update: prints the version change, one line per piece by name, the release
   assert.doesNotMatch(out, /Happy coding|PARAMETERS|To go back to a release/);
 });
 
+const LAUNCHER_VERSION = path.join(HOME, ".plan2code", "bin", "version.json");
+
+/** The installed plan2code command's version.json, as installLauncher() writes it. */
+function writeLauncherVersion(version) {
+  fs.mkdirSync(path.dirname(LAUNCHER_VERSION), { recursive: true });
+  fs.writeFileSync(LAUNCHER_VERSION, JSON.stringify({ name: "Plan2Code", version }));
+}
+
 test("update: already on the new version it says so and stops, until --force", async () => {
   fs.mkdirSync(path.dirname(RECORD), { recursive: true });
   fs.writeFileSync(RECORD, JSON.stringify({ version: VERSION, scope: "global", pieces: ["skills", "launcher"] }));
+  writeLauncherVersion(VERSION);
   const idle = fakeSteps();
   const stopped = await runUpdate(idle.steps);
   assert.equal(stopped.code, 0, stopped.out);
@@ -200,6 +209,52 @@ test("update: already on the new version it says so and stops, until --force", a
   assert.equal(code, 0, out);
   assert.deepEqual(forced.ran(), ["skills"]);
   assert.match(out, new RegExp(`Updating ${VERSION.replace(/\./g, "\\.")} -> ${VERSION.replace(/\./g, "\\.")}`));
+});
+
+test("update: a record on the new version over an older plan2code command installs again, without --force", async () => {
+  // An update stopped after the skills step: the record says new, the command is still old.
+  fs.mkdirSync(path.dirname(RECORD), { recursive: true });
+  fs.writeFileSync(RECORD, JSON.stringify({ version: VERSION, scope: "global", pieces: ["skills", "launcher"] }));
+  for (const launcher of ["1.0.0", null]) {
+    if (launcher) writeLauncherVersion(launcher);
+    else fs.rmSync(LAUNCHER_VERSION, { force: true });
+    const fake = fakeSteps();
+    const { code, out } = await runUpdate(fake.steps);
+    assert.equal(code, 0, out);
+    assert.doesNotMatch(out, /Already on/);
+    assert.match(out, new RegExp(`The plan2code command is still on ${launcher ? "1\\.0\\.0" : "an unknown version"}`));
+    assert.deepEqual(fake.ran(), ["skills"]);
+    assert.match(out, /plan2code command: updated/);
+  }
+  // A record without the command does not look at its version.json.
+  fs.writeFileSync(RECORD, JSON.stringify({ version: VERSION, scope: "global", pieces: ["statusline"] }));
+  const idle = fakeSteps();
+  assert.match((await runUpdate(idle.steps)).out, /Already on/);
+  assert.deepEqual(idle.ran(), []);
+});
+
+test("update: the record keeps the old version until every piece is in, so a stopped update retries", async () => {
+  writeRecord(["skills", "launcher", "app"]);
+  const seen = [];
+  const fake = fakeSteps();
+  // As the real steps: each records its piece as it finishes.
+  for (const piece of ["skills", "app"]) {
+    const step = fake.steps[piece];
+    fake.steps[piece] = async (options) => {
+      const code = await step(options);
+      installer.recordInstalled(piece);
+      seen.push(installer.readInstallRecord().version);
+      return code;
+    };
+  }
+  const { code, out } = await runUpdate(fake.steps);
+  assert.equal(code, 0, out);
+  assert.deepEqual(seen, ["1.0.0", "1.0.0"], "mid-update writes keep the old version");
+  assert.equal(installer.readInstallRecord().version, VERSION, "stamped once the update finished");
+  assert.deepEqual(installer.readInstallRecord().pieces, ["app", "launcher", "skills"]);
+  // Outside an update, a record write stamps the version being installed again.
+  installer.recordInstalled("statusline");
+  assert.equal(installer.readInstallRecord().version, VERSION);
 });
 
 test("update: a step's own output stays out of the summary, except its warnings and its failures", async () => {
