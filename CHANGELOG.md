@@ -4,6 +4,14 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
+## v3.1.5 (2026-11-23)
+
+### 🐛 Fixed
+
+- **desktop app**: Change project, and picking a recent folder, now starts the new project's agent and dashboard; before, the agent opened inside the old project's stopped session and never showed its page.
+- **web console**: the page itself no longer scrolls (its panels do), so the blank space that could show below the footer is gone; the narrow-window layout and printing follow the same rule.
+- **For contributors**: `npm run test:page -- <file>` runs page test files with the desktop app's variables unset, and a new layout page test checks that the page shell never scrolls.
+
 ## v3.1.4 (2026-11-20)
 
 ### 🔧 Changed

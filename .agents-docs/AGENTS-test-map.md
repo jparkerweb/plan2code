@@ -18,5 +18,6 @@ Which checks cover which files, read by PR Prep and Test (`test-map.mjs read` ch
 | Desktop app | `plan2code-app/**` | `cd plan2code-app && cargo test` | no |
 | Metrics | `plan2code-metrics/**` | `cd plan2code-metrics && npm test` | no |
 | Bot | `plan2code-bot/**` | `cd plan2code-bot && npm test` | no |
+| Web console page shell and styles | `src/web-console/public/styles/**`, `src/web-console/public/index.html` | `npm run test:page -- scripts/test-web-console-page-layout.mjs` | no |
 | Shared code | `install.js`, `src/web-console/public/skills.js`, `src/web-console/console.mjs`, `src/web-console/routes.mjs`, `src/web-console/static.mjs`, `scripts/*-helpers.mjs` | `npm test` | yes |
 | Docs only | `**/*.md` | `node --test scripts/test-us-english.mjs scripts/test-line-endings.mjs` | no |

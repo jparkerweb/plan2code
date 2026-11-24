@@ -194,7 +194,9 @@ h1, h2, h3, .md-h, .dash-title, .git-branch, .git-step-title { font-variant-nume
 .md-p, .card .prompt { text-wrap: pretty; }
 ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
 
-html, body { height: 100%; }
+/* The page itself never scrolls (the desktop app frames it, and a scrolling
+   page showed blank space under the footer): panels scroll, the shell does not. */
+html, body { height: 100%; overflow: hidden; }
 
 body {
   margin: 0;
@@ -203,7 +205,7 @@ body {
   font: var(--fs-base)/var(--lh-body) var(--sans);
   display: grid;
   grid-template-rows: auto 1fr auto;
-  min-height: 100vh;
+  min-height: 0;
 }
 
 :focus-visible {

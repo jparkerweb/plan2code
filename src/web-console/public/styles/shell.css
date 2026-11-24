@@ -217,6 +217,10 @@ h1 {
   grid-template-columns: 250px minmax(0, 1fr) 320px;
   min-height: 0;
   overflow: hidden;
+  /* The containing block for the absolutely placed bits inside (the rail items'
+     screen-reader text): without one they sit against the page, and the ones
+     below a scrolled panel stretched the page itself past the footer. */
+  position: relative;
 }
 
 /* A side column with nothing to show is not drawn: an empty aside gives its

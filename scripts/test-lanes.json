@@ -115,6 +115,7 @@
     "test-web-console-page-cards.mjs",
     "test-web-console-page-changes.mjs",
     "test-web-console-page-dashboard.mjs",
+    "test-web-console-page-layout.mjs",
     "test-web-console-page-git.mjs",
     "test-web-console-page-help.mjs",
     "test-web-console-page-learning.mjs",

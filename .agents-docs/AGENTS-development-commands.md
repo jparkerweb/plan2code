@@ -90,6 +90,7 @@ The same areas as one-command rows live in the [Test map](./AGENTS-test-map.md),
 | What changed | Run |
 |---|---|
 | An Activities game (`public/activities/*`), `public/tones.js` or `public/music.js` | `node --test scripts/test-web-console-tones.mjs scripts/test-web-console-activities.mjs`, plus the game's own `scripts/test-web-console-activities-<game>*.mjs` when it has one; add `test-web-console-page-activities.mjs` when the Activities window or its switches changed |
+| Page styles (`public/styles/*.css`) or `public/index.html` | `npm run test:page -- scripts/test-web-console-page-layout.mjs`, plus the page file of a screen whose own look changed (`test:page` unsets the app variables, takes `--test-name-pattern`, and is the way to run any page file) |
 | A music prototype (`prototypes/music/<game>/`) | `node prototypes/music/check.cjs <game>` (nothing in `npm test` reads `prototypes/`) |
 | One web console area (server routes, chat, git board, workspace, notepad, Implementation Loop...) | that area's `scripts/test-web-console-<area>.mjs` (the loop's is `test-web-console-loop.mjs`), and its `test-web-console-page-<area>.mjs` when the page changed; `node scripts/parse-check.mjs` after editing any browser module under `public/` |
 | The launcher (`src/launcher/`) | `node --test scripts/test-launcher.mjs` |

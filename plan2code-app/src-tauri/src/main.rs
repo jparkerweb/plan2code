@@ -1139,6 +1139,14 @@ fn teardown_project(state: &AppState) -> Result<(), String> {
             let _ = sup.stop();
         }
     }
+    // The new project's agent asks the window which session is current and
+    // joins it; left at the old project's (its console just stopped), its
+    // `open` joined a dead page and the dashboard never showed.
+    if let Ok(guard) = state.announce.lock() {
+        if let Some(server) = guard.as_ref() {
+            server.forget_current();
+        }
+    }
     Ok(())
 }
 
@@ -2011,8 +2019,22 @@ mod tests {
     }
 
     #[test]
-    fn new_session_forgets_the_windows_session_so_the_fresh_agent_starts_its_own() {
+    fn changing_project_forgets_the_old_projects_session_so_the_new_agent_starts_its_own() {
+        // The new agent's `open` asks the window which session is current; left
+        // at the old project's (its console torn down) it joined a dead page
+        // and never showed its dashboard.
         let state = state_for("project-a");
+        announce_page(&state, "s1");
+        teardown_project(&state).unwrap();
+        assert_eq!(
+            state.announce.lock().unwrap().as_ref().unwrap().current(),
+            None,
+            "the new project's agent must not join the old project's s1"
+        );
+    }
+
+    /// Starts the announce server on `state` and announces page `sid` to it.
+    fn announce_page(state: &AppState, sid: &str) {
         let server = AnnounceServer::start(Arc::new(|_| true)).unwrap();
         let port: u16 = server
             .url()
@@ -2023,7 +2045,8 @@ mod tests {
             .parse()
             .unwrap();
         *state.announce.lock().unwrap() = Some(server);
-        let body = r#"{"url":"http://127.0.0.1:5000/s/abc/","sid":"s1","workflow":"plan"}"#;
+        let body =
+            format!(r#"{{"url":"http://127.0.0.1:5000/s/abc/","sid":"{sid}","workflow":"plan"}}"#);
         let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
         let token = state
             .announce
@@ -2055,8 +2078,14 @@ mod tests {
                 .unwrap()
                 .current()
                 .map(|n| n.sid),
-            Some("s1".to_string())
+            Some(sid.to_string())
         );
+    }
+
+    #[test]
+    fn new_session_forgets_the_windows_session_so_the_fresh_agent_starts_its_own() {
+        let state = state_for("project-a");
+        announce_page(&state, "s1");
 
         // No console supervised here, so no brief to write: only the forgetting.
         assert_eq!(before_fresh_hook(&state)(), None);

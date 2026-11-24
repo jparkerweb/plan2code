@@ -5,7 +5,7 @@
 /* Print only the document; session furniture stays off paper. */
 @media print {
   .topbar, .rail, .aside, .footer, .banner, .skip, .doc-tools, .pager, .modal, .arrival, .review-offer { display: none !important; }
-  html, body { height: auto; background: #fff; color: #000; }
+  html, body { height: auto; overflow: visible; background: #fff; color: #000; }
   body { display: block; }
   .layout { display: block; overflow: visible; }
   .main { overflow: visible; padding: 0; max-width: none; }
@@ -32,7 +32,9 @@
    rail becomes a strip above the page (Planny beside the list) and the notes
    follow the card, as on a phone. */
 @media (max-width: 900px) {
-  body { display: block; }
+  /* One column: here the page scrolls as a whole (the sticky footer rides it). */
+  html, body { overflow: visible; }
+  body { display: block; min-height: 100vh; }
   .layout, .layout:has(> .aside:empty), .layout:has(.git-board) { display: block; }
   .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
   .sidebar, .aside { border: 0; border-bottom: 1px solid var(--rule); max-height: 30vh; }
