@@ -43,19 +43,32 @@ Every answer carries state (not-set-up, off, on, paused, unknown) and active.
       The personal pause, on this machine only. Refused unless the project is on.
 
   node lessons.mjs read [--paths a,b] [--run <handle>] [--from-banner]
-      Reads only: the lessons that fit this run, general.md plus the areas
-      matching the named paths and the branch's changed files, each as
+      The lessons that fit this run, general.md plus the areas matching the
+      named paths and the branch's changed files, each as
       { id, text, why, marked, gone }. run is the handle for the next read,
       which returns only areas not handed over yet; line is printed as is.
       The first read adds headsUp (left out with --from-banner) and logLines
-      (the failure log lines log-lines would offer).
+      (the failure log lines log-lines would offer). Its only write is on this
+      machine: a waiting doubt for each marked lesson whose search no longer
+      agrees with the code, or a marked convention with no Why, listed in
+      raised ([{ id, target, reason }]) and counted in line.
 
   node lessons.mjs note --type lesson --text <sentence> --kind <kind> --about a,b
                    --source said|inferred [--seen a,b] --skill <name>
                    [--why <sentence>] [--area <name>] [--dry-run]
+                   [--shows-in <glob> --match should|never --text-match <literal>]
       Check the lesson, then hold it on this machine until a person decides.
-      kind: correction (needs --why), convention, how-it-works, command.
+      kind: correction or convention (both need --why), how-it-works, command.
       about: one to three files, or one folder. --source inferred needs --seen.
+      The search is all three of --shows-in, --match and --text-match or none:
+      the literal (one line, at most 120 characters, no " | ") should match
+      or never matches in files under the glob. It is saved as the block's
+      "- Shows in: <glob> | should match|never matches | <text>" line, written
+      before "- Noted:". A "- Noted:" value may end with ", kept over the
+      check" (after any ", checked <date>"): the person kept it over the check.
+      The eight read-only skills (pathfinder, plan, revise-plan, document,
+      finalize, pr-prep, dead-code, ui-prototype) note only --source said:
+      --source inferred from them exits 5 inferred-from-read-only.
       Does nothing (noted: false) while Learning is off or paused for you.
       Exit 4 invalid-lesson with problems; exit 5 secret with pattern and part.
 
@@ -76,24 +89,68 @@ Every answer carries state (not-set-up, off, on, paused, unknown) and active.
       { area, paths: [..], run, shared }, replacing the row of that area or
       added. The new text is checked: a secret exits 5, writing nothing.
 
+  node lessons.mjs note --type tidy --change merge|reword|retire|move
+                   --targets <id,id> --reason <sentence> --skill <name>
+                   [--text <new wording>] [--why <sentence>] [--kind <kind>]
+                   [--about a,b] [--area <name>] [--dry-run]
+      A tidy-up the coach proposes for saved lessons, one change each: merge
+      (two or more targets into one new wording), reword (one target, new
+      wording), retire (one target) or move (one target into --area, an
+      existing area or General). Targets are saved lesson ids from tidy-input.
+      A new wording is validated as a lesson is (kind, why and about default
+      from the targets). Every change needs a one-sentence reason. The same
+      change on the same targets is not written twice (already: true).
+      Exit 4 invalid-tidy with problems; exit 5 secret with pattern and part.
+
+  node lessons.mjs tidy-input
+      Reads only: every saved lesson as { id, area, text, why, kind, about,
+      search, noted, keptOverCheck, marked, gone, followed, lastFollowed },
+      plus general { count, max } and areas [{ name, slug, count }].
+
   node lessons.mjs check --text <sentence> [--why <sentence>]
       Reads only: the check note and decide run. refused { pattern, part }
       (a named secret pattern, its text cut to four characters) or null, and
       flags [{ pattern, part }] (email, handle, person-name). Always exit 0.
 
-  node lessons.mjs list [--first-ask] [--log-all]
+  node lessons.mjs check-input [--tidy]
+      Reads only (it writes the run's check file on this machine): the waiting
+      lessons due a check, oldest first, at most 10 (the rest in notChecked;
+      a lesson whose stored check still holds is left out), each with its
+      files ({ path, hash, read: whole|sampled }, budgetHit when a folder was
+      cut at 6 files or 60 KB) and, with a search, searchResult { matched,
+      hits [{ file, line }], filesSearched }. Also context { agentsMd, saved,
+      waiting }, checkId and started. With --tidy, waiting tidy-ups join the
+      lessons under the same cap of 10, each { type: "tidy", change, reason,
+      targets [{ id, text, why, kind, about, area }] }: its text, why, kind
+      and about are the new wording and its About (merge, reword) or the
+      target's own (retire, move), and area is where a move or merge lands.
+
+  node lessons.mjs check-record --file <verdicts.json>
+      Store a checker's verdicts, { checkId, how: helper|same-agent, verdicts:
+      [{ id, tests: { true, worth, overlap, clear: { verdict: Pass|Doubt|Fail,
+      reason } }, suggestion? }] }, on the waiting lessons with the file hashes
+      from check-input. Exit 4 invalid-verdicts naming each fault, storing
+      nothing. A bad suggestion is dropped and named in problems.
+
+  node lessons.mjs list [--first-ask] [--log-all] [--check <checkId>] [--check-failed <reason>]
       Reads only: the approval list of everything waiting: items, opening
       (the main-branch line), card (the console's lessons item) and rounds
       (the items grouped by type for a question tool). While on, it adds
       the new failure log lines (--log-all: every unmarked one). With
       --first-ask while not set up and a lesson is waiting, firstAsk is the
       first-ask card: { lesson, sentences, yes, no, later }.
+      A lesson whose stored check still holds (its files hash as they did)
+      carries check { fails, doubts, passed, suggestion? }; the card gains
+      suggested { <id>: Drop|Keep } and checked { how, count, seconds } (or
+      { failed } with --check-failed). tag is "Not checked yet" without a
+      fresh check, and "Checked in an earlier run" for one older than --check.
 
   node lessons.mjs decide --file <decisions.json> [--dry-run]
       Apply a person's choices, [{ id, choice, text?, why?, area?, name?, paths? }]:
       Keep, Reword, Drop for a lesson; Create, Rename, Drop for an area;
       Keep, Reword, Retire for a doubt or a lesson whose files are gone;
-      Apply, Reword (after, or row), Drop for an AGENTS.md fix; Move (why,
+      Apply, Reword (text, why, area: merge and reword only), Leave for a
+      tidy-up; Apply, Reword (after, or row), Drop for an AGENTS.md fix; Move (why,
       about, area?), Reword and move (lessons: [{ text, why, about, area? }]),
       Leave in the log for a failure log line. Writes .plan2code/lessons/
       and, for fixes and log lines, AGENTS.md or the .agents-docs/ file;
@@ -116,6 +173,12 @@ Every answer carries state (not-set-up, off, on, paused, unknown) and active.
 
   node lessons.mjs report
       Reads only: lessons per area, the oldest, marked and gone ones.
+
+  node lessons.mjs follow --lesson <lesson id> --skill <name>
+      Records that a run followed a saved lesson ("Following a lesson: ..."),
+      one line in follows.ndjson on this machine only; nothing is written into
+      the project. Does nothing (noted: false) while Learning is off or paused
+      for you. Exit 4 when the id names no saved lesson (use an id read gave).
 
   node lessons.mjs remove --confirm [--dry-run]
       Delete .plan2code/lessons/ (removed lists its files). Leaves
@@ -422,8 +485,48 @@ export const GENERAL = "general";
 export const GENERAL_MAX = 25;
 export const KINDS = ["correction", "convention", "how-it-works", "command"];
 
-const FIELD = /^- (Kind|About|Why|Noted):[ \t]?(.*)$/;
-const NOTED = /^(.*?)(?:,\s*checked\s+(\d{4}-\d{2}-\d{2}))?\s*$/;
+const FIELD = /^- (Kind|About|Why|Shows in|Noted):[ \t]?(.*)$/;
+const NOTED = /^(.*?)(?:,\s*checked\s+(\d{4}-\d{2}-\d{2}))?(,\s*kept over the check)?\s*$/;
+const KEPT_OVER_CHECK = "kept over the check";
+
+// A search glob's limits: lesson files are shared through the repository, and
+// matchGlob turns each **/ into a group that backtracks, so a glob with many of
+// them (22 took 47 s for one path) would stall every teammate's read.
+export const SEARCH_GLOB_MAX = 120;
+
+// The Why a said correction or convention is noted with when the person gave
+// no reason (lessons.md, Remember this). The card asks for the real one: list
+// says so on the row, and decide refuses to save it until a Reword replaces it.
+export const SAID_NO_WHY = "You asked for this to be remembered.";
+const NEEDS_WHY_NOTE = "No reason given yet: use Reword to say why it matters.";
+const isSaidNoWhy = (why) => String(why ?? "").trim() === SAID_NO_WHY;
+export const SEARCH_GLOB_STARS_MAX = 3;
+// Each single * or ? backtracks too: 15 single stars in 30 characters took 4 s
+// for one 30-character name, so every wildcard counts toward one more cap.
+export const SEARCH_GLOB_WILDCARDS_MAX = 6;
+
+/** Why a search glob is over its limits, or null when it is within them. */
+export function globTooBusy(glob) {
+  const g = String(glob);
+  if (g.length > SEARCH_GLOB_MAX) return `is ${g.length} characters; at most ${SEARCH_GLOB_MAX}`;
+  const stars = (g.match(/\*\*/g) || []).length;
+  if (stars > SEARCH_GLOB_STARS_MAX) return `has ${stars} **; at most ${SEARCH_GLOB_STARS_MAX}`;
+  const wildcards = (g.match(/\*+|\?/g) || []).length;
+  if (wildcards > SEARCH_GLOB_WILDCARDS_MAX) return `has ${wildcards} wildcards; at most ${SEARCH_GLOB_WILDCARDS_MAX}`;
+  return null;
+}
+
+// `<glob> | should match|never matches | <text>` into { glob, match, text },
+// or null when the value is not exactly those three parts or the glob is over
+// its limits (globTooBusy), so a hostile line is never run.
+function parseSearch(value) {
+  const parts = String(value).split(" | ");
+  if (parts.length !== 3) return null;
+  const [glob, words, text] = parts.map((p) => p.trim());
+  const match = words === "should match" ? "should" : words === "never matches" ? "never" : null;
+  if (!glob || !match || !text || globTooBusy(glob)) return null;
+  return { glob, match, text };
+}
 
 const splitList = (s) =>
   String(s || "")
@@ -458,10 +561,16 @@ function parseBlock(lines, startLine) {
     if (m[1] === "Kind") block.kind = value;
     else if (m[1] === "About") block.about = splitList(value);
     else if (m[1] === "Why") block.why = value;
-    else {
+    else if (m[1] === "Shows in") {
+      // An unparseable line stays in `lines` (never dropped) and is reported here.
+      const search = parseSearch(value);
+      if (search) block.search = search;
+      else (block.badLines ||= []).push(line);
+    } else {
       const n = value.match(NOTED);
       block.noted = n[1].trim();
       block.checked = n[2] || null;
+      if (n[3]) block.keptOverCheck = true;
     }
   }
   return block;
@@ -496,7 +605,8 @@ export function parseAreaFile(text) {
 export function renderBlock(block) {
   const lines = [`### ${block.heading}`, `- Kind: ${block.kind}`, `- About: ${block.about.join(", ")}`];
   if (block.why) lines.push(`- Why: ${block.why}`);
-  lines.push(`- Noted: ${block.noted}${block.checked ? `, checked ${block.checked}` : ""}`);
+  if (block.search) lines.push(`- Shows in: ${block.search.glob} | ${block.search.match === "never" ? "never matches" : "should match"} | ${block.search.text}`);
+  lines.push(`- Noted: ${block.noted}${block.checked ? `, checked ${block.checked}` : ""}${block.keptOverCheck ? `, ${KEPT_OVER_CHECK}` : ""}`);
   lines.push("");
   return lines;
 }
@@ -620,18 +730,41 @@ function pathProblem(p) {
 }
 
 /**
+ * The problems with a lesson's search, `[{ field, message }]`: the glob passes
+ * unsupported() and the same path rules as About, match is should or never,
+ * and the text is one non-empty line of at most 120 characters without " | ".
+ */
+export function searchProblems(search) {
+  const problems = [];
+  if (!search || typeof search !== "object") return [{ field: "search", message: "The search is missing." }];
+  const glob = String(search.glob ?? "");
+  const bad = pathProblem(glob) || unsupported(glob) || globTooBusy(glob);
+  if (bad) problems.push({ field: "shows-in", message: `${glob} ${bad}.` });
+  if (glob.includes(" | ")) problems.push({ field: "shows-in", message: "The glob cannot contain ' | '." });
+  if (search.match !== "should" && search.match !== "never") problems.push({ field: "match", message: "match must be should or never." });
+  const text = String(search.text ?? "");
+  if (!text.trim()) problems.push({ field: "text-match", message: "The search text is empty." });
+  if (/[\r\n]/.test(text)) problems.push({ field: "text-match", message: "The search text must be one line." });
+  if (text.length > 120) problems.push({ field: "text-match", message: `The search text is ${text.length} characters; at most 120.` });
+  if (text.includes(" | ")) problems.push({ field: "text-match", message: "The search text cannot contain ' | '." });
+  return problems;
+}
+
+/**
  * The problems with a lesson, `[{ field, message }]` (empty when it is fine):
  * one sentence of at most 200 characters for text and why, a known kind, a
- * why for a correction, and one to three files or exactly one folder inside
- * the repository.
+ * why for a correction or a convention, one to three files or exactly one
+ * folder inside the repository, and a sound search when one is present.
  */
-export function validateLesson({ text, why, kind, about }, root) {
+export function validateLesson({ text, why, kind, about, search }, root) {
   const problems = [];
   problems.push(...sentenceProblems("text", text ?? ""));
   if (why) problems.push(...sentenceProblems("why", why));
   // A rejected kind is never echoed: it has not been through the secret check.
   if (!KINDS.includes(kind)) problems.push({ field: "kind", message: `kind must be one of ${KINDS.join(", ")}.` });
   if (kind === "correction" && !String(why || "").trim()) problems.push({ field: "why", message: "A correction needs a why." });
+  if (kind === "convention" && !String(why || "").trim()) problems.push({ field: "why", message: "A convention needs a why." });
+  if (search) problems.push(...searchProblems(search));
   const list = Array.isArray(about) ? about : splitList(about);
   if (!list.length) problems.push({ field: "about", message: "about names one to three files, or one folder." });
   for (const p of list) {
@@ -1284,6 +1417,16 @@ async function cmdCheck(L, root, args) {
 
 const SOURCES = ["said", "inferred"];
 
+// Skills that read and plan but never run the code: they note only what the
+// person said, never what they inferred. Matched after the `plan2code-` prefix
+// and a step number such as `1b-` are dropped, so `plan2code-1-plan` is `plan`.
+export const READ_ONLY_SKILLS = new Set(["pathfinder", "plan", "revise-plan", "document", "finalize", "pr-prep", "dead-code", "ui-prototype"]);
+
+function isReadOnlySkill(skill) {
+  const name = String(skill).trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/^plan2code-/, "").replace(/^\d+[a-z]?-/, "");
+  return READ_ONLY_SKILLS.has(name);
+}
+
 /** Fail with exit 4 and the list when a check found problems. */
 function refuseProblems(error, problems, what) {
   if (!problems.length) return;
@@ -1332,8 +1475,8 @@ function globProblems(paths) {
 
 async function cmdNote(L, root, args) {
   const type = args.type;
-  if (type !== "lesson" && type !== "area" && type !== "doubt" && type !== "agents-fix") {
-    fail(EXIT.USAGE, "missing-value", type ? "That note type is not one of lesson, area, doubt or agents-fix." : "note needs --type lesson, area, doubt or agents-fix.", "Run: lessons.mjs note --type lesson ..., --type area, --type doubt or --type agents-fix.");
+  if (type !== "lesson" && type !== "area" && type !== "doubt" && type !== "agents-fix" && type !== "tidy") {
+    fail(EXIT.USAGE, "missing-value", type ? "That note type is not one of lesson, area, doubt, agents-fix or tidy." : "note needs --type lesson, area, doubt, agents-fix or tidy.", "Run: lessons.mjs note --type lesson ..., --type area, --type doubt, --type agents-fix or --type tidy.");
   }
   if (typeof args.skill !== "string" || !args.skill.trim()) fail(EXIT.USAGE, "missing-value", "note needs --skill, the skill noting it.", "Add --skill <name>, for example --skill Implement.");
   const s = stateOf(L, root);
@@ -1351,8 +1494,8 @@ async function cmdNote(L, root, args) {
   };
   // Names, paths and the skill are checked before anything is echoed back in
   // a problem message; the lesson's text and why after validation, as before.
-  const lists = { about: splitList(args.about), seen: splitList(args.seen), paths: splitGlobs(args.paths) };
-  refuseSecret(secretIn(args.skill, args.name, args.area, args.target, args.file, lists.about, lists.seen, lists.paths), type);
+  const lists = { about: splitList(args.about), seen: splitList(args.seen), paths: splitGlobs(args.paths), targets: splitList(args.targets) };
+  refuseSecret(secretIn(args.skill, args.name, args.area, args.target, args.file, args.change, lists.about, lists.seen, lists.paths, lists.targets), type);
   const skillProblems = /[\r\n]/.test(args.skill) || args.skill.trim().length > 40 ? [{ field: "skill", message: "skill is one line of at most 40 characters, the skill's name." }] : [];
   let item;
   if (type === "doubt") {
@@ -1374,6 +1517,14 @@ async function cmdNote(L, root, args) {
     item = { id, type, target, found: args.found.trim(), skill: args.skill.trim(), branch, noted: when.toISOString(), flags };
   } else if (type === "agents-fix") {
     item = agentsFixItem(root, args, { id, skillProblems, refuseSecret, branch, when });
+  } else if (type === "tidy") {
+    item = tidyItem(root, args, lists, { id, skillProblems, refuseSecret, branch, when });
+    // The same change on the same targets is one proposal, not two.
+    const already = L.listWaiting(root, when).find((w) => w.type === "tidy" && w.change === item.change && sameSet(w.targets, item.targets));
+    if (already) {
+      out({ ok: true, state: s.state, active: s.active, noted: false, id: already.id, line: "", already: true });
+      return;
+    }
   } else if (type === "area") {
     if (typeof args.name !== "string") fail(EXIT.USAGE, "missing-value", "note --type area needs --name.", "Add --name <Area name> --paths <glob,glob>.");
     areaSlug(args.name);
@@ -1383,8 +1534,18 @@ async function cmdNote(L, root, args) {
   } else {
     const about = lists.about.map((p) => p.replace(/\/{2,}/g, "/"));
     const seen = lists.seen;
-    const lesson = { text: args.text ?? "", why: args.why || "", kind: args.kind, about };
+    if (args.source === "inferred" && isReadOnlySkill(args.skill)) {
+      fail(EXIT.REFUSED, "inferred-from-read-only", "This skill notes only what the person said, so the lesson was not noted.", "Note a lesson from this skill only with --source said, after the person told you it.", { state: s.state, active: s.active });
+    }
+    // The search is all three flags or none.
+    const searchFlags = [["shows-in", args["shows-in"]], ["match", args.match], ["text-match", args["text-match"]]];
+    const missingSearch = searchFlags.filter(([, v]) => v === undefined).map(([k]) => `--${k}`);
+    const searchPartial = missingSearch.length > 0 && missingSearch.length < 3;
+    refuseSecret(secretIn(args["shows-in"] ?? "", args["text-match"] ?? ""), "lesson");
+    const search = missingSearch.length === 0 ? { glob: String(args["shows-in"]).trim().replace(/\/{2,}/g, "/"), match: args.match, text: String(args["text-match"]).trim() } : null;
+    const lesson = { text: args.text ?? "", why: args.why || "", kind: args.kind, about, search };
     const problems = [...skillProblems, ...validateLesson(lesson, root)];
+    if (searchPartial) problems.push({ field: "shows-in", message: `A search needs --shows-in, --match and --text-match together; missing ${missingSearch.join(", ")}.` });
     if (args.area !== undefined && /[\r\n]/.test(args.area)) problems.push({ field: "area", message: "area is one line, the area's name." });
     if (!SOURCES.includes(args.source)) problems.push({ field: "source", message: "source must be said or inferred." });
     if (args.source === "inferred" && !seen.length) problems.push({ field: "seen", message: "An inferred lesson names the files it was seen in (--seen)." });
@@ -1396,6 +1557,14 @@ async function cmdNote(L, root, args) {
     const { refused, flags } = checkAll(lesson.text, lesson.why);
     refuseSecret(refused, "lesson");
     item = { id, type, kind: lesson.kind, text: lesson.text, why: lesson.why, about, source: args.source, seen, skill: args.skill.trim(), branch, noted: when.toISOString(), area: (args.area || "").trim(), flags };
+    if (search) item.search = search;
+    // The same words noted again (a said lesson whose Why the person gave after the first note) replace the waiting item instead of adding a second.
+    const same = L.listWaiting(root, when, { prune: false }).find((w) => w.type === "lesson" && w.source === "said" && w.skill === item.skill && String(w.text).trim() === lesson.text.trim());
+    if (same && !args["dry-run"]) {
+      item.id = same.id;
+      item.noted = same.noted || item.noted;
+      if (!item.search && same.search) item.search = same.search;
+    }
   }
   if (!args["dry-run"]) L.writeWaiting(root, item);
   out({
@@ -1403,9 +1572,9 @@ async function cmdNote(L, root, args) {
     state: s.state,
     active: s.active,
     noted: true,
-    id,
+    id: item.id,
     flags: item.flags || [],
-    line: `Noted for the end of the run: ${type === "area" ? `a new area, ${item.name}` : type === "doubt" ? `a doubt about ${item.target}` : type === "agents-fix" ? `a fix to ${item.file}` : item.text}`,
+    line: `Noted for the end of the run: ${type === "area" ? `a new area, ${item.name}` : type === "doubt" ? `a doubt about ${item.target}` : type === "agents-fix" ? `a fix to ${item.file}` : type === "tidy" ? `a tidy-up (${item.change}): ${item.reason}` : item.text}`,
     dryRun: !!args["dry-run"],
   });
 }
@@ -1453,6 +1622,102 @@ function agentsFixItem(root, args, { id, skillProblems, refuseSecret, branch, wh
     fail(EXIT.INVALID, "no-match", `The before text must occur exactly once in ${file}; it occurs ${text === null ? "nowhere (no such file)" : occurrences(text, args.before) === 0 ? "nowhere" : "more than once"}.`, "Copy the before text exactly from the file, with enough of it to be unique.");
   }
   return { ...base, file, before: args.before, after: args.after, flags };
+}
+
+const TIDY_CHANGES = ["merge", "reword", "retire", "move"];
+const sameSet = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
+const areaNameOf = (entry) => (entry && entry.area.name) || (entry && entry.slug === GENERAL ? "General" : entry ? entry.slug : "");
+
+/**
+ * The waiting item for `note --type tidy`: one change to saved lessons
+ * (merge, reword, retire or move), its targets as saved lesson ids, and the
+ * one-sentence reason. A merge or reword carries the new wording, validated as
+ * a lesson is (kind, why and about default from the targets); a move names an
+ * existing area; every change needs a reason. New words go through the secret
+ * screen: a refusal exits 5 and writes nothing.
+ */
+function tidyItem(root, args, lists, { id, skillProblems, refuseSecret, branch, when }) {
+  const problems = [...skillProblems];
+  const change = args.change;
+  if (!TIDY_CHANGES.includes(change)) problems.push({ field: "change", message: `change must be one of ${TIDY_CHANGES.join(", ")}.` });
+  const loaded = loadAreas(root);
+  const found = [];
+  for (const raw of lists.targets) {
+    const saved = findLesson(loaded, raw.trim());
+    if (!saved) {
+      problems.push({ field: "targets", message: "A target names no saved lesson; use the ids tidy-input returned." });
+      continue;
+    }
+    const tid = lessonId(saved.entry.slug, saved.block.heading);
+    if (found.some((f) => f.id === tid)) problems.push({ field: "targets", message: "A target is named twice." });
+    else found.push({ id: tid, saved });
+  }
+  if (TIDY_CHANGES.includes(change)) {
+    if (change === "merge" ? lists.targets.length < 2 : lists.targets.length !== 1) problems.push({ field: "targets", message: change === "merge" ? "A merge needs two or more targets." : `A ${change} takes exactly one target.` });
+  }
+  problems.push(...sentenceProblems("reason", args.reason ?? ""));
+  let text = "";
+  let why = "";
+  let kind = "";
+  let about = [];
+  let area = typeof args.area === "string" ? args.area.trim() : "";
+  if (/[\r\n]/.test(area)) problems.push({ field: "area", message: "area is one line, the area's name." });
+  const first = found[0] && found[0].saved;
+  if (first) {
+    const b = first.block;
+    if (change === "merge" || change === "reword") {
+      text = typeof args.text === "string" ? args.text : "";
+      why = args.why !== undefined ? String(args.why) : found.map((f) => f.saved.block.why).find(Boolean) || "";
+      kind = args.kind !== undefined ? args.kind : b.kind;
+      about = lists.about.length ? lists.about.map((p) => p.replace(/\/{2,}/g, "/")) : [...new Set(found.flatMap((f) => f.saved.block.about))];
+      problems.push(...validateLesson({ text, why, kind, about, search: change === "reword" ? b.search : undefined }, root));
+    } else {
+      text = b.heading;
+      why = b.why || "";
+      kind = b.kind;
+      about = b.about;
+    }
+    if (change === "move" || (change === "merge" && area)) {
+      const slug = slugOf(area);
+      if (!area) problems.push({ field: "area", message: "A move needs --area, the area to move the lesson to." });
+      else if (slug !== GENERAL && !loaded.has(slug)) problems.push({ field: "area", message: "No area by that name; name an existing area or General." });
+      else if (change === "move" && slug === first.entry.slug) problems.push({ field: "area", message: "The lesson is already in that area." });
+    }
+    if (change === "reword") area = "";
+  }
+  refuseProblems("invalid-tidy", problems, "tidy-up");
+  const { refused, flags } = checkAll(text, why, args.reason);
+  refuseSecret(refused, "tidy-up");
+  return { id, type: "tidy", change, targets: found.map((f) => f.id), text, why, kind, about, area, reason: String(args.reason).trim(), skill: args.skill.trim(), branch, noted: when.toISOString(), flags };
+}
+
+/** `tidy-input`: every saved lesson with what the coach weighs, and how full the areas are. */
+async function cmdTidyInput(L, root) {
+  const s = stateOf(L, root);
+  const loaded = loadAreas(root);
+  const all = markLessons(root, [...loaded.values()].flatMap(lessonsOf));
+  const follows = L.followCounts(root);
+  const lessons = all.map((l) => {
+    const f = follows[l.id];
+    return {
+      id: l.id,
+      area: areaNameOf(loaded.get(l.slug)),
+      text: l.block.heading,
+      why: l.block.why || "",
+      kind: l.block.kind,
+      about: l.block.about,
+      search: l.block.search || null,
+      noted: l.block.noted,
+      keptOverCheck: !!l.block.keptOverCheck,
+      marked: !!l.marked,
+      gone: !!l.gone,
+      followed: f ? f.count : 0,
+      lastFollowed: f ? f.last : null,
+    };
+  });
+  const general = loaded.get(GENERAL);
+  const areas = [...loaded.values()].filter((e) => e.slug !== GENERAL).map((e) => ({ name: e.area.name || e.slug, slug: e.slug, count: e.area.blocks.length }));
+  out({ ok: true, state: s.state, active: s.active, lessons, general: { count: general ? general.area.blocks.length : 0, max: GENERAL_MAX }, areas });
 }
 
 async function cmdAreas(L, root, args) {
@@ -1541,9 +1806,72 @@ function areaTakes(root, globs, p) {
 
 const handOver = (l) => ({ id: l.id, text: l.block.heading, why: l.block.why || "", marked: !!l.marked, gone: !!l.gone });
 
+/** The line a read prints when it raised doubts, such as "Raised 1 doubt: its search no longer matches." */
+export function raisedLine(raised) {
+  if (!raised.length) return "";
+  const reasons = [...new Set(raised.map((r) => r.reason))];
+  return `Raised ${plural(raised.length, "doubt", "doubts")}: ${reasons.join(" and ")}.`;
+}
+
+/**
+ * After a read marks lessons, raise a waiting doubt for each marked lesson whose
+ * search no longer agrees with the code (a should-match search with no hit, a
+ * never-matches search with a hit), and for each marked convention with no Why.
+ * Searches run only for marked lessons that carry one. A lesson with a doubt
+ * already waiting gets no second one. The waiting store is on this machine only,
+ * so this writes nothing into the project. Returns `[{ id, target, reason }]`.
+ */
+function raiseDoubts(L, root, lessons) {
+  const marked = lessons.filter((l) => l.marked && !l.gone);
+  if (!marked.length) return [];
+  const doubted = new Set(L.listWaiting(root, now(), { prune: false }).filter((w) => w.type === "doubt").map((w) => w.target));
+  const raised = [];
+  let listed = null;
+  for (const l of marked) {
+    if (doubted.has(l.id)) continue;
+    let found = null;
+    let reason = "";
+    const search = l.block.search;
+    if (search) {
+      listed ||= searchFiles(root);
+      const r = runSearch(root, search, listed);
+      const should = search.match !== "never";
+      if (should && !r.matched) {
+        found = "Its search no longer matches: nothing in the searched files holds the text now.";
+        reason = "its search no longer matches";
+      } else if (!should && r.matched) {
+        const first = r.hits[0];
+        const count = `${r.hits.length >= SEARCH_HITS_MAX ? "at least " : ""}${plural(r.hits.length, "line", "lines")}`;
+        const verb = `${count} now ${r.hits.length === 1 ? "holds" : "hold"} the text`;
+        // The first hit's file is named when the sentence stays within its 200 characters.
+        found = `Its search no longer matches: ${verb}, the first in ${first.file} at line ${first.line}.`;
+        if (found.length > 200) found = `Its search no longer matches: ${verb}, the first at line ${first.line} of a searched file.`;
+        reason = "its search no longer matches";
+      }
+    }
+    if (!found && l.block.kind === "convention" && !(l.block.why || "").trim()) {
+      found = "Needs a Why: a convention is saved with the reason for it, and this one has none.";
+      reason = "a convention needs its Why";
+    }
+    if (!found || sentenceProblems("found", found).length) continue;
+    const when = now();
+    const { refused, flags } = checkAll(found);
+    if (refused) continue;
+    const item = { id: L.newWaitingId(when), type: "doubt", target: l.id, found, skill: "read", branch: safeBranch(root), noted: when.toISOString(), flags };
+    try {
+      L.writeWaiting(root, item);
+    } catch {
+      continue;
+    }
+    doubted.add(l.id);
+    raised.push({ id: item.id, target: l.id, reason });
+  }
+  return raised;
+}
+
 async function cmdRead(L, root, args) {
   const handle = args.run !== undefined ? decodeRun(args.run) : null;
-  // A read never writes, not even the waiting store's 30-day cleanup (NFR-3).
+  // A read never prunes the waiting store (NFR-3); its only write is a doubt raised for a marked lesson, kept on this machine.
   const s = L.learningState(root, now(), { prune: false });
   if (s.state !== "on") {
     const answer = { ok: true, state: s.state, active: false, line: s.state === "paused" ? "Learning is paused for you." : "" };
@@ -1562,6 +1890,7 @@ async function cmdRead(L, root, args) {
   const withGeneral = !given.includes(GENERAL);
   const returned = [...(withGeneral && generalEntry ? lessonsOf(generalEntry) : []), ...matched.flatMap(lessonsOf)];
   markLessons(root, returned);
+  const raised = raiseDoubts(L, root, returned);
   const of = (slug) => returned.filter((l) => l.slug === slug).map(handOver);
   const areas = matched.map((e) => ({ name: e.area.name, slug: e.slug, lessons: of(e.slug) }));
   const general = withGeneral ? of(GENERAL) : null;
@@ -1572,7 +1901,8 @@ async function cmdRead(L, root, args) {
     state: s.state,
     active: s.active,
     run: encodeRun([...given, GENERAL, ...matched.map((e) => e.slug)]),
-    line: readLine({ first, general: general ? general.length : 0, areas: areas.map((a) => ({ name: a.name, count: a.lessons.length })), empty }),
+    line: [readLine({ first, general: general ? general.length : 0, areas: areas.map((a) => ({ name: a.name, count: a.lessons.length })), empty }), raisedLine(raised)].filter(Boolean).join(" "),
+    ...(raised.length ? { raised } : {}),
     general,
     areas,
   };
@@ -1614,15 +1944,373 @@ async function cmdReport(L, root) {
   });
 }
 
+/* ------------------------------------------------- the check (the script's half) */
+
+export const CHECK_CAP = 10;
+export const FOLDER_FILES = 6;
+export const FOLDER_BYTES = 60 * 1024;
+export const SEARCH_FILE_MAX = 512 * 1024;
+export const SEARCH_HITS_MAX = 20;
+const SKIP_DIRS = new Set(["node_modules", ".git"]);
+// The four tests, by the key a verdict uses and the name the card shows.
+export const CHECK_TESTS = { true: "True against the code", worth: "Worth keeping", overlap: "Overlap or conflict", clear: "Clear enough" };
+const VERDICTS = ["Pass", "Doubt", "Fail"];
+const CHECK_ID = /^[a-z0-9]{1,12}-[0-9a-f]{4}$/;
+
+const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
+const looksBinary = (buf) => buf.subarray(0, 8000).includes(0);
+
+/** The SHA-256 hex of a project file's bytes, or null when it cannot be read. */
+function hashOf(root, p) {
+  if (pathProblem(p)) return null;
+  try {
+    return sha256(fs.readFileSync(path.join(root, p)));
+  } catch {
+    return null;
+  }
+}
+
+/** Every file under `dir` (a project-relative path, "" for the root) as a posix path, skipping node_modules and .git (and skills/ at the root when asked). */
+function walkFiles(root, dir, { skipSkills = false } = {}) {
+  const found = [];
+  const visit = (d) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(path.join(root, d), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const p = d ? `${d}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        if (SKIP_DIRS.has(e.name) || (skipSkills && p === "skills")) continue;
+        visit(p);
+      } else if (e.isFile()) found.push(p);
+    }
+  };
+  visit(dir);
+  return found;
+}
+
+/**
+ * The files the checker may read for a lesson, each `{ path, hash, read }`.
+ * A file About is read whole; a folder About is listed, the files sharing words
+ * with the lesson first, and sampled until FOLDER_FILES files or FOLDER_BYTES
+ * (`budgetHit` when files were left unread). A path that is gone is left out.
+ */
+function filesFor(root, lesson) {
+  const files = [];
+  let budgetHit = false;
+  const words = new Set(`${lesson.text || ""} ${(lesson.about || []).join(" ")}`.toLowerCase().match(/[a-z0-9]{4,}/g) || []);
+  for (const raw of lesson.about || []) {
+    if (typeof raw !== "string") continue;
+    const p = cleanPath(raw);
+    if (!p || pathProblem(p)) continue;
+    const abs = path.join(root, p);
+    if (isDir(abs)) {
+      const score = (f) => (f.toLowerCase().match(/[a-z0-9]{4,}/g) || []).filter((w) => words.has(w)).length;
+      const listed = walkFiles(root, p)
+        .map((f) => ({ f, score: score(f) }))
+        .sort((a, b) => b.score - a.score || (a.f < b.f ? -1 : 1))
+        .map((x) => x.f);
+      let bytes = 0;
+      let taken = 0;
+      for (const f of listed) {
+        if (taken >= FOLDER_FILES || bytes >= FOLDER_BYTES) {
+          budgetHit = true;
+          break;
+        }
+        let buf;
+        try {
+          buf = fs.readFileSync(path.join(root, f));
+        } catch {
+          continue;
+        }
+        if (looksBinary(buf)) continue;
+        files.push({ path: f, hash: sha256(buf), read: "sampled" });
+        bytes += buf.length;
+        taken++;
+      }
+    } else if (fs.existsSync(abs)) {
+      const hash = hashOf(root, p);
+      if (hash) files.push({ path: p, hash, read: "whole" });
+    }
+  }
+  return { files, budgetHit };
+}
+
+/**
+ * The files a lesson search may look at, as sorted posix paths: what git tracks
+ * plus untracked files it does not ignore (so build output such as
+ * plan2code-app/target/ is never searched), else, outside git, the whole tree.
+ * Never node_modules, .git or skills/ at the root. A command that runs several
+ * searches lists once and hands the list to each runSearch().
+ */
+export function searchFiles(root) {
+  const r = gitRun(root, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"]);
+  if (r.code !== 0) return walkFiles(root, "", { skipSkills: true });
+  const skipped = (p) => p === "skills" || p.startsWith("skills/") || p.split("/").some((part) => SKIP_DIRS.has(part));
+  return [...new Set(r.out.split("\0").filter((p) => p && !skipped(p)))].sort();
+}
+
+/**
+ * Run a lesson's search over the project: the files matching `search.glob`
+ * among `files` (searchFiles() when not given), each a text file of at most
+ * 512 KB, and every line holding `search.text` exactly (case and all), at most 20.
+ */
+export function runSearch(root, search, files = null) {
+  const hits = [];
+  let filesSearched = 0;
+  // A stored item from before the limits: refuse it rather than stall the run.
+  if (globTooBusy(search.glob)) return { matched: false, hits, filesSearched, refused: true };
+  for (const file of files || searchFiles(root)) {
+    if (!matchGlob(search.glob, file)) continue;
+    let buf;
+    try {
+      if (fs.statSync(path.join(root, file)).size > SEARCH_FILE_MAX) continue;
+      buf = fs.readFileSync(path.join(root, file));
+    } catch {
+      continue;
+    }
+    if (looksBinary(buf)) continue;
+    filesSearched++;
+    const lines = buf.toString("utf8").split(/\r?\n/);
+    for (let n = 0; n < lines.length && hits.length < SEARCH_HITS_MAX; n++) if (lines[n].includes(search.text)) hits.push({ file, line: n + 1 });
+    if (hits.length >= SEARCH_HITS_MAX) break;
+  }
+  return { matched: hits.length > 0, hits, filesSearched };
+}
+
+// A stored verdict set of the shape check-record writes: all four tests, each a known verdict and a reason.
+const wellFormedTests = (tests) =>
+  !!tests && typeof tests === "object" && Object.keys(CHECK_TESTS).every((k) => tests[k] && typeof tests[k] === "object" && VERDICTS.includes(tests[k].verdict) && typeof tests[k].reason === "string");
+
+/** Whether a waiting item's stored check still holds: it is well formed and every file it names hashes as it did. */
+export function checkIsFresh(root, item) {
+  const check = item && item.check;
+  if (!check || typeof check !== "object" || !check.files || typeof check.files !== "object" || !wellFormedTests(check.tests)) return false;
+  return Object.entries(check.files).every(([p, hash]) => hashOf(root, p) === hash);
+}
+
+const checksDir = (L, root) => path.join(L.storeDir(root), "checks");
+export const CHECK_FILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Delete check files over a day old: a check whose check-record never succeeded
+ * (an abandoned run, a checker that failed twice, `list --check-failed`) would
+ * otherwise keep its file forever. The age comes from the id's base-36 start time.
+ */
+function pruneChecks(L, root) {
+  let names;
+  try {
+    names = fs.readdirSync(checksDir(L, root));
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const id = name.replace(/\.json$/, "");
+    if (id === name || !CHECK_ID.test(id)) continue;
+    const started = parseInt(id.split("-")[0], 36);
+    if (Number.isFinite(started) && Date.now() - started > CHECK_FILE_MAX_AGE_MS) fs.rmSync(path.join(checksDir(L, root), name), { force: true });
+  }
+}
+
+/** What the checker reads of one waiting tidy-up: the wording under test (the new one for a merge or reword, the target's own for a retire or move), its About, and the targets. */
+function tidyCheckEntry(root, loaded, w, searchList = () => searchFiles(root)) {
+  const targets = w.targets.map((t) => {
+    const { entry, block } = findLesson(loaded, t);
+    return { id: t, text: block.heading, why: block.why || "", kind: block.kind, about: block.about, area: areaNameOf(entry) };
+  });
+  const own = w.change === "merge" || w.change === "reword";
+  const first = findLesson(loaded, w.targets[0]).block;
+  const text = own ? w.text : targets[0].text;
+  const about = own ? (Array.isArray(w.about) ? w.about : []) : targets[0].about;
+  const search = w.change === "reword" || w.change === "retire" ? first.search : null;
+  const { files, budgetHit } = filesFor(root, { text, about });
+  return {
+    id: w.id,
+    type: "tidy",
+    change: w.change,
+    reason: w.reason,
+    text,
+    why: own ? w.why || "" : targets[0].why,
+    kind: own ? w.kind : targets[0].kind,
+    about,
+    area: w.area || (w.change === "move" ? "" : targets[0].area),
+    targets,
+    ...(search ? { search, searchResult: runSearch(root, search, searchList()) } : {}),
+    files,
+    ...(budgetHit ? { budgetHit: true } : {}),
+  };
+}
+
+async function cmdCheckInput(L, root, args = {}) {
+  const s = stateOf(L, root);
+  const loaded = args.tidy ? loadAreas(root) : null;
+  const tidyOk = (w) => w.type === "tidy" && Array.isArray(w.targets) && w.targets.length > 0 && w.targets.every((t) => findLesson(loaded, t));
+  const listed = L.listWaiting(root, now(), { prune: false });
+  const waiting = listed.filter((w) => w.type === "lesson");
+  // Tidy-ups share the cap, oldest first among the lessons.
+  const eligible = listed.filter((w) => w.type === "lesson" || (args.tidy && tidyOk(w)));
+  const due = eligible.filter((w) => !checkIsFresh(root, w));
+  const picked = due.slice(0, CHECK_CAP);
+  pruneChecks(L, root);
+  // One file listing serves every search in this check.
+  let searchable = null;
+  const searchList = () => (searchable ||= searchFiles(root));
+  const lessons = picked.map((w) => {
+    if (w.type === "tidy") return tidyCheckEntry(root, loaded, w, searchList);
+    const about = Array.isArray(w.about) ? w.about : [];
+    const { files, budgetHit } = filesFor(root, { text: w.text, about });
+    return {
+      id: w.id,
+      text: w.text,
+      why: w.why || "",
+      kind: w.kind,
+      about,
+      ...(w.search ? { search: w.search, searchResult: runSearch(root, w.search, searchList()) } : {}),
+      files,
+      ...(budgetHit ? { budgetHit: true } : {}),
+    };
+  });
+  const inPicked = new Set(picked.map((w) => w.id));
+  // A tidy-up's own targets are not overlaps of it.
+  const inTidy = new Set(picked.filter((w) => w.type === "tidy").flatMap((w) => w.targets));
+  const context = {
+    agentsMd: fs.existsSync(path.join(root, "AGENTS.md")) ? "AGENTS.md" : null,
+    saved: readLessons(root)
+      .filter((l) => !inTidy.has(l.id))
+      .map((l) => ({ id: l.id, text: l.block.heading })),
+    waiting: waiting.filter((w) => !inPicked.has(w.id)).map((w) => ({ id: w.id, text: w.text })),
+  };
+  // The id carries the start time (base 36, then a few random hex characters), so list can tell a verdict from this run from an earlier one.
+  const startedMs = Date.now();
+  const checkId = `${startedMs.toString(36)}-${crypto.randomBytes(2).toString("hex")}`;
+  const result = { ok: true, state: s.state, active: s.active, checkId, started: new Date(startedMs).toISOString(), cap: CHECK_CAP, lessons, context, notChecked: due.slice(CHECK_CAP).map((w) => w.id) };
+  // Nothing to grade means no check-record call, so keep no file for one.
+  if (lessons.length) {
+    fs.mkdirSync(checksDir(L, root), { recursive: true });
+    fs.writeFileSync(path.join(checksDir(L, root), `${checkId}.json`), JSON.stringify(result));
+  }
+  out(result);
+}
+
+const checkProblem = (field, message) => ({ field, message });
+
+async function cmdCheckRecord(L, root, args) {
+  if (typeof args.file !== "string") fail(EXIT.USAGE, "missing-value", "check-record needs --file.", "Run: lessons.mjs check-record --file <verdicts.json>.");
+  const text = readText(path.resolve(args.file));
+  if (text === null) fail(EXIT.NOT_FOUND, "no-file", `The verdicts file ${args.file} was not found.`, "Write the checker's verdicts to a JSON file and pass it with --file.");
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    fail(EXIT.INVALID, "invalid-file", "The verdicts file is not JSON.", "Write { checkId, how, verdicts: [{ id, tests, suggestion? }] }.");
+  }
+  const refuse = (problems) => fail(EXIT.INVALID, "invalid-verdicts", `The check was not recorded: ${problems.map((p) => p.message).join(" ")}`, "Fix what problems lists and record it again.", { problems });
+  if (!data || typeof data !== "object" || Array.isArray(data)) refuse([checkProblem("file", "The verdicts file must be an object { checkId, how, verdicts }.")]);
+  const problems = [];
+  const id = typeof data.checkId === "string" ? data.checkId : "";
+  const checkFile = CHECK_ID.test(id) ? path.join(checksDir(L, root), `${id}.json`) : null;
+  let input = null;
+  try {
+    input = checkFile ? JSON.parse(fs.readFileSync(checkFile, "utf8")) : null;
+  } catch {}
+  if (!input) {
+    problems.push(checkProblem("checkId", "The checkId is not one check-input printed (or it was already recorded); run check-input again."));
+    refuse(problems);
+  }
+  if (data.how !== "helper" && data.how !== "same-agent") problems.push(checkProblem("how", "how must be helper or same-agent."));
+  if (!Array.isArray(data.verdicts)) refuse([...problems, checkProblem("verdicts", "verdicts must be a list.")]);
+  const byId = new Map(input.lessons.map((l) => [l.id, l]));
+  const seen = new Set();
+  const clean = [];
+  for (const v of data.verdicts) {
+    const vid = v && typeof v.id === "string" ? v.id : "";
+    const lesson = byId.get(vid);
+    if (!lesson) {
+      problems.push(checkProblem("id", "A verdict names an id that is not in this check's lessons."));
+      continue;
+    }
+    if (seen.has(vid)) {
+      problems.push(checkProblem("id", `${vid} has more than one verdict.`));
+      continue;
+    }
+    seen.add(vid);
+    const tests = {};
+    for (const key of Object.keys(CHECK_TESTS)) {
+      const t = v.tests && typeof v.tests === "object" ? v.tests[key] : null;
+      const field = `${vid}.${key}`;
+      if (!t || typeof t !== "object") {
+        problems.push(checkProblem(field, `${field} is missing: every verdict needs all four tests (true, worth, overlap, clear).`));
+        continue;
+      }
+      if (!VERDICTS.includes(t.verdict)) problems.push(checkProblem(`${field}.verdict`, `${field}.verdict must be Pass, Doubt or Fail.`));
+      if (typeof t.reason !== "string") problems.push(checkProblem(`${field}.reason`, `${field}.reason must be one sentence of text.`));
+      else if (checkAll(t.reason).refused) problems.push(checkProblem(`${field}.reason`, `${field}.reason holds secret-shaped text; reword it without the secret.`));
+      else problems.push(...sentenceProblems(`${field}.reason`, t.reason));
+      tests[key] = { verdict: t.verdict, reason: typeof t.reason === "string" ? t.reason.trim() : "" };
+    }
+    let suggestion;
+    const warnings = [];
+    const hasSuggestion = v.suggestion !== undefined && v.suggestion !== null && v.suggestion !== "";
+    if (hasSuggestion && lesson.type === "tidy" && (lesson.change === "retire" || lesson.change === "move")) {
+      // A retire or a move has no wording to reword, so the card offers nothing to use it on.
+      warnings.push({ id: vid, field: "suggestion", message: "The suggested wording was dropped: a retire or a move has no wording to change." });
+    } else if (hasSuggestion) {
+      const wording = typeof v.suggestion === "string" ? v.suggestion : "";
+      const bad = validateLesson({ text: wording, why: lesson.why, kind: lesson.kind, about: lesson.about, search: lesson.search }, root);
+      const secret = checkAll(wording).refused;
+      if (bad.length || secret || !wording) warnings.push({ id: vid, field: "suggestion", message: secret ? "The suggested wording held secret-shaped text and was dropped." : `The suggested wording was dropped: ${(bad[0] && bad[0].message) || "it is not a sentence."}` });
+      else suggestion = wording.trim();
+    }
+    clean.push({ lesson, tests, suggestion, warnings });
+  }
+  if (problems.length) refuse(problems);
+  const checked = new Date().toISOString();
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(input.started)) / 1000));
+  const warnings = [];
+  let recorded = 0;
+  const stored = new Map(L.listWaiting(root, now(), { prune: false }).map((w) => [w.id, w]));
+  for (const c of clean) {
+    warnings.push(...c.warnings);
+    const item = stored.get(c.lesson.id);
+    if (!item) continue; // decided or aged out while the checker ran
+    const files = Object.fromEntries(c.lesson.files.map((f) => [f.path, f.hash]));
+    L.writeWaiting(root, { ...item, check: { tests: c.tests, ...(c.suggestion ? { suggestion: c.suggestion } : {}), how: data.how, files, checked, seconds } });
+    recorded++;
+  }
+  try {
+    fs.rmSync(checkFile, { force: true });
+  } catch {}
+  const s = stateOf(L, root);
+  out({ ok: true, state: s.state, active: s.active, recorded, how: data.how, seconds, problems: warnings });
+}
+
+// What a row shows of its fresh check, and the card's outline for it.
+function checkFields(item, fresh, runMs) {
+  if (!fresh) return { tag: "Not checked yet" };
+  const entries = Object.entries(CHECK_TESTS).map(([key, name]) => ({ test: name, ...item.check.tests[key] }));
+  const pick = (verdict) => entries.filter((e) => e.verdict === verdict).map((e) => ({ test: e.test, reason: e.reason }));
+  const earlier = Number.isFinite(runMs) && Date.parse(item.check.checked) < runMs;
+  return {
+    check: { fails: pick("Fail"), doubts: pick("Doubt"), passed: entries.filter((e) => e.verdict === "Pass").length, ...(item.check.suggestion ? { suggestion: item.check.suggestion } : {}) },
+    ...(earlier ? { tag: "Checked in an earlier run" } : {}),
+  };
+}
+
+const outlineOf = (check) => (check.fails.length ? "Drop" : check.passed === Object.keys(CHECK_TESTS).length ? "Keep" : null);
+
 const CHOICES = {
   lesson: ["Keep", "Reword", "Drop"],
   area: ["Create", "Rename", "Drop"],
   doubt: ["Keep", "Reword", "Retire"],
   gone: ["Keep", "Reword", "Retire"],
   "agents-fix": ["Apply", "Reword", "Drop"],
+  tidy: ["Apply", "Reword", "Leave"],
   "log-line": ["Move", "Reword and move", "Leave in the log"],
 };
-const ROUND_ORDER = ["area", "lesson", "doubt", "gone", "agents-fix", "log-line"];
+const ROUND_ORDER = ["area", "lesson", "doubt", "gone", "agents-fix", "tidy", "log-line"];
 const LOG_ORIGIN = "From the failure log in AGENTS.md.";
 
 // The first-ask card's words (FR-30), from "What a person is told".
@@ -1648,6 +2336,7 @@ const GONE_PREFIX = "gone:";
 function listable(w, loaded) {
   if (w.type === "lesson" || w.type === "area" || w.type === "agents-fix") return true;
   if (w.type === "doubt") return !!findLesson(loaded, w.target);
+  if (w.type === "tidy") return Array.isArray(w.targets) && w.targets.length > 0 && w.targets.every((id) => findLesson(loaded, id));
   return false;
 }
 
@@ -1722,6 +2411,47 @@ function fixItem(root, w, note) {
   };
 }
 
+// A tidy-up's choices: Reword only where there is a new wording to edit.
+const tidyChoices = (change) => (change === "merge" || change === "reword" ? CHOICES.tidy : CHOICES.tidy.filter((c) => c !== "Reword"));
+
+/**
+ * A tidy-up as the list shows it: the change in words, its reason, the lessons
+ * it touches (`targets`), and, for a merge or reword, the new wording and its
+ * Why (`wording`, `wordingWhy`) that the card's Reword edits.
+ */
+function tidyRow(root, w, loaded, areaNames, note) {
+  const targets = w.targets.map((id) => {
+    const { entry, block } = findLesson(loaded, id);
+    return { id, text: block.heading, area: areaNameOf(entry) };
+  });
+  const own = w.change === "merge" || w.change === "reword";
+  const { refused, flags } = checkAll(w.text, w.why, w.reason);
+  const words = refused ? masked(w.text) : w.text;
+  const reason = refused ? masked(w.reason) : w.reason;
+  let text;
+  if (w.change === "merge") text = `Merge ${targets.length} lessons into: ${words}`;
+  else if (w.change === "reword") text = `Reword to: ${words}`;
+  else if (w.change === "retire") text = `Retire: ${targets[0].text} Reason: ${reason}`;
+  else text = `Move to ${w.area}: ${targets[0].text}`;
+  const choices = tidyChoices(w.change);
+  return {
+    id: w.id,
+    type: "tidy",
+    change: w.change,
+    text,
+    why: w.change === "retire" ? "" : reason,
+    origin: "",
+    note,
+    flags,
+    refused,
+    area: w.area || (own ? targets[0].area : ""),
+    targets,
+    ...(own ? { wording: words, wordingWhy: refused ? masked(w.why || "") : w.why || "" } : {}),
+    areas: areaNames,
+    choices: refused ? choices.filter((c) => c !== "Apply") : choices,
+  };
+}
+
 /** A failure log line as the list shows it, with the lessons it would become. */
 function logItem(l) {
   const { refused, flags } = checkAll(l.text);
@@ -1753,6 +2483,12 @@ function buildList(L, root, args) {
   const proposed = proposedAreas(waiting);
   const branch = safeBranch(root);
   const items = [];
+  // The areas a lesson may be saved in, for the card's Reword: General, every
+  // area file, and the areas waiting in this same list.
+  const areaNames = [...new Set(["General", ...areaList.map((a) => a.name), ...proposed.map((p) => p.name)].filter(Boolean))];
+  // The run's check, when its id is passed: a verdict from before it is tagged as earlier.
+  const runMs = typeof args.check === "string" && CHECK_ID.test(args.check) ? parseInt(args.check.split("-")[0], 36) : NaN;
+  const fresh = new Map();
   for (const w of waiting) {
     if (!listable(w, loaded)) continue;
     if (w.type === "area") {
@@ -1761,6 +2497,12 @@ function buildList(L, root, args) {
     }
     if (w.type === "agents-fix") {
       items.push(fixItem(root, w, branchNote(root, w, branch, null)));
+      continue;
+    }
+    if (w.type === "tidy") {
+      const isFresh = checkIsFresh(root, w);
+      if (isFresh) fresh.set(w.id, w);
+      items.push({ ...checkFields(w, isFresh, runMs), ...tidyRow(root, w, loaded, areaNames, branchNote(root, w, branch, null)) });
       continue;
     }
     if (w.type === "doubt") {
@@ -1772,7 +2514,10 @@ function buildList(L, root, args) {
     const about = Array.isArray(w.about) ? w.about : [];
     const { refused, flags } = checkAll(w.text, w.why);
     const seen = Array.isArray(w.seen) && w.seen.length ? w.seen : about;
+    const isFresh = checkIsFresh(root, w);
+    if (isFresh) fresh.set(w.id, w);
     items.push({
+      ...checkFields(w, isFresh, runMs),
       id: w.id,
       type: "lesson",
       text: refused ? masked(w.text) : w.text,
@@ -1781,10 +2526,11 @@ function buildList(L, root, args) {
       about,
       area: areaFor(root, w, areaList, proposed).name,
       origin: w.source === "inferred" ? `Seen in the code, in ${seen.join(", ")}.` : "You said this.",
-      note: branchNote(root, w, branch, about),
+      note: [branchNote(root, w, branch, about), !refused && isSaidNoWhy(w.why) ? NEEDS_WHY_NOTE : ""].filter(Boolean).join(" "),
       flags,
       refused,
-      choices: refused ? CHOICES.lesson.filter((c) => c !== "Keep") : CHOICES.lesson,
+      // A placeholder Why cannot be kept (decide refuses it), only reworded.
+      choices: refused || isSaidNoWhy(w.why) ? CHOICES.lesson.filter((c) => c !== "Keep") : CHOICES.lesson,
     });
   }
   for (const g of goneItems(root, loaded, waiting)) items.push(savedItem(g, findLesson(loaded, g.target), { note: "" }));
@@ -1794,16 +2540,14 @@ function buildList(L, root, args) {
     for (const l of lines) items.push(logItem(l));
   }
   const opening = s.state !== "unknown" && onDefaultBranch(root) ? `You are on ${branch}: kept lessons will be uncommitted changes here.` : null;
-  // The areas a lesson may be saved in, for the card's Reword: General, every
-  // area file, and the areas waiting in this same list.
-  const areaNames = [...new Set(["General", ...areaList.map((a) => a.name), ...proposed.map((p) => p.name)].filter(Boolean))];
   // What the card draws beyond the shared fields: the before and after of a fix,
   // the lessons a log line would become, what a doubt found, and where a lesson may go.
   const extra = (i) => {
     if (i.type === "agents-fix") return { file: i.file, before: i.before, after: i.after, ...(i.row ? { row: i.row } : {}) };
     if (i.type === "log-line") return { lessons: (i.lessons || []).map((inc) => inc.text).filter(Boolean) };
     if (i.type === "doubt" || i.type === "gone") return { heading: i.heading, ...(i.found ? { found: i.found } : {}), areas: areaNames };
-    if (i.type === "lesson") return { kind: i.kind, about: i.about, areas: areaNames };
+    if (i.type === "lesson") return { kind: i.kind, about: i.about, areas: areaNames, ...(i.check ? { check: i.check } : {}), ...(i.tag ? { tag: i.tag } : {}) };
+    if (i.type === "tidy") return { change: i.change, targets: i.targets, areas: i.areas, ...(i.wording !== undefined ? { wording: i.wording, wordingWhy: i.wordingWhy } : {}), ...(i.check ? { check: i.check } : {}), ...(i.tag ? { tag: i.tag } : {}) };
     return {};
   };
   const rows = items.map((i) =>
@@ -1822,6 +2566,26 @@ function buildList(L, root, args) {
       }
     : null;
   const rounds = ROUND_ORDER.map((type) => ({ type, choices: CHOICES[type], items: items.filter((i) => i.type === type) })).filter((r) => r.items.length);
+  if (card) {
+    // The outline: Drop where a test failed, Keep where all four passed, nothing for doubts only.
+    const suggested = {};
+    for (const i of items) {
+      let pick = i.type === "lesson" && i.check && !i.refused ? outlineOf(i.check) : null;
+      if (pick && !i.choices.includes(pick)) pick = null;
+      // A tidy-up: Leave where a test failed, Apply where all four passed.
+      if (i.type === "tidy" && i.check && !i.refused) pick = { Drop: "Leave", Keep: "Apply" }[outlineOf(i.check)] || null;
+      if (pick) suggested[i.id] = pick;
+    }
+    if (Object.keys(suggested).length) card.suggested = suggested;
+    // The latest check: the items one record call stamped with the newest time.
+    const stamps = [...fresh.values()].map((w) => w.check);
+    const latest = stamps.reduce((a, c) => (!a || Date.parse(c.checked) > Date.parse(a.checked) ? c : a), null);
+    // The how-checked line speaks only for this run's check: a list without
+    // --check (nothing new to grade) never repeats an earlier run's numbers.
+    // A failure reason is one line of at most 200 characters, as the card takes it.
+    if (typeof args["check-failed"] === "string") card.checked = { failed: args["check-failed"].replace(/\s+/g, " ").trim().slice(0, 200) || "The check did not run." };
+    else if (latest && typeof args.check === "string") card.checked = { how: latest.how, count: stamps.filter((c) => c.checked === latest.checked).length, seconds: latest.seconds };
+  }
   const answer = { ok: true, state: s.state, active: s.active, items, opening, card, rounds };
   // The first ask (FR-30): only while not set up, led by the newest waiting lesson.
   if (args["first-ask"] && s.state === "not-set-up") {
@@ -1879,6 +2643,8 @@ export function closingLine(c, stillWaiting) {
   if (c.moved) parts.push(`moved ${c.moved} from the failure log`);
   if (c.created) parts.push(`created ${plural(c.created, "area", "areas")}`);
   if (c.dropped) parts.push(`dropped ${c.dropped}`);
+  if (c.tidied) parts.push(`tidied ${c.tidied}`);
+  if (c.left) parts.push(`left ${c.left} as ${c.left === 1 ? "it was" : "they were"}`);
   if (!parts.length) return `Nothing decided. ${stillWaiting} still waiting.`;
   const first = parts.join(", ");
   return `${first[0].toUpperCase()}${first.slice(1)}. ${stillWaiting} still waiting.`;
@@ -1899,7 +2665,7 @@ function decideSaved(root, loaded, droppedAreas, item, d, today) {
     block.checked = today;
     const at = block.lines ? block.lines.findIndex((l) => /^- Noted:/.test(l)) : -1;
     if (at === -1 || !block.noted) block.lines = null;
-    else block.lines = block.lines.map((l, n) => (n === at ? `- Noted: ${block.noted}, checked ${today}` : l));
+    else block.lines = block.lines.map((l, n) => (n === at ? `- Noted: ${block.noted}, checked ${today}${block.keptOverCheck ? `, ${KEPT_OVER_CHECK}` : ""}` : l));
     entry.dirty = true;
     return { outcome: "kept", lesson: item.target, file: rel(root, entry.file) };
   }
@@ -1934,7 +2700,7 @@ function decideSaved(root, loaded, droppedAreas, item, d, today) {
     } else if (loaded.has(slug) && !droppedAreas.has(slug)) target = loaded.get(slug);
     else return { outcome: "invalid", problems: [{ field: "area", message: "No area by that name; name an existing area or General." }] };
   }
-  const next = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted: block.noted, checked: today };
+  const next = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted: block.noted, checked: today, ...(block.search ? { search: block.search } : {}) };
   if (target === entry) {
     const r = replaceBlock(entry.area, item.target, next);
     if (r.duplicate) return { outcome: "duplicate", area: entry.area.name };
@@ -1947,6 +2713,93 @@ function decideSaved(root, loaded, droppedAreas, item, d, today) {
   }
   target.dirty = true;
   return { outcome: "reworded", area: target.area.name, lesson: lessonId(target.slug, next.heading), file: rel(root, target.file) };
+}
+
+/**
+ * Apply a tidy-up decision to `loaded` (written by the caller). Leave changes
+ * nothing and settles it; Apply (or Reword, with a new text, why or area)
+ * merges, rewords, retires or moves the targets. A target that is gone since
+ * the proposal was noted makes it `outOfDate`. All or nothing: a refused or
+ * invalid result leaves `loaded` as it was.
+ */
+function decideTidy(root, loaded, droppedAreas, item, d, today) {
+  if (d.choice === "Leave") return { outcome: "left" };
+  if (d.choice === "Reword" && item.change !== "merge" && item.change !== "reword") return { outcome: "invalid-choice", message: "Only a merge or a reword has a new wording to reword." };
+  const targets = item.targets.map((id) => ({ id, saved: findLesson(loaded, id) }));
+  if (!targets.length || targets.some((t) => !t.saved)) return { outcome: "outOfDate" };
+  const reword = d.choice === "Reword";
+  if (item.change === "retire") {
+    const r = decideSaved(root, loaded, droppedAreas, { target: targets[0].id }, { choice: "Retire" }, today);
+    return r.outcome === "retired" ? { outcome: "applied", change: "retire", lesson: targets[0].id, file: r.file } : r;
+  }
+  if (item.change === "reword") {
+    const next = { choice: "Reword", text: reword && typeof d.text === "string" ? d.text : item.text, why: reword && typeof d.why === "string" ? d.why : item.why, kind: item.kind, about: item.about, ...(reword && typeof d.area === "string" && d.area.trim() ? { area: d.area } : {}) };
+    const r = decideSaved(root, loaded, droppedAreas, { target: targets[0].id }, next, today);
+    return r.outcome === "reworded" ? { ...r, outcome: "applied", change: "reword" } : r;
+  }
+  const first = targets[0].saved;
+  const named = (reword && typeof d.area === "string" && d.area.trim() ? d.area : item.area) || "";
+  if (item.change === "move") {
+    const block = first.block;
+    const piece = { text: block.heading, why: block.why || "", kind: block.kind, about: block.about, area: named, search: block.search, checked: block.checked, keptOverCheck: block.keptOverCheck };
+    const r = placeLessons(root, loaded, droppedAreas, [piece], block.noted);
+    if (r.outcome !== "moved") return r;
+    // placeLessons inserted the copy; take out the old block (by position, as the copy may share its heading).
+    const at = first.entry.area.blocks.indexOf(block);
+    if (at === -1) return { outcome: "outOfDate" };
+    first.entry.area.blocks.splice(at, 1);
+    first.entry.dirty = true;
+    if (!first.entry.area.blocks.length && first.entry.slug !== GENERAL) first.entry.remove = true;
+    return { outcome: "applied", change: "move", area: r.lessons[0].area, lesson: r.lessons[0].lesson, file: r.lessons[0].file };
+  }
+  // A merge writes one block and removes the targets, the targets first so a full General has room; undo both on a problem.
+  const final = {
+    text: reword && typeof d.text === "string" ? d.text : item.text,
+    why: reword && typeof d.why === "string" ? d.why : item.why || "",
+    kind: item.kind,
+    about: Array.isArray(item.about) ? item.about : [],
+  };
+  const fieldSecret = secretIn(final.about.filter((p) => typeof p === "string"), named);
+  if (fieldSecret) return { outcome: "refused", pattern: fieldSecret.pattern, part: fieldSecret.part };
+  const problems = validateLesson(final, root);
+  if (problems.length) return { outcome: "invalid", problems };
+  const { refused } = checkAll(final.text, final.why);
+  if (refused) return { outcome: "refused", pattern: refused.pattern, part: refused.part };
+  let slug = first.entry.slug;
+  if (named) {
+    const s = slugOf(named);
+    if (s === GENERAL || (loaded.has(s) && !droppedAreas.has(s))) slug = s;
+    else return { outcome: "invalid", problems: [{ field: "area", message: "No area by that name; name an existing area or General." }] };
+  }
+  let entry = loaded.get(slug);
+  if (!entry) {
+    entry = { slug, file: areaFilePath(root, slug), area: newArea(slug === GENERAL ? "General" : slug, []), existed: false, dirty: false };
+    loaded.set(slug, entry);
+  }
+  const undo = new Map();
+  for (const e of [entry, ...targets.map((t) => t.saved.entry)]) if (!undo.has(e)) undo.set(e, { blocks: [...e.area.blocks], dirty: e.dirty, remove: e.remove });
+  for (const t of targets) {
+    removeBlock(t.saved.entry.area, t.id);
+    t.saved.entry.dirty = true;
+  }
+  const noted = targets.map((t) => t.saved.block.noted).find(Boolean) || `${today}, tidy`;
+  // The targets' search carries over when they hold exactly one between them (as a
+  // move and a reword keep theirs); the kept-over-the-check mark does not, since
+  // the merged wording is a new lesson, as after a Reword.
+  const searches = [...new Map(targets.filter((t) => t.saved.block.search).map((t) => [JSON.stringify(t.saved.block.search), t.saved.block.search])).values()];
+  const block = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted, checked: null, ...(searches.length === 1 ? { search: searches[0] } : {}) };
+  const r = insertBlock(entry.area, block, { general: slug === GENERAL });
+  if (r.full || r.duplicate) {
+    for (const [e, was] of undo) {
+      e.area.blocks = was.blocks;
+      e.dirty = was.dirty;
+      e.remove = was.remove;
+    }
+    return { outcome: r.full ? "needsRoom" : "duplicate", area: r.full ? "General" : entry.area.name };
+  }
+  entry.dirty = true;
+  for (const t of targets) if (!t.saved.entry.area.blocks.length && t.saved.entry.slug !== GENERAL) t.saved.entry.remove = true;
+  return { outcome: "applied", change: "merge", area: entry.area.name, lesson: lessonId(slug, block.heading), file: rel(root, entry.file) };
 }
 
 function readDecisions(file) {
@@ -1983,6 +2836,8 @@ function placeLessons(root, loaded, droppedAreas, pieces, noted) {
       kind: typeof p.kind === "string" ? p.kind : "correction",
       about: Array.isArray(p.about) ? p.about : splitList(p.about),
     };
+    // A lesson moved whole keeps its search and its marks.
+    const keep = { ...(p.search ? { search: p.search } : {}), ...(p.checked ? { checked: p.checked } : {}), ...(p.keptOverCheck ? { keptOverCheck: true } : {}) };
     const named = typeof p.area === "string" ? p.area : "";
     const fieldSecret = secretIn(final.about.filter((x) => typeof x === "string"), named);
     if (fieldSecret) return { outcome: "refused", pattern: fieldSecret.pattern, part: fieldSecret.part };
@@ -1990,7 +2845,7 @@ function placeLessons(root, loaded, droppedAreas, pieces, noted) {
     if (problems.length) return { outcome: "invalid", problems };
     const { refused } = checkAll(final.text, final.why);
     if (refused) return { outcome: "refused", pattern: refused.pattern, part: refused.part };
-    finals.push({ final, named });
+    finals.push({ final, named, keep });
   }
   const saved = new Map();
   const created = [];
@@ -2002,7 +2857,7 @@ function placeLessons(root, loaded, droppedAreas, pieces, noted) {
     for (const slug of created) loaded.delete(slug);
   };
   const placed = [];
-  for (const { final, named } of finals) {
+  for (const { final, named, keep } of finals) {
     let slug;
     if (named && slugOf(named) === GENERAL) slug = GENERAL;
     else if (named && loaded.has(slugOf(named)) && !droppedAreas.has(slugOf(named))) slug = slugOf(named);
@@ -2014,7 +2869,7 @@ function placeLessons(root, loaded, droppedAreas, pieces, noted) {
       created.push(slug);
     }
     if (!saved.has(entry)) saved.set(entry, { blocks: [...entry.area.blocks], dirty: entry.dirty });
-    const block = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted, checked: null };
+    const block = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted, checked: null, ...keep };
     const r = insertBlock(entry.area, block, { general: slug === GENERAL });
     if (r.full || r.duplicate) {
       restore();
@@ -2108,7 +2963,7 @@ async function cmdDecide(L, root, args) {
   const settledGone = new Set();
   const droppedAreas = new Set();
   const results = [];
-  const counts = { kept: 0, reworded: 0, retired: 0, applied: 0, moved: 0, created: 0, dropped: 0 };
+  const counts = { kept: 0, reworded: 0, retired: 0, applied: 0, moved: 0, created: 0, dropped: 0, tidied: 0, left: 0 };
   const today = isoDate(now());
 
   // Waiting items go only after every file is written (below), so a failure
@@ -2170,6 +3025,15 @@ async function cmdDecide(L, root, args) {
       }
       setDoc(agentsFile, withoutBullet(text, item.text));
       counts.moved++;
+      results.push({ id: d.id, ...r });
+      continue;
+    }
+    if (item.type === "tidy") {
+      const r = decideTidy(root, loaded, droppedAreas, item, d, today);
+      // Settled whatever cannot be retried: applied, left, or targets gone since it was noted.
+      if (r.outcome === "applied" || r.outcome === "left" || r.outcome === "outOfDate") drop(d.id);
+      if (r.outcome === "applied") counts.tidied++;
+      if (r.outcome === "left") counts.left++;
       results.push({ id: d.id, ...r });
       continue;
     }
@@ -2306,6 +3170,7 @@ async function cmdDecide(L, root, args) {
       continue;
     }
     const problems = validateLesson(final, root);
+    if (isSaidNoWhy(final.why)) problems.push({ field: "why", message: "The Why is still the placeholder for a lesson noted with no reason; Reword it with why it matters." });
     if (problems.length) {
       results.push({ id: d.id, outcome: "invalid", problems });
       continue;
@@ -2325,7 +3190,9 @@ async function cmdDecide(L, root, args) {
       entry = { slug: target.slug, file: areaFilePath(root, target.slug), area: newArea(target.slug === GENERAL ? "General" : target.slug, []), existed: false, dirty: false };
       loaded.set(target.slug, entry);
     }
-    const block = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted: `${today}, ${skill}`, checked: null };
+    // Keep or Reword over a check that found a Fail is recorded on the saved lesson.
+    const overCheck = checkIsFresh(root, item) && Object.values(item.check.tests).some((t) => t.verdict === "Fail");
+    const block = { heading: final.text.trim(), kind: final.kind, about: final.about, why: final.why.trim(), noted: `${today}, ${skill}`, checked: null, ...(item.search ? { search: item.search } : {}), ...(overCheck ? { keptOverCheck: true } : {}) };
     const r = insertBlock(entry.area, block, { general: target.slug === GENERAL });
     if (r.full) {
       results.push({ id: d.id, outcome: "needsRoom", area: "General" });
@@ -2366,6 +3233,20 @@ async function cmdDecide(L, root, args) {
   out({ ok: true, state: s.state, active: s.active, written: written.sort(), stillWaiting, results, closing: closingLine(counts, stillWaiting), dryRun });
 }
 
+async function cmdFollow(L, root, args) {
+  if (typeof args.lesson !== "string" || !args.lesson.trim()) fail(EXIT.USAGE, "missing-value", "follow needs --lesson, the id of the lesson followed.", "Run: lessons.mjs follow --lesson <lesson id> --skill <name>.");
+  if (typeof args.skill !== "string" || !args.skill.trim() || /[\r\n]/.test(args.skill) || args.skill.trim().length > 40) fail(EXIT.USAGE, "missing-value", "follow needs --skill, the skill's name (one line, at most 40 characters).", "Add --skill <name>, for example --skill implement.");
+  const s = stateOf(L, root);
+  if (!s.active) {
+    out({ ok: true, state: s.state, active: s.active, noted: false });
+    return;
+  }
+  const saved = findLesson(loadAreas(root), args.lesson.trim());
+  if (!saved) fail(EXIT.INVALID, "unknown-lesson", "No saved lesson has that id.", "Use an id read returned: lessons.mjs read.", { state: s.state, active: s.active });
+  L.recordFollow(root, { lesson: lessonId(saved.entry.slug, saved.block.heading), skill: args.skill.trim() }, now());
+  out({ ok: true, state: s.state, active: s.active, noted: true });
+}
+
 const COMMANDS = {
   state: cmdState,
   switch: cmdSwitch,
@@ -2374,17 +3255,21 @@ const COMMANDS = {
   check: cmdCheck,
   note: cmdNote,
   list: cmdList,
+  "check-input": cmdCheckInput,
+  "tidy-input": cmdTidyInput,
+  "check-record": cmdCheckRecord,
   decide: cmdDecide,
   "log-lines": cmdLogLines,
   areas: cmdAreas,
   report: cmdReport,
+  follow: cmdFollow,
   remove: cmdRemove,
 };
 
 async function main(argv) {
   const args = parseArgs(argv, {
-    values: ["root", "type", "text", "why", "kind", "about", "source", "seen", "skill", "area", "name", "paths", "file", "run", "target", "found", "before", "after", "test-map-row"],
-    booleans: ["dry-run", "suggest", "first-ask", "from-banner", "all", "log-all", "confirm"],
+    values: ["root", "type", "text", "why", "kind", "about", "source", "seen", "skill", "area", "name", "paths", "file", "run", "lesson", "target", "found", "before", "after", "test-map-row", "shows-in", "match", "text-match", "check", "check-failed", "change", "targets", "reason"],
+    booleans: ["dry-run", "suggest", "first-ask", "from-banner", "all", "log-all", "confirm", "tidy"],
   });
   const start = path.resolve(args.root || process.cwd());
   const cmd = args._[0];

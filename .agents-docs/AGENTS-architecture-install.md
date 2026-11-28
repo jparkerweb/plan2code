@@ -17,7 +17,8 @@ plan2code/
 │   │   └── trail.md                        # Every-response map visual + pathed resume command
 │   ├── shared-references/              # Reference files shared across skills
 │   │   ├── building-habits.md              # Find the cause, test first, pin behavior (quick-task, implement, implement-review, test)
-│   │   ├── helper-strength.md              # How strong a model and how much effort each helper gets (init, init-update, pathfinder, plan, revise-plan, document, quick-task, implement, implement-review, review, finalize, xray, diagnose, pr-prep, test)
+│   │   ├── helper-strength.md              # How strong a model and how much effort each helper gets (dashboard, for the lesson check only, init, init-update, pathfinder, plan, revise-plan, document, quick-task, implement, implement-review, review, finalize, xray, diagnose, pr-prep, test)
+│   │   ├── lesson-check.md                 # Learning: the lesson checker's brief, four tests, verdicts and reasons, never edits (dashboard, implement, implement-review, review, quick-task, xray, diagnose, test)
 │   │   ├── lessons.md                      # Learning: the fixed words and when a skill runs each `lessons.mjs` command (dashboard, pathfinder, plan, revise-plan, document, implement, implement-review, review, finalize, quick-task, xray, diagnose, pr-prep, test, dead-code, ui-prototype)
 │   │   ├── review-in-build.md              # The review a building skill runs on its own work (quick-task, implement, implement-review, review, finalize, dead-code)
 │   │   └── test-runs.md                    # Choosing what tests to run: targeted per task and phase, full suite only where the plan puts it (document, implement, implement-review, quick-task, review, finalize, pr-prep, test, dead-code)

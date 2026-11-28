@@ -41,6 +41,7 @@ import {
   lessonDecision,
   lessonMissing,
   lessonEditStart,
+  lessonEditField,
   lessonReworded,
   startsTicked,
 } from "../answers.js";
@@ -1825,6 +1826,8 @@ function buildLessons(card, item, staged) {
   };
 
   if (item.opening) card.appendChild(el("p", "lessons-opening", item.opening));
+  const how = lessonsCheckedLine(item.checked);
+  if (how) card.appendChild(el("p", "lessons-checked", how));
   const list = el("ul", "lessons-rows");
   for (const row of item.rows || []) list.appendChild(lessonRow(item, row, draft, commit));
   card.appendChild(list);
@@ -1850,6 +1853,61 @@ function buildLessons(card, item, staged) {
   commentField(card, item, "Anything to add?");
 }
 
+const plural = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+// The card's one how-checked line, or "" when the card carries none.
+function lessonsCheckedLine(checked) {
+  if (!checked || typeof checked !== "object") return "";
+  if (typeof checked.failed === "string") return `The check could not run: ${checked.failed}`;
+  const by = checked.how === "helper" ? "a fresh helper that could only read" : checked.how === "same-agent" ? "the same agent that noted them" : "";
+  if (!by) return "";
+  return `Checked ${plural(checked.count, "lesson")} in ${plural(checked.seconds, "second")} by ${by}`;
+}
+
+// What the check found on one row: each Fail then each Doubt on a line of its
+// own, then a quiet pass line. Nothing at all for a row the check never saw.
+function lessonCheckLines(li, item, row, draft, commit) {
+  const check = row.check;
+  if (!check || typeof check !== "object") return;
+  const fails = Array.isArray(check.fails) ? check.fails : [];
+  const doubts = Array.isArray(check.doubts) ? check.doubts : [];
+  const box = el("div", "lesson-checks");
+  for (const [word, list] of [["Fail", fails], ["Doubt", doubts]]) {
+    for (const e of list) {
+      const line = el("p", "lesson-check " + word.toLowerCase());
+      line.appendChild(el("span", "lesson-check-word", word));
+      line.appendChild(document.createTextNode(` ${e.test}: ${e.reason}`));
+      box.appendChild(line);
+    }
+  }
+  const found = fails.length + doubts.length;
+  // With all four tests flagged there is nothing left that passed.
+  if (!found || check.passed !== 0) box.appendChild(el("p", "lesson-check-pass", found && Number.isInteger(check.passed) ? `Passed the other ${check.passed}` : "Passed the check"));
+  if (check.suggestion) {
+    const sug = el("p", "lesson-suggestion");
+    sug.appendChild(el("span", null, `Suggested wording: ${check.suggestion}`));
+    const use = el("button", "btn sm", "Use this wording");
+    use.type = "button";
+    use.id = `lesson-use-${item.id}-${row.id}`;
+    use.addEventListener("click", () => {
+      // Picks Reword and opens it on the suggestion; what is sent is a
+      // normal Reword of whatever the person leaves in the box.
+      const word = LESSON_EDIT_WORD[row.type];
+      draft.picks[row.id] = (row.choices || []).includes(word) ? word : "Reword";
+      draft.leaveAll = false;
+      // Only the words change: a Why or Area already typed stays.
+      const start = lessonEditStart(row, check.suggestion);
+      const key = lessonEditField(row).key;
+      draft.edits[row.id] = { ...(draft.edits[row.id] || start), [key]: start[key] };
+      commit(true);
+      document.getElementById(use.id)?.focus();
+    });
+    sug.appendChild(use);
+    box.appendChild(sug);
+  }
+  li.appendChild(box);
+}
+
 // One waiting item: what it is, why, where it came from, and its own choices.
 function lessonRow(item, row, draft, commit) {
   const pick = draft.picks[row.id] || "";
@@ -1868,6 +1926,16 @@ function lessonRow(item, row, draft, commit) {
     pair.appendChild(el("p", "lessons-fix-label", "After"));
     pair.appendChild(el("blockquote", "lessons-after", row.after || row.text || ""));
     li.appendChild(pair);
+  } else if (row.type === "tidy") {
+    li.appendChild(el("p", "lessons-text", row.text));
+    // A merge or reword replaces lessons already saved: show them, so the change reads whole.
+    const was = (row.targets || []).filter((t) => t && t.text);
+    if ((row.change === "merge" || row.change === "reword") && was.length) {
+      li.appendChild(el("p", "lessons-heading", row.change === "merge" ? "It replaces these lessons:" : "It replaces this wording:"));
+      const ul = el("ul", "lessons-become");
+      for (const t of was) ul.appendChild(el("li", null, t.text));
+      li.appendChild(ul);
+    }
   } else if (row.type === "log-line") {
     li.appendChild(el("p", "lessons-text", row.text));
     const become = (row.lessons || []).filter(Boolean);
@@ -1885,6 +1953,8 @@ function lessonRow(item, row, draft, commit) {
   // The doubt's and the fix's origin repeat what is drawn above them.
   if (row.origin && !["doubt", "gone", "agents-fix"].includes(row.type)) li.appendChild(el("p", "lessons-origin", row.origin));
   if (row.note) li.appendChild(el("p", "lessons-note", row.note));
+  if (row.tag) li.appendChild(el("p", "lessons-tag", row.tag));
+  lessonCheckLines(li, item, row, draft, commit);
 
   for (const f of Array.isArray(row.flags) ? row.flags : []) {
     const what = FLAG_WORDS[f && f.pattern] || "something personal";

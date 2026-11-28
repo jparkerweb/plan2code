@@ -191,11 +191,11 @@ export function answerLines(item, v) {
 
 // The choice that keeps a row as it stands, per row type (FR-15). A refused
 // row cannot take it until it is reworded.
-export const LESSON_KEEP_WORD = { lesson: "Keep", doubt: "Keep", gone: "Keep", "agents-fix": "Apply", "log-line": "Move", area: "Create" };
+export const LESSON_KEEP_WORD = { lesson: "Keep", doubt: "Keep", gone: "Keep", "agents-fix": "Apply", tidy: "Apply", "log-line": "Move", area: "Create" };
 // The choices that open the row for editing.
 export const LESSON_EDIT_WORDS = new Set(["Reword", "Reword and move", "Rename"]);
 // The edit word per row type: what a refused row's keep word goes back to.
-export const LESSON_EDIT_WORD = { lesson: "Reword", doubt: "Reword", gone: "Reword", "agents-fix": "Reword", "log-line": "Reword and move", area: "Rename" };
+export const LESSON_EDIT_WORD = { lesson: "Reword", doubt: "Reword", gone: "Reword", "agents-fix": "Reword", tidy: "Reword", "log-line": "Reword and move", area: "Rename" };
 // The first ask's answers, as the agent reads them.
 export const FIRST_ASK_WORDS = { yes: "Switch Learning on", no: "Not for this project" };
 
@@ -211,12 +211,17 @@ export function lessonEditField(row) {
 // list gave none (a refused line comes masked and with none).
 const logLessons = (row) => (Array.isArray(row.lessons) && row.lessons.length ? row.lessons.map(String) : [row.text || ""]);
 
-/** The edit fields' first values: the row as it stands. */
-export function lessonEditStart(row) {
-  if (row.type === "agents-fix") return { after: lessonOriginal(row) };
-  if (row.type === "area") return { name: lessonOriginal(row), paths: [...(row.paths || [])] };
-  if (row.type === "log-line") return { lessons: logLessons(row), why: row.why || "", area: row.area || "" };
-  return { text: lessonOriginal(row), why: row.why || "", area: row.area || "" };
+/**
+ * The edit fields' first values: the row as it stands, or its text replaced by
+ * `prefill` (a suggested wording) when one is given.
+ */
+export function lessonEditStart(row, prefill) {
+  const given = typeof prefill === "string" && prefill.trim() ? prefill : null;
+  if (row.type === "agents-fix") return { after: given ?? lessonOriginal(row) };
+  if (row.type === "area") return { name: given ?? lessonOriginal(row), paths: [...(row.paths || [])] };
+  if (row.type === "log-line") return { lessons: given ? [given] : logLessons(row), why: row.why || "", area: row.area || "" };
+  if (row.type === "tidy") return { text: given ?? lessonOriginal(row), why: row.wordingWhy || "", area: row.area || "" };
+  return { text: given ?? lessonOriginal(row), why: row.why || "", area: row.area || "" };
 }
 
 /**
@@ -227,6 +232,8 @@ export function lessonOriginal(row) {
   if (row.type === "agents-fix") return row.after || row.text || "";
   if (row.type === "area") return row.name || row.text || "";
   if (row.type === "log-line") return logLessons(row).join("\n");
+  // A tidy row's words are the new wording, not the sentence describing the change.
+  if (row.type === "tidy") return row.wording || "";
   return row.text || "";
 }
 
@@ -267,7 +274,8 @@ export function lessonDecision(row, choice, edit = {}) {
     }
     return out;
   }
-  const why = typeof edit.why === "string" ? edit.why.trim() : row.why || "";
+  const baseWhy = row.type === "tidy" ? row.wordingWhy || "" : row.why || "";
+  const why = typeof edit.why === "string" ? edit.why.trim() : baseWhy;
   const area = typeof edit.area === "string" && edit.area && edit.area !== (row.area || "") ? edit.area : "";
   if (row.type === "log-line") {
     const texts = typed.split("\n");
@@ -275,7 +283,7 @@ export function lessonDecision(row, choice, edit = {}) {
   }
   const out = { ...d, text: typed };
   // An emptied Why is sent as "", so decide does not keep the old one.
-  if (why || (typeof edit.why === "string" && row.why)) out.why = why;
+  if (why || (typeof edit.why === "string" && baseWhy)) out.why = why;
   if (area) out.area = area;
   return out;
 }
@@ -294,7 +302,7 @@ export function lessonMissing(row, decision) {
 /** The words one decision reads as: "Keep: <text>", "Reword: <new text>", "Apply: <file>". */
 export function lessonDecisionLine(row, d) {
   const shown =
-    d.choice === "Apply"
+    d.choice === "Apply" && !(row && row.type === "tidy")
       ? (row && row.file) || "AGENTS.md"
       : Array.isArray(d.lessons)
         ? d.lessons.map((l) => (l && l.text) || "").join(" / ")
@@ -982,13 +990,14 @@ export function deleteReply(spec) {
 // A Learning control on the dashboard (screens/learning-row.js and the
 // waiting banner). No hop: the dashboard agent runs lessons.mjs for it. Plain
 // wording, no em dashes: these lines are read by the agent.
-export const LEARNING_ACTIONS = ["review", "switch-on", "switch-off", "move-log", "remove"];
+export const LEARNING_ACTIONS = ["review", "switch-on", "switch-off", "move-log", "remove", "tidy"];
 const LEARNING_REPLIES = {
   review: "Review the waiting lessons.",
   "switch-on": "Switch Learning on for this project.",
   "switch-off": "Switch Learning off for this project.",
   "move-log": "Move the failure log into lessons.",
   remove: "Remove all saved lessons from this project. Learning stays on.",
+  tidy: "Tidy up the saved lessons: propose merges, rewords, retires and moves.",
 };
 export function learningAction(what) {
   if (!LEARNING_ACTIONS.includes(what)) throw new Error("unknown Learning action: " + what);
@@ -1014,6 +1023,13 @@ export function learningBannerText(learning) {
   const n = learning.waiting;
   const d = Number.isInteger(learning.oldestDays) ? learning.oldestDays : 0;
   return `${n} ${n === 1 ? "lesson is" : "lessons are"} waiting for your review (oldest ${d} ${d === 1 ? "day" : "days"}).`;
+}
+
+// The tidy-up nudge's line, or "" when it shows nothing: the saved lessons are
+// near their limit (the scan's nearCap) and Learning is on.
+export function learningNearCapText(learning) {
+  if (!learning || learning.state !== "on" || learning.nearCap !== true) return "";
+  return "Lessons are nearing their limit. Tidy up?";
 }
 
 // What the delete dialog says about the spec, from the scan alone. `touched`

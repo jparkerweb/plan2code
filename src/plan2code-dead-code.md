@@ -14,7 +14,7 @@ The FIRST thing you do, before anything else in this file, before running a scri
 
 Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything it says about slow suites or code reached by name. Dead Code still works without one, but the test map is what tells it which tests and build to run after a removal; without it the scripts read the project's config files, and the person confirms the commands.
 
-**Lessons:** follow `references/lessons.md` → Start and While working.
+**Lessons:** follow `references/lessons.md` → Start and While working; note only what the person asks you to remember (references/lessons.md, While working).
 
 ## Scripts
 

@@ -155,6 +155,7 @@ function moreMenu() {
   };
   list.append(
     item("Switch off for this project", () => hooks.sendLearning("switch-off")),
+    item("Tidy up lessons", () => hooks.sendLearning("tidy")),
     item("Move the failure log into lessons", () => hooks.sendLearning("move-log")),
     item("Remove all lessons…", () => openRemoveConfirm(), " is-danger")
   );
@@ -504,6 +505,49 @@ function openRemoveConfirm() {
   dlg.showModal();
 }
 
+// The same slug lessons.mjs gives a lesson's heading (slugOf), so a lesson's id
+// is `<file name without .md>/<slug>` here as there.
+function slugOf(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
+}
+
+/** "Followed 12 times, last on Nov 20", "Followed once, last on Nov 20" or "Not followed yet". */
+function followLine(entry) {
+  if (!entry || !(entry.count > 0)) return "Not followed yet";
+  const last = shortDate(entry.last);
+  const times = entry.count === 1 ? "once" : `${entry.count} times`;
+  return `Followed ${times}${last ? ", last on " + last : ""}`;
+}
+
+// One file's text through the page's Markdown, a quiet follow line under each
+// lesson's heading (a "### " line).
+function appendLessonText(part, file, follows) {
+  const area = String(file.name || "").replace(/\.md$/i, "");
+  const chunks = String(file.text || "").split(/\r?\n(?=### )/);
+  const add = (text) => {
+    if (!text.trim()) return;
+    const div = el("div", "md");
+    mdInto(div, text);
+    part.appendChild(div);
+  };
+  for (const chunk of chunks) {
+    const m = /^### (.+?)\s*(?:\r?\n|$)/.exec(chunk);
+    if (!m) {
+      add(chunk);
+      continue;
+    }
+    add(m[0]);
+    const line = el("p", "learn-follow", followLine(follows[`${area}/${slugOf(m[1])}`]));
+    part.appendChild(line);
+    add(chunk.slice(m[0].length));
+  }
+}
+
 // Open the lessons: every lesson file, read-only, through the page's Markdown.
 async function openLessons() {
   let dlg = document.getElementById("learn-lessons-modal");
@@ -525,7 +569,7 @@ async function openLessons() {
   try {
     const res = await fetch("/learning/lessons", { cache: "no-store" });
     if (res.status !== 200) throw new Error(String(res.status));
-    const { files } = await res.json();
+    const { files, follows } = await res.json();
     body.replaceChildren();
     if (!files || !files.length) {
       body.appendChild(el("p", "md-p", "No lessons are saved in this project yet."));
@@ -534,9 +578,7 @@ async function openLessons() {
     for (const f of files) {
       const part = el("section", "learn-lessons-file");
       part.appendChild(el("p", "learn-lessons-name", f.name));
-      const text = el("div", "md");
-      mdInto(text, f.text || "");
-      part.appendChild(text);
+      appendLessonText(part, f, follows || {});
       body.appendChild(part);
     }
   } catch {

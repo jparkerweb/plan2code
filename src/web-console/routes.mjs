@@ -52,7 +52,7 @@ import { cleanSetting, offered } from "./public/subagents.js";
 import { DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, accentId, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
-import { learningScan, learningState, writePause } from "./learning.mjs";
+import { followCounts, learningScan, learningState, writePause } from "./learning.mjs";
 import { linkToOpen, openFile, openLink } from "./open-link.mjs";
 import {
   NotepadError,
@@ -743,7 +743,9 @@ function readLessonFiles(worktree) {
 }
 
 function learningLessons(req, res, ctx) {
-  return json(res, 200, { files: readLessonFiles(ctx.worktree() || ctx.project) }, { "cache-control": "no-store" });
+  const project = ctx.worktree() || ctx.project;
+  // follows: how often each saved lesson was followed, read from this machine's store.
+  return json(res, 200, { files: readLessonFiles(project), follows: followCounts(project) }, { "cache-control": "no-store" });
 }
 
 // What an unknown git host is, for the git board's pull-request link. Saved

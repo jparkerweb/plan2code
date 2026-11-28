@@ -14,9 +14,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { ENV, HOME, LEARNING_DIR, ROOT, cli, postPatch, readState, sessionUrl } from "./web-console-test-helpers.mjs";
-import { learningScan, storeDir, writePause, writeWaiting } from "../src/web-console/learning.mjs";
+import { followCounts, learningScan, lessonsNearCap, recordFollow, storeDir, writePause, writeWaiting } from "../src/web-console/learning.mjs";
 import { sessionActions } from "../src/web-console/cmd-post-wait.mjs";
-import { indentReply, learningAction, learningBannerText, learningReply, lessonsReply } from "../src/web-console/public/answers.js";
+import { indentReply, learningAction, learningBannerText, learningNearCapText, learningReply, lessonDecisionLine, lessonsReply } from "../src/web-console/public/answers.js";
 
 const LESSONS = path.join(ROOT, "src", "skill-scripts", "lessons.mjs");
 
@@ -67,7 +67,7 @@ function dashboard(t, dir) {
 test("scan.learning: not set up, off, on and paused, with the waiting count", (t) => {
   const none = project();
   const s1 = dashboard(t, none);
-  assert.deepEqual(readState(s1.session).scan.learning, { state: "not-set-up", pausedSince: null, waiting: 0, oldestDays: 0 });
+  assert.deepEqual(readState(s1.session).scan.learning, { state: "not-set-up", pausedSince: null, waiting: 0, oldestDays: 0, nearCap: false });
 
   const off = project(SETTINGS("off"));
   assert.equal(readState(dashboard(t, off).session).scan.learning.state, "off");
@@ -76,7 +76,7 @@ test("scan.learning: not set up, off, on and paused, with the waiting count", (t
   const noted = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 60000).toISOString();
   writeWaiting(on, { id: "20261111-120000-abcdef", type: "lesson", text: "A lesson.", noted });
   writeWaiting(on, { id: "20261112-120000-abcdef", type: "lesson", text: "Another.", noted: new Date().toISOString() });
-  assert.deepEqual(readState(dashboard(t, on).session).scan.learning, { state: "on", pausedSince: null, waiting: 2, oldestDays: 2 });
+  assert.deepEqual(readState(dashboard(t, on).session).scan.learning, { state: "on", pausedSince: null, waiting: 2, oldestDays: 2, nearCap: false });
 
   const paused = project(SETTINGS("on"));
   const pause = writePause(paused, true, "2026-11-13T09:00:00.000Z");
@@ -90,6 +90,33 @@ test("scan.learning is absent for a settings format this console does not know",
   const scan = readState(dashboard(t, dir).session).scan;
   assert.ok(scan, "the dashboard still scans");
   assert.equal("learning" in scan, false, "no learning field, so the page draws no row");
+});
+
+// An area file holding `n` lessons.
+const lessonFile = (title, n) =>
+  `# ${title}\n\n` + Array.from({ length: n }, (_, i) => `### Lesson number ${i}\n- Kind: how-it-works\n- About: src/a.js\n- Noted: 2026-11-01, Implement\n`).join("\n");
+
+test("scan.learning.nearCap: true at 22 general lessons or 30 in an area, false below, and only while Learning is on", (t) => {
+  const near = (files) => learningScan(project(files)).nearCap;
+  assert.equal(near({ ...SETTINGS("on") }), false, "no lessons folder");
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/general.md": lessonFile("General", 21) }), false);
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/general.md": lessonFile("General", 22) }), true);
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/general.md": lessonFile("General", 25) }), true);
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/web.md": lessonFile("Web", 29) }), false);
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/web.md": lessonFile("Web", 30) }), true);
+  // 22 is the general file's line only: an area at 22 is not crowded.
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/web.md": lessonFile("Web", 22) }), false);
+  // Either file is enough, and CRLF files count the same.
+  assert.equal(near({ ...SETTINGS("on"), ".plan2code/lessons/general.md": lessonFile("General", 3), ".plan2code/lessons/web.md": lessonFile("Web", 30).replace(/\n/g, "\r\n") }), true);
+  // Not on: no nudge, however full.
+  assert.equal(near({ ...SETTINGS("off"), ".plan2code/lessons/general.md": lessonFile("General", 25) }), false);
+  assert.equal(lessonsNearCap(project({ ".plan2code/lessons/general.md": lessonFile("General", 25) })), true, "the count itself ignores the state");
+  // It reaches the page through the dashboard's scan.
+  const full = project({ ...SETTINGS("on"), ".plan2code/lessons/general.md": lessonFile("General", 23) });
+  assert.equal(readState(dashboard(t, full).session).scan.learning.nearCap, true);
+  const before = listing(full);
+  learningScan(full);
+  assert.deepEqual(listing(full), before, "the scan writes nothing");
 });
 
 test("a failure in Learning's core never fails the scan", () => {
@@ -109,7 +136,7 @@ test("an unreadable learning store reads as empty: on, not paused, nothing waiti
   fs.writeFileSync(store, "not a folder");
   t.after(() => fs.rmSync(store, { force: true }));
   const s = dashboard(t, dir);
-  assert.deepEqual(readState(s.session).scan.learning, { state: "on", pausedSince: null, waiting: 0, oldestDays: 0 });
+  assert.deepEqual(readState(s.session).scan.learning, { state: "on", pausedSince: null, waiting: 0, oldestDays: 0, nearCap: false });
 });
 
 test("the scan reads without pruning: an old waiting item stays on disk", (t) => {
@@ -170,7 +197,7 @@ test("GET /learning/state answers the scan's object, worked out now", async (t) 
   writeWaiting(dir, { id: "20261113-120000-bbbbbb", type: "lesson", text: "New.", noted: new Date().toISOString() });
   const res = await s.get("/learning/state");
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { state: "on", pausedSince: null, waiting: 1, oldestDays: 0 });
+  assert.deepEqual(await res.json(), { state: "on", pausedSince: null, waiting: 1, oldestDays: 0, nearCap: false });
 
   const unknown = dashboard(t, project({ ".plan2code/settings.json": "{}" }));
   assert.deepEqual(await (await unknown.get("/learning/state")).json(), {});
@@ -208,13 +235,37 @@ test("GET /learning/lessons: general first, then the rest by name; no sub-folder
   if (linked) assert.equal(files.some((f) => f.name === "linked.md"), false, "the link out was not followed");
 
   const empty = dashboard(t, project(SETTINGS("on")));
-  assert.deepEqual(await (await empty.get("/learning/lessons")).json(), { files: [] });
+  assert.deepEqual(await (await empty.get("/learning/lessons")).json(), { files: [], follows: {} });
+});
+
+test("followCounts: sums lines per lesson, keeps the latest time and skips an unreadable line", () => {
+  const dir = project(SETTINGS("on"));
+  assert.deepEqual(followCounts(dir), {}, "no file yet");
+  recordFollow(dir, { lesson: "web/a", skill: "implement" }, new Date("2026-11-10T09:00:00Z"));
+  recordFollow(dir, { lesson: "web/a", skill: "quick-task" }, new Date("2026-11-20T09:00:00Z"));
+  recordFollow(dir, { lesson: "web/b", skill: "implement" }, new Date("2026-11-12T09:00:00Z"));
+  fs.appendFileSync(path.join(storeDir(dir), "follows.ndjson"), "{ not json\n\n{\"lesson\":3}\n");
+  recordFollow(dir, { lesson: "web/a", skill: "implement" }, new Date("2026-11-15T09:00:00Z"));
+  assert.deepEqual(followCounts(dir), {
+    "web/a": { count: 3, last: "2026-11-20T09:00:00.000Z" },
+    "web/b": { count: 1, last: "2026-11-12T09:00:00.000Z" },
+  });
+  assert.equal(listing(dir).some((f) => f.includes("follows")), false, "nothing written into the project");
+});
+
+test("GET /learning/lessons carries follows from this machine's store", async (t) => {
+  const dir = project({ ...SETTINGS("on"), ".plan2code/lessons/general.md": "# General\n\n### A lesson\n- Kind: how-it-works\n- About: src/x.js\n- Noted: 2026-11-01, Implement\n" });
+  recordFollow(dir, { lesson: "general/a-lesson", skill: "implement" }, new Date("2026-11-10T09:00:00Z"));
+  recordFollow(dir, { lesson: "general/a-lesson", skill: "implement" }, new Date("2026-11-11T09:00:00Z"));
+  const s = dashboard(t, dir);
+  const body = await (await s.get("/learning/lessons")).json();
+  assert.deepEqual(body.follows, { "general/a-lesson": { count: 2, last: "2026-11-11T09:00:00.000Z" } });
 });
 
 /* ------------------------------------------------- the action and reply */
 
 test("a Learning action reaches the agent whole, and a launch keeps fromBanner", () => {
-  for (const what of ["review", "switch-on", "switch-off", "move-log", "remove"]) {
+  for (const what of ["review", "switch-on", "switch-off", "move-log", "remove", "tidy"]) {
     const action = learningAction(what);
     assert.deepEqual(action, { i: "__learning", type: "learning", do: what });
     assert.deepEqual(sessionActions({ actions: [action] }), [{ i: "__learning", do: what }]);
@@ -233,6 +284,25 @@ test("the waiting banner's line shows only while lessons wait and Learning is on
   assert.equal(learningBannerText({ state: "paused", waiting: 4, oldestDays: 0 }), "");
   assert.equal(learningBannerText({ state: "off", waiting: 4, oldestDays: 0 }), "");
   assert.equal(learningBannerText(undefined), "");
+});
+
+test("the tidy-up nudge's line shows only while Learning is on and the lessons are near their limit", () => {
+  assert.equal(learningNearCapText({ state: "on", waiting: 0, nearCap: true }), "Lessons are nearing their limit. Tidy up?");
+  assert.equal(learningNearCapText({ state: "on", waiting: 3, nearCap: true }), "Lessons are nearing their limit. Tidy up?", "beside the waiting line");
+  assert.equal(learningNearCapText({ state: "on", waiting: 0, nearCap: false }), "");
+  assert.equal(learningNearCapText({ state: "on", waiting: 0 }), "");
+  assert.equal(learningNearCapText({ state: "paused", nearCap: true }), "");
+  assert.equal(learningNearCapText({ state: "off", nearCap: true }), "");
+  assert.equal(learningNearCapText({ state: "not-set-up", nearCap: true }), "");
+  assert.equal(learningNearCapText(undefined), "");
+});
+
+test("a tidy row's decisions read as the change, never as an AGENTS.md file", () => {
+  const retire = { id: "t1", type: "tidy", change: "retire", text: "Retire: Draw the page from state Reason: Git marks it.", choices: ["Apply", "Leave"] };
+  const fix = { id: "f1", type: "agents-fix", file: ".agents-docs/AGENTS-code-style.md", text: "x", choices: ["Apply", "Reword", "Drop"] };
+  assert.equal(lessonDecisionLine(retire, { id: "t1", choice: "Apply" }), "Apply: Retire: Draw the page from state Reason: Git marks it.");
+  assert.equal(lessonDecisionLine(retire, { id: "t1", choice: "Leave" }), "Leave: Retire: Draw the page from state Reason: Git marks it.");
+  assert.equal(lessonDecisionLine(fix, { id: "f1", choice: "Apply" }), "Apply: .agents-docs/AGENTS-code-style.md", "a fix still shows its file");
 });
 
 /* ---------------------------------------------- the lessons card, end to end */

@@ -351,7 +351,7 @@ function makeLearningProject() {
   const note = (text, kind, about) =>
     spawnSync(
       process.execPath,
-      [path.join(ROOT, "src", "skill-scripts", "lessons.mjs"), "note", "--type", "lesson", "--text", text, "--kind", kind, "--about", about, "--source", "said", "--skill", "implement"],
+      [path.join(ROOT, "src", "skill-scripts", "lessons.mjs"), "note", "--type", "lesson", "--text", text, "--kind", kind, "--about", about, "--source", "said", "--skill", "implement", ...(kind === "convention" ? ["--why", "An offset skips rows when the list changes between pages."] : [])],
       { cwd: project, env: ENV, encoding: "utf8" }
     );
   note("Every list endpoint pages with a cursor, never an offset.", "convention", "src/tasks");

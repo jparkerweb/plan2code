@@ -112,6 +112,8 @@
 /* Lessons waiting: the banner nearest the title, in the accent tint. */
 .dash-nudge.learn-banner { border-left-width: 4px; }
 .learn-banner .btn { margin-left: auto; }
+/* Two lines in one banner (lessons waiting, lessons near their limit): each its own row. */
+.learn-banner-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; flex: 1 1 100%; }
 
 /* Open the lessons: each file under its own name. */
 .learn-lessons-file + .learn-lessons-file { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
@@ -120,6 +122,8 @@
    A lesson's title is a long heading: balanced wrapping (tokens.css) halves it, so fill each line. */
 .learn-lessons-file .md { max-width: none; }
 .learn-lessons-file .md-h { text-wrap: wrap; }
+/* One quiet line under a lesson's heading: how often it was followed. */
+.learn-follow { margin: 2px 0 6px; font-size: var(--fs-sm); color: var(--ink-3); }
 
 /* The lessons card (cards.js buildLessons): one block per item, none chosen at first. */
 .lessons-opening { margin: 14px 0 0; font-size: var(--fs-md); color: var(--ink-3); }
@@ -138,6 +142,15 @@
 .lessons-found { font-size: var(--fs-md); color: var(--ink-2); }
 .lessons-origin,
 .lessons-note { font-size: var(--fs-sm); color: var(--ink-3); }
+.lessons-tag { font-size: var(--fs-sm); color: var(--ink-3); font-style: italic; }
+.lessons-checked { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--ink-3); }
+.lesson-checks { margin: 0 0 6px; }
+.lesson-checks p { margin: 0 0 4px; font-size: var(--fs-md); }
+.lesson-check-word { font-weight: 700; margin-right: 2px; }
+.lesson-check.fail { color: var(--warn); }
+.lesson-check.doubt { color: var(--stage); }
+.lesson-checks .lesson-check-pass { color: var(--ink-3); font-size: var(--fs-sm); }
+.lesson-suggestion { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--ink-2); }
 .lessons-fix blockquote {
   margin: 0 0 8px;
   padding: 6px 10px;

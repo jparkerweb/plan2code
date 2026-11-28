@@ -12,6 +12,7 @@ import {
   loopDriving,
   learningBusyNow,
   LEARNING_BUSY_MS,
+  learningBusyLimit,
 } from "../selectors.js";
 import { whenTitle, whenWords } from "../labels.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
@@ -49,6 +50,7 @@ import {
   learningAction,
   learningReply,
   learningBannerText,
+  learningNearCapText,
   noteSwitchShows,
   noteTabEmpty,
   defaultNoteTicks,
@@ -1440,16 +1442,17 @@ function learningBanner(sc) {
   const busy = learningBusyNow(state);
   // Review pressed, or the choices just saved: the banner says what the agent
   // is doing, in the same place, so the wait is never silent.
-  const working = busy && (busy.what === "review" || busy.what === "decide") ? busy : null;
+  const working = busy && (busy.what === "review" || busy.what === "decide" || busy.what === "tidy") ? busy : null;
   const text = learningBannerText(sc && sc.learning);
-  if (!text && !working) return null;
+  const nudge = learningNearCapText(sc && sc.learning);
+  if (!text && !nudge && !working) return null;
   const banner = el("div", "callout is-info dash-nudge learn-banner");
   banner.setAttribute("role", "status");
   if (working) {
     banner.classList.add("is-busy");
     banner.setAttribute("aria-busy", "true");
     const line = el("span", "dash-nudge-text learn-busy");
-    line.append(el("span", "spinner tiny"), document.createTextNode(working.what === "review" ? "Opening lessons…" : "Saving your lessons…"));
+    line.append(el("span", "spinner tiny"), document.createTextNode(working.what === "review" ? "Opening lessons…" : working.what === "tidy" ? "Looking over your lessons…" : "Saving your lessons…"));
     banner.appendChild(line);
     if (working.what === "review") {
       const review = el("button", "btn sm primary", "Review");
@@ -1459,14 +1462,21 @@ function learningBanner(sc) {
     }
     return banner;
   }
-  banner.appendChild(el("span", "dash-nudge-text", text));
-  const review = el("button", "btn sm primary", "Review");
-  review.type = "button";
   const why = hooks.learningBlocked();
-  review.disabled = Boolean(why);
-  if (why) review.title = why;
-  review.addEventListener("click", () => sendLearning("review"));
-  banner.appendChild(review);
+  // Each line is its own row with its own button: lessons waiting, and lessons near their limit.
+  const row = (words, label, what, primary) => {
+    const r = el("div", "learn-banner-row");
+    r.appendChild(el("span", "dash-nudge-text", words));
+    const b = el("button", "btn sm" + (primary ? " primary" : ""), label);
+    b.type = "button";
+    b.disabled = Boolean(why);
+    if (why) b.title = why;
+    b.addEventListener("click", () => sendLearning(what));
+    r.appendChild(b);
+    banner.appendChild(r);
+  };
+  if (text) row(text, "Review", "review", true);
+  if (nudge) row(nudge, "Tidy up", "tidy", !text);
   return banner;
 }
 
@@ -1478,7 +1488,7 @@ function learningBanner(sc) {
 function watchLearningBusy(busy) {
   const timer = setInterval(() => {
     if (page.learningBusy !== busy) return clearInterval(timer);
-    if (Date.now() - busy.at > LEARNING_BUSY_MS) {
+    if (Date.now() - busy.at > learningBusyLimit(busy)) {
       clearInterval(timer);
       page.learningBusy = null;
       redraw();
@@ -1493,8 +1503,8 @@ function watchLearningBusy(busy) {
     if (!busy.seen && Date.now() - busy.at < 3000) return;
     clearInterval(timer);
     page.learningBusy = null;
-    if (busy.what === "review") {
-      const none = hooks.banner("No lessons are waiting any more.", "info");
+    if (busy.what === "review" || busy.what === "tidy") {
+      const none = hooks.banner(busy.what === "tidy" ? "Nothing to tidy up right now." : "No lessons are waiting any more.", "info");
       setTimeout(() => hooks.clearBanner(none), 4000);
     }
     redraw();
@@ -1523,13 +1533,13 @@ export async function sendLearning(what) {
   // the agent answers.
   const sc = scan();
   const from = sc && sc.learning && sc.learning.state;
-  if ((what === "switch-on" || what === "switch-off" || what === "review") && from) {
+  if ((what === "switch-on" || what === "switch-off" || what === "review" || what === "tidy") && from) {
     const busy = { what, from, at: Date.now(), seen: false };
     page.learningBusy = busy;
     redraw();
     // One redraw at the limit, so an action the agent never answers stops spinning.
     setTimeout(redraw, LEARNING_BUSY_MS + 500);
-    if (what === "review") watchLearningBusy(busy);
+    if (what === "review" || what === "tidy") watchLearningBusy(busy);
   }
   try {
     const res = await fetch("/submit", {

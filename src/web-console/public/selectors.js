@@ -15,6 +15,16 @@ export const WORKING_GRACE_MS = 5 * 60 * 1000;
 // How long a Learning action may show as working before the page gives up
 // waiting for the agent (it normally answers in a second or two).
 export const LEARNING_BUSY_MS = 30000;
+// Review and Tidy up first grade every waiting lesson (check-input, a checker,
+// check-record), which often takes longer than LEARNING_BUSY_MS: while the
+// agent is still working on one, the page waits up to this long instead.
+export const LEARNING_CHECK_MS = 5 * 60 * 1000;
+
+/** How long a Learning action may stay busy: LEARNING_CHECK_MS for a Review or Tidy up the agent is still working on, else LEARNING_BUSY_MS. */
+export function learningBusyLimit(busy) {
+  const checking = (busy.what === "review" || busy.what === "tidy") && (page.pendingResult || agentWorking());
+  return checking ? LEARNING_CHECK_MS : LEARNING_BUSY_MS;
+}
 
 /**
  * The Learning action the person just pressed while the agent works on it, or
@@ -31,9 +41,9 @@ export function learningBusyNow(state) {
     page.learningBusy = null;
     return null;
   };
-  if (Date.now() - busy.at > LEARNING_BUSY_MS) return end();
+  if (Date.now() - busy.at > learningBusyLimit(busy)) return end();
   if ((busy.what === "switch-on" || busy.what === "switch-off") && busy.from !== state) return end();
-  if (busy.what === "review" && ((page.S && page.S.items) || []).some((i) => i && i.kind === "lessons" && isOpen(i))) return end();
+  if ((busy.what === "review" || busy.what === "tidy") && ((page.S && page.S.items) || []).some((i) => i && i.kind === "lessons" && isOpen(i))) return end();
   return busy;
 }
 

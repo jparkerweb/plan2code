@@ -7,6 +7,7 @@
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -363,6 +364,76 @@ test("lessons record: parse and render round trip byte for byte, LF and CRLF", (
   assert.equal(record.parseAreaFile(AREA_TEXT.replace(/\n/g, "\r\n")).eol, "\r\n");
 });
 
+const SEARCH_TEXT = [
+  "# Web console",
+  "Paths: src/web-console/**",
+  "",
+  "### Keep the flat keys",
+  "- Kind: convention",
+  "- About: src/web-console/server.mjs",
+  "- Why: a nested key was lost once.",
+  "- Shows in: src/web-console/**/*.js | never matches | localStorage.setItem",
+  "- Noted: 2026-11-01, Implement, checked 2026-11-10, kept over the check",
+  "",
+  "### Run the page test alone",
+  "- Kind: command",
+  "- About: scripts/a.mjs",
+  "- Shows in: scripts/*.mjs | should match | node-test.mjs",
+  "- Noted: 2026-11-02, Quick Task, kept over the check",
+  "",
+  "### An old block with no new fields",
+  "- Kind: how-it-works",
+  "- About: src/a.js",
+  "- Noted: 2026-11-03, Review",
+  "",
+].join("\n");
+
+test("lessons record: a search line and the kept-over-the-check mark parse and round trip, LF and CRLF", () => {
+  for (const text of [SEARCH_TEXT, SEARCH_TEXT.replace(/\n/g, "\r\n"), SEARCH_TEXT.replace(/\n$/, "")]) {
+    const area = record.parseAreaFile(text);
+    assert.equal(record.renderAreaFile(area), text);
+    const [a, b, c] = area.blocks;
+    assert.deepEqual(a.search, { glob: "src/web-console/**/*.js", match: "never", text: "localStorage.setItem" });
+    assert.equal(a.noted, "2026-11-01, Implement");
+    assert.equal(a.checked, "2026-11-10");
+    assert.equal(a.keptOverCheck, true);
+    assert.deepEqual(b.search, { glob: "scripts/*.mjs", match: "should", text: "node-test.mjs" });
+    assert.equal(b.checked, null);
+    assert.equal(b.keptOverCheck, true);
+    assert.equal(c.search, undefined);
+    assert.equal(c.keptOverCheck, undefined);
+    // A fresh render of the parsed block writes the same lines (LF only here).
+    if (!text.includes("\r")) assert.deepEqual(record.renderBlock(a), a.lines.slice(0, record.renderBlock(a).length));
+  }
+});
+
+test("lessons record: a Shows in line that does not parse stays in the block and is reported", () => {
+  const text = ["# A", "", "### One", "- Kind: command", "- About: a.js", "- Shows in: a.js | maybe | x", "- Noted: 2026-11-01, I", ""].join("\n");
+  const area = record.parseAreaFile(text);
+  assert.equal(area.blocks[0].search, undefined);
+  assert.deepEqual(area.blocks[0].badLines, ["- Shows in: a.js | maybe | x"]);
+  assert.equal(record.renderAreaFile(area), text);
+});
+
+test("lessons record: this repository's general.md round trips byte for byte", () => {
+  const file = path.join(import.meta.dirname, "..", ".plan2code", "lessons", "general.md");
+  const text = fs.readFileSync(file, "utf8");
+  assert.equal(record.renderAreaFile(record.parseAreaFile(text)), text);
+});
+
+test("lessons record: searchProblems checks the glob, the match words and the text", () => {
+  assert.deepEqual(record.searchProblems({ glob: "src/**/*.js", match: "should", text: "export default" }), []);
+  const bad = (search) => record.searchProblems(search).length;
+  assert.ok(bad({ glob: "../x/**", match: "should", text: "a" }));
+  assert.ok(bad({ glob: "src\\a.js", match: "should", text: "a" }));
+  assert.ok(bad({ glob: "/abs/a.js", match: "should", text: "a" }));
+  assert.ok(bad({ glob: "src/**", match: "sometimes", text: "a" }));
+  assert.ok(bad({ glob: "src/**", match: "never", text: "" }));
+  assert.ok(bad({ glob: "src/**", match: "never", text: "a | b" }));
+  assert.ok(bad({ glob: "src/**", match: "never", text: "a".repeat(121) }));
+  assert.equal(bad({ glob: "src/**", match: "never", text: "a".repeat(120) }), 0);
+});
+
 test("lessons record: an insert lands at its alphabetical place and leaves every other line alone", () => {
   for (const eolText of ["\n", "\r\n"]) {
     const text = AREA_TEXT.replace(/\n/g, eolText);
@@ -489,7 +560,7 @@ const waitingFiles = (store) =>
         .filter((f) => /waiting[\\/][^\\/]+\.json$/.test(f))
     : [];
 
-const lesson = (text, extra = []) => ["note", "--type", "lesson", "--text", text, "--kind", "convention", "--about", "src/a.js", "--source", "said", "--skill", "Implement", ...extra];
+const lesson = (text, extra = []) => ["note", "--type", "lesson", "--text", text, "--kind", "convention", "--about", "src/a.js", "--source", "said", "--skill", "Implement", "--why", "The tests say so.", ...extra];
 
 test("lessons note: each rule refuses with exit 4 invalid-lesson", () => {
   const dir = repo();
@@ -499,20 +570,24 @@ test("lessons note: each rule refuses with exit 4 invalid-lesson", () => {
     ["201 characters", lesson("a".repeat(201))],
     ["unknown kind", ["note", "--type", "lesson", "--text", "One rule", "--kind", "rule", "--about", "src/a.js", "--source", "said", "--skill", "I"]],
     ["a correction with no why", ["note", "--type", "lesson", "--text", "One rule", "--kind", "correction", "--about", "src/a.js", "--source", "said", "--skill", "I"]],
-    ["four files", ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--about", "a.js,b.js,c.js,d.js", "--source", "said", "--skill", "I"]],
-    ["a path with ..", ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--about", "../outside.js", "--source", "said", "--skill", "I"]],
-    ["inferred with no seen files", ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--about", "src/a.js", "--source", "inferred", "--skill", "I"]],
+    ["four files", ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--why", "The tests say so.", "--about", "a.js,b.js,c.js,d.js", "--source", "said", "--skill", "I"], "about"],
+    ["a path with ..", ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--why", "The tests say so.", "--about", "../outside.js", "--source", "said", "--skill", "I"], "about"],
+    ["inferred with no seen files", ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--why", "The tests say so.", "--about", "src/a.js", "--source", "inferred", "--skill", "I"], "seen"],
   ];
-  for (const [what, args] of cases) {
+  for (const [what, args, field] of cases) {
     const r = L(dir, args, store);
     assert.equal(r.code, 4, `${what}: ${r.stdout}`);
     assert.equal(r.json.error, "invalid-lesson", what);
     assert.ok(r.json.problems.length >= 1, what);
+    // A case that names its field must fail on that rule, not on another it trips by accident.
+    if (field) assert.deepEqual([...new Set(r.json.problems.map((p) => p.field))], [field], `${what}: ${r.stdout}`);
   }
   assert.equal(L(dir, lesson("Call `a.b()` first. Then `c()`, as in `x. Y`"), store).code, 4, "a second sentence outside code still counts");
   assert.equal(L(dir, lesson("Call `x. Y` before the build"), store).code, 0, "a stop inside a code span is not a sentence end");
   write(dir, "src/web/a.js", "");
-  assert.equal(L(dir, ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--about", "src/web,src/a.js", "--source", "said", "--skill", "I"], store).code, 4, "a folder stands alone");
+  const folder = L(dir, ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--why", "The tests say so.", "--about", "src/web,src/a.js", "--source", "said", "--skill", "I"], store);
+  assert.equal(folder.code, 4, "a folder stands alone");
+  assert.deepEqual(folder.json.problems.map((p) => p.field), ["about"], "a folder stands alone, and only that is wrong");
 });
 
 test("lessons note: a refused secret exits 5 and writes nothing anywhere", () => {
@@ -543,13 +618,81 @@ test("lessons note: a refused secret exits 5 and writes nothing anywhere", () =>
   assert.deepEqual(waitingFiles(store), [], "the waiting folder stays empty");
 });
 
+const SEARCH = ["--shows-in", "src/**/*.js", "--match", "never", "--text-match", "localStorage"];
+
+test("lessons note: a full search is stored on the waiting item", () => {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  const r = L(dir, lesson("Use the flat keys", SEARCH), store);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.noted, true);
+  const file = waitingFiles(store)[0];
+  const item = JSON.parse(fs.readFileSync(path.join(store, file), "utf8"));
+  assert.deepEqual(item.search, { glob: "src/**/*.js", match: "never", text: "localStorage" });
+  const plain = L(dir, lesson("Use another rule"), store);
+  assert.equal(plain.code, 0, plain.stdout);
+  const other = waitingFiles(store).find((f) => f !== file);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(store, other), "utf8")).search, undefined);
+});
+
+test("lessons note: a partial or malformed search, or a convention with no why, exits 4", () => {
+  const dir = repo();
+  const store = learningDir();
+  const cases = [
+    ["only --shows-in", lesson("A rule", ["--shows-in", "src/**"])],
+    ["--shows-in and --match", lesson("A rule", ["--shows-in", "src/**", "--match", "should"])],
+    ["only --text-match", lesson("A rule", ["--text-match", "x"])],
+    ["a glob with ..", lesson("A rule", ["--shows-in", "../x/**", "--match", "should", "--text-match", "x"])],
+    ["a text with a pipe", lesson("A rule", ["--shows-in", "src/**", "--match", "should", "--text-match", "a | b"])],
+    ["a bad match word", lesson("A rule", ["--shows-in", "src/**", "--match", "maybe", "--text-match", "x"])],
+    ["a convention with no why", ["note", "--type", "lesson", "--text", "A rule", "--kind", "convention", "--about", "src/a.js", "--source", "said", "--skill", "I"]],
+  ];
+  for (const [what, args] of cases) {
+    const r = L(dir, args, store);
+    assert.equal(r.code, 4, `${what}: ${r.stdout}`);
+    assert.equal(r.json.error, "invalid-lesson", what);
+  }
+  assert.ok(L(dir, cases[0][1], store).json.problems[0].message.includes("--match"), "a partial set names the missing flags");
+  assert.equal(L(dir, ["note", "--type", "lesson", "--text", "A rule", "--kind", "correction", "--about", "src/a.js", "--source", "said", "--skill", "I"], store).code, 4, "a correction still needs a why");
+  assert.equal(L(dir, ["note", "--type", "lesson", "--text", "A rule", "--kind", "command", "--about", "src/a.js", "--source", "said", "--skill", "I"], store).code, 0, "a command needs none");
+  assert.deepEqual(waitingFiles(store).length, 1, "only the command was held");
+});
+
+test("lessons note: a secret-shaped search text exits 5 and writes nothing", () => {
+  const dir = repo();
+  const store = learningDir();
+  const [bad] = SECRETS["github-token"];
+  const r = L(dir, lesson("A rule", ["--shows-in", "src/**", "--match", "never", "--text-match", bad]), store);
+  assert.equal(r.code, 5, r.stdout);
+  assert.equal(r.json.error, "secret");
+  assert.ok(!r.stdout.includes(bad));
+  assert.deepEqual(waitingFiles(store), []);
+});
+
+test("lessons note: an inferred lesson from a read-only skill is refused, and said or another skill is accepted", () => {
+  const dir = repo();
+  const store = learningDir();
+  const inferred = (skill) => ["note", "--type", "lesson", "--text", "A rule", "--kind", "command", "--about", "src/a.js", "--source", "inferred", "--seen", "src/a.js", "--skill", skill];
+  for (const skill of ["plan", "plan2code-1-plan", "finalize", "dead-code", "Dead Code", "PR Prep", "UI Prototype", "Revise plan"]) {
+    const r = L(dir, inferred(skill), store);
+    assert.equal(r.code, 5, `${skill}: ${r.stdout}`);
+    assert.equal(r.json.error, "inferred-from-read-only");
+  }
+  assert.deepEqual(waitingFiles(store), [], "nothing was written");
+  const said = L(dir, ["note", "--type", "lesson", "--text", "A rule", "--kind", "command", "--about", "src/a.js", "--source", "said", "--skill", "plan"], store);
+  assert.equal(said.code, 0, said.stdout);
+  assert.equal(L(dir, inferred("quick-task"), store).code, 0);
+});
+
 test("lessons note: a skill name with a line break or over 40 characters is refused", () => {
   const dir = repo();
   const store = learningDir();
   for (const skill of ["Implement\n### Injected heading", "x".repeat(41)]) {
-    const r = L(dir, ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--about", "src/a.js", "--source", "said", "--skill", skill], store);
+    const r = L(dir, ["note", "--type", "lesson", "--text", "One rule", "--kind", "convention", "--why", "The tests say so.", "--about", "src/a.js", "--source", "said", "--skill", skill], store);
     assert.equal(r.code, 4, r.stdout);
     assert.equal(r.json.error, "invalid-lesson");
+    assert.deepEqual(r.json.problems.map((p) => p.field), ["skill"], r.stdout);
   }
   assert.deepEqual(waitingFiles(store), []);
 });
@@ -725,7 +868,7 @@ test("lessons list: origin lines, the other-branch note and the main-branch open
   write(dir, "src/only-here.js", "x\n");
   g("add", "-A");
   g("commit", "-q", "-m", "feature file");
-  L(dir, ["note", "--type", "lesson", "--text", "Keep it short", "--kind", "convention", "--about", "src/only-here.js", "--source", "inferred", "--seen", "src/only-here.js,src/b.js", "--skill", "Implement"], store);
+  L(dir, ["note", "--type", "lesson", "--text", "Keep it short", "--kind", "convention", "--about", "src/only-here.js", "--source", "inferred", "--seen", "src/only-here.js,src/b.js", "--skill", "Implement", "--why", "The tests say so."], store);
   const onFeature = L(dir, ["list"], store).json;
   assert.equal(onFeature.opening, null, "not on the default branch");
   assert.equal(onFeature.items[0].note, "");
@@ -805,7 +948,7 @@ test("lessons decide: two branches keeping different lessons in one area merge w
   g("commit", "-q", "-m", "area");
   const keepOn = (branch, text) => {
     g("checkout", "-q", "-b", branch, "main");
-    L(dir, ["note", "--type", "lesson", "--text", text, "--kind", "convention", "--about", "src/web-console/a.mjs", "--source", "said", "--skill", "Implement"], store);
+    L(dir, ["note", "--type", "lesson", "--text", text, "--kind", "convention", "--about", "src/web-console/a.mjs", "--source", "said", "--skill", "Implement", "--why", "The tests say so."], store);
     assert.equal(decide(dir, store, [{ id: ids(dir, store)[0], choice: "Keep" }]).json.results[0].outcome, "kept");
     g("commit", "-q", "-am", branch);
   };
@@ -838,8 +981,8 @@ test("lessons decide: a lesson whose proposed area is dropped lands in a matchin
   settings(dir, { format: 1, learning: "on" });
   write(dir, ".plan2code/lessons/source.md", "# Source\nPaths: src/**\n");
   L(dir, ["note", "--type", "area", "--name", "Web", "--paths", "src/web/**", "--skill", "Implement"], store);
-  L(dir, ["note", "--type", "lesson", "--text", "Web lesson", "--kind", "convention", "--about", "src/web/a.js", "--source", "said", "--skill", "Implement", "--area", "Web"], store);
-  L(dir, ["note", "--type", "lesson", "--text", "Docs lesson", "--kind", "convention", "--about", "docs/a.md", "--source", "said", "--skill", "Implement", "--area", "Web"], store);
+  L(dir, ["note", "--type", "lesson", "--text", "Web lesson", "--kind", "convention", "--about", "src/web/a.js", "--source", "said", "--skill", "Implement", "--why", "The tests say so.", "--area", "Web"], store);
+  L(dir, ["note", "--type", "lesson", "--text", "Docs lesson", "--kind", "convention", "--about", "docs/a.md", "--source", "said", "--skill", "Implement", "--why", "The tests say so.", "--area", "Web"], store);
   const listed = L(dir, ["list"], store).json;
   assert.deepEqual(
     listed.rounds.map((round) => round.type),
@@ -868,7 +1011,7 @@ test("lessons decide: Create then Keep into the new area, Rename, and unknown id
   settings(dir, { format: 1, learning: "on" });
   L(dir, ["note", "--type", "area", "--name", "Web", "--paths", "src/web/**", "--skill", "Implement"], store);
   L(dir, ["note", "--type", "area", "--name", "Docs", "--paths", "docs/**", "--skill", "Implement"], store);
-  L(dir, ["note", "--type", "lesson", "--text", "Web lesson", "--kind", "convention", "--about", "src/web/a.js", "--source", "said", "--skill", "Implement"], store);
+  L(dir, ["note", "--type", "lesson", "--text", "Web lesson", "--kind", "convention", "--about", "src/web/a.js", "--source", "said", "--skill", "Implement", "--why", "The tests say so."], store);
   const [web, docs, one] = idsOf(dir, store, "Web", "Docs", "Web lesson");
   const r = decide(dir, store, [
     { id: one, choice: "Keep" },
@@ -1396,17 +1539,35 @@ test("lessons decide: a doubt kept moves the checked date and nothing else, and 
   assert.equal(marks(dir)[LESSON_ID].marked, false, "the block's own line moved past the edit");
 });
 
+test("lessons decide: a kept lesson carries its search into the file, and a Reword keeps a saved search", () => {
+  const dir = markA();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  const n = L(dir, lesson("Page with a cursor everywhere", ["--about", "src/app.js", "--shows-in", "src/**/*.js", "--match", "never", "--text-match", "offset="]), store);
+  assert.equal(n.code, 0, n.stdout);
+  const kept = decide(dir, store, [{ id: ids(dir, store)[0], choice: "Keep" }]);
+  assert.equal(kept.json.results[0].outcome, "kept", JSON.stringify(kept.json.results));
+  const area = fs.readdirSync(path.join(dir, ".plan2code", "lessons")).map((f) => read(dir, `.plan2code/lessons/${f}`)).join("\n");
+  assert.match(area, /- Shows in: src\/\*\*\/\*\.js \| never matches \| offset=\n- Noted: /);
+  write(dir, WEB_FILE, "# Web\nPaths: src/**\n\n### Keep the handler small\n- Kind: command\n- About: src/app.js\n- Shows in: src/** | should match | handler\n- Noted: 2026-11-01, Implement, kept over the check\n");
+  L(dir, doubt(LESSON_ID), store);
+  const doubtId = L(dir, ["list"], store).json.items.find((i) => i.type === "doubt").id;
+  const r = decide(dir, store, [{ id: doubtId, choice: "Reword", text: "Keep the handler tiny" }]);
+  assert.equal(r.json.results[0].outcome, "reworded", JSON.stringify(r.json.results));
+  assert.match(read(dir, WEB_FILE), /- Shows in: src\/\*\* \| should match \| handler\n/);
+});
+
 test("lessons decide: Reword a doubted lesson re-sorts it, and Retire empties and removes the area file", () => {
   const dir = markA();
   const store = learningDir();
   settings(dir, { format: 1, learning: "on" });
   write(dir, WEB_FILE, WEB_AREA + "\n### Name the handler after its route\n- Kind: convention\n- About: src/app.js\n- Noted: 2026-11-02, Implement\n");
   L(dir, doubt(LESSON_ID), store);
-  const reworded = decide(dir, store, [{ id: ids(dir, store)[0], choice: "Reword", text: "Answer from one small handler" }]);
+  const reworded = decide(dir, store, [{ id: ids(dir, store)[0], choice: "Reword", text: "Answer from one small handler", why: "One handler per route kept them apart." }]);
   assert.equal(reworded.json.results[0].outcome, "reworded", JSON.stringify(reworded.json.results));
   assert.equal(reworded.json.results[0].lesson, "web/answer-from-one-small-handler");
   assert.deepEqual(read(dir, WEB_FILE).match(/^### .*$/gm), ["### Answer from one small handler", "### Name the handler after its route"]);
-  assert.match(read(dir, WEB_FILE), /### Answer from one small handler\n- Kind: convention\n- About: src\/app.js\n- Noted: 2026-11-01, Implement, checked 2026-08-03\n/);
+  assert.match(read(dir, WEB_FILE), /### Answer from one small handler\n- Kind: convention\n- About: src\/app.js\n- Why: One handler per route kept them apart.\n- Noted: 2026-11-01, Implement, checked 2026-08-03\n/);
 
   fs.rmSync(path.join(dir, "src/app.js"));
   const gone = L(dir, ["list"], store).json.items.map((i) => i.id);
@@ -2143,7 +2304,7 @@ test("lessons.md: every line it tells a skill to print is a line the script prin
 
   // "Noted for the end of the run: <the lesson>", from a real note.
   const [noted] = pick("Noted for the end of the run: ");
-  const note = L(dir, ["note", "--type", "lesson", "--text", "Draw the page from the state object", "--kind", "convention", "--about", "src/web/page.js", "--source", "said", "--skill", "Implement"], store);
+  const note = L(dir, ["note", "--type", "lesson", "--text", "Draw the page from the state object", "--kind", "convention", "--about", "src/web/page.js", "--source", "said", "--skill", "Implement", "--why", "The tests say so."], store);
   assert.equal(note.code, 0, note.stderr);
   assert.equal(note.json.line, noted.replace("<the lesson>", "Draw the page from the state object"));
 
@@ -2168,10 +2329,974 @@ test("lessons.mjs: no output string says pending or queued (the fixed word is wa
   const outputs = [L(dir, ["state"], store), L(dir, ["list", "--first-ask"], store)];
   settings(dir, { format: 1, learning: "on" });
   outputs.push(
-    L(dir, ["note", "--type", "lesson", "--text", "Draw the page from the state object", "--kind", "convention", "--about", "README.md", "--source", "said", "--skill", "Implement"], store),
+    L(dir, ["note", "--type", "lesson", "--text", "Draw the page from the state object", "--kind", "convention", "--about", "README.md", "--source", "said", "--skill", "Implement", "--why", "The tests say so."], store),
     L(dir, ["read"], store),
     L(dir, ["list"], store),
     L(dir, ["remove"], store)
   );
   for (const out of outputs) assert.doesNotMatch(out.stdout + out.stderr, BANNED);
+});
+
+/* ------------------------------------------------------------ the check */
+
+const sha = (text) => crypto.createHash("sha256").update(text).digest("hex");
+
+// Run `fn` with the learning store pointed at `store`, for the core's calls.
+function inStore(store, fn) {
+  const before = process.env.PLAN2CODE_LEARNING_DIR;
+  process.env.PLAN2CODE_LEARNING_DIR = store;
+  try {
+    return fn();
+  } finally {
+    if (before === undefined) delete process.env.PLAN2CODE_LEARNING_DIR;
+    else process.env.PLAN2CODE_LEARNING_DIR = before;
+  }
+}
+
+// A waiting lesson written through the core, into a given store. `noted` is a Date.
+const putLesson = (dir, store, id, noted, fields = {}) =>
+  inStore(store, () => core.writeWaiting(dir, { id, type: "lesson", text: `Lesson ${id}`, why: "A reason.", kind: "correction", about: ["src/a.js"], source: "said", skill: "Implement", noted: noted.toISOString(), ...fields }));
+
+// The waiting item as stored now (its check included).
+const storedItem = (dir, store, id) => inStore(store, () => core.listWaiting(dir, nowDate(), { prune: false }).find((w) => w.id === id));
+
+const checkFilesIn = (dir, store) =>
+  inStore(store, () => {
+    const d = path.join(core.storeDir(dir), "checks");
+    return fs.existsSync(d) ? fs.readdirSync(d) : [];
+  });
+
+const passAll = (over = {}) => {
+  const t = (verdict = "Pass", reason = "It holds.") => ({ verdict, reason });
+  return { true: t(), worth: t(), overlap: t(), clear: t(), ...over };
+};
+
+const recordFile = (body) => {
+  const file = path.join(tmp("lessons-check"), "verdicts.json");
+  fs.writeFileSync(file, JSON.stringify(body));
+  return file;
+};
+
+// A learning-on repository with src/a.js, ready for waiting lessons.
+function checkRepo() {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  write(dir, "src/a.js", "export const a = 1;\n");
+  return { dir, store };
+}
+
+test("lessons check-input: 12 waiting lessons give 10 oldest first and 2 in notChecked", () => {
+  const { dir, store } = checkRepo();
+  const order = [];
+  for (let i = 0; i < 12; i++) {
+    const id = `w${String(i).padStart(2, "0")}`;
+    putLesson(dir, store, id, daysBefore(20 - i));
+    order.push(id);
+  }
+  const r = L(dir, ["check-input"], store);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.cap, 10);
+  assert.deepEqual(r.json.lessons.map((l) => l.id), order.slice(0, 10));
+  assert.deepEqual(r.json.notChecked, order.slice(10));
+  assert.match(r.json.checkId, /^[a-z0-9]+-[0-9a-f]{4}$/);
+  assert.equal(checkFilesIn(dir, store).length, 1, "the run's check file is written");
+});
+
+test("lessons check-input: check files over a day old are pruned, newer ones and other files are kept", () => {
+  const { dir, store } = checkRepo();
+  const old = `${(Date.now() - 2 * 24 * 60 * 60 * 1000).toString(36)}-abcd.json`;
+  const recent = `${(Date.now() - 60 * 1000).toString(36)}-beef.json`;
+  inStore(store, () => {
+    const d = path.join(core.storeDir(dir), "checks");
+    fs.mkdirSync(d, { recursive: true });
+    for (const name of [old, recent, "notes.txt"]) fs.writeFileSync(path.join(d, name), "{}");
+  });
+  putLesson(dir, store, "w01", daysBefore(3));
+  const r = L(dir, ["check-input"], store);
+  assert.equal(r.code, 0, r.stderr);
+  const left = checkFilesIn(dir, store);
+  assert.ok(!left.includes(old), "an abandoned check from two days ago is gone");
+  assert.ok(left.includes(recent) && left.includes("notes.txt"), "a check from a minute ago and a file of another shape stay");
+  assert.ok(left.includes(`${r.json.checkId}.json`), "this run's check file is written");
+});
+
+test("lessons check-input: a file lesson is read whole with its hash, and context lists saved and other waiting lessons", () => {
+  const { dir, store } = checkRepo();
+  write(dir, "AGENTS.md", "# A\n");
+  write(dir, ".plan2code/lessons/general.md", "# General\n\n### Saved one\n- Kind: how-it-works\n- About: src/a.js\n- Noted: 2026-01-01, Implement\n");
+  putLesson(dir, store, "w01", daysBefore(3));
+  const r = L(dir, ["check-input"], store);
+  assert.deepEqual(r.json.lessons[0].files, [{ path: "src/a.js", hash: sha("export const a = 1;\n"), read: "whole" }]);
+  assert.equal(r.json.lessons[0].budgetHit, undefined);
+  assert.equal(r.json.context.agentsMd, "AGENTS.md");
+  assert.deepEqual(r.json.context.saved, [{ id: "general/saved-one", text: "Saved one" }]);
+  assert.deepEqual(r.json.context.waiting, []);
+  // Beyond the cap, a lesson is context rather than checked.
+  for (let i = 0; i < 11; i++) putLesson(dir, store, `x${String(i).padStart(2, "0")}`, daysBefore(2));
+  const more = L(dir, ["check-input"], store).json;
+  assert.equal(more.lessons.length, 10);
+  assert.equal(more.context.waiting.length, 2);
+});
+
+test("lessons check-input: a folder lesson stops at 6 files or 60 KB with budgetHit, preferring files that share words", () => {
+  const { dir, store } = checkRepo();
+  for (let i = 0; i < 8; i++) write(dir, `src/many/f${i}.js`, `// ${i}\n`);
+  write(dir, "src/many/zebra-parser.js", "// z\n");
+  putLesson(dir, store, "w01", daysBefore(5), { text: "The zebra parser never trims", about: ["src/many"] });
+  for (let i = 0; i < 3; i++) write(dir, `src/big/b${i}.txt`, "x".repeat(31000));
+  putLesson(dir, store, "w02", daysBefore(4), { text: "Big files", about: ["src/big"] });
+  write(dir, "src/small/s0.js", "// s\n");
+  putLesson(dir, store, "w03", daysBefore(3), { text: "Small folder", about: ["src/small"] });
+  const [many, big, small] = L(dir, ["check-input"], store).json.lessons;
+  assert.equal(many.files.length, 6);
+  assert.equal(many.budgetHit, true);
+  assert.ok(many.files.every((f) => f.read === "sampled"));
+  assert.equal(many.files[0].path, "src/many/zebra-parser.js", "the file sharing words with the lesson comes first");
+  assert.equal(big.files.length, 2, "two 31000 byte files pass the 60 KB budget");
+  assert.equal(big.budgetHit, true);
+  assert.equal(small.files.length, 1);
+  assert.equal(small.budgetHit, undefined);
+});
+
+test("lessons check-input: a lesson whose stored check still holds is skipped, and one whose file changed is due again", () => {
+  const { dir, store } = checkRepo();
+  putLesson(dir, store, "w01", daysBefore(5), { check: { tests: passAll(), how: "helper", files: { "src/a.js": sha("export const a = 1;\n") }, checked: new Date().toISOString(), seconds: 3 } });
+  putLesson(dir, store, "w02", daysBefore(4));
+  assert.deepEqual(L(dir, ["check-input"], store).json.lessons.map((l) => l.id), ["w02"]);
+  write(dir, "src/a.js", "export const a = 2;\n");
+  assert.deepEqual(L(dir, ["check-input"], store).json.lessons.map((l) => l.id), ["w01", "w02"]);
+});
+
+test("lessons search: hits carry file and line, matching is case-exact, node_modules, .git, skills/ and gitignored files are skipped", () => {
+  const dir = repo();
+  write(dir, "src/a.js", "const a = 1;\n\nlocalStorage.setItem('k', 1);\n");
+  write(dir, "src/b.txt", "no match here\n");
+  write(dir, "node_modules/x/index.js", "localStorage\n");
+  write(dir, ".git/hooks/x.js", "localStorage\n");
+  write(dir, "skills/y/z.js", "localStorage\n");
+  write(dir, "src/big.js", "localStorage " + "x".repeat(600 * 1024));
+  write(dir, "src/bin.js", "localStorage\0\n");
+  const found = record.runSearch(dir, { glob: "**/*.js", match: "never", text: "localStorage" });
+  assert.equal(found.matched, true);
+  assert.deepEqual(found.hits, [{ file: "src/a.js", line: 3 }]);
+  assert.equal(found.filesSearched, 1);
+  assert.equal(record.runSearch(dir, { glob: "**/*.js", match: "never", text: "localstorage" }).matched, false, "case-exact");
+  const none = record.runSearch(dir, { glob: "src/**", match: "should", text: "absent text" });
+  assert.deepEqual({ matched: none.matched, hits: none.hits }, { matched: false, hits: [] });
+  write(dir, ".gitignore", "build/\n");
+  write(dir, "build/gen.js", "localStorage\n");
+  assert.deepEqual(record.runSearch(dir, { glob: "**/*.js", match: "never", text: "localStorage" }).hits, [{ file: "src/a.js", line: 3 }], "a gitignored file is never searched");
+  const listed = record.searchFiles(dir);
+  assert.ok(!listed.includes("build/gen.js") && listed.includes("src/a.js"), "the listing leaves ignored files out and keeps untracked ones");
+  assert.deepEqual(record.runSearch(dir, { glob: "build/*.js", match: "never", text: "localStorage" }, ["build/gen.js"]).hits, [{ file: "build/gen.js", line: 1 }], "a list handed in is searched as given");
+  for (let i = 0; i < 30; i++) write(dir, `src/many/m${i}.js`, "localStorage\n");
+  assert.equal(record.runSearch(dir, { glob: "src/many/*.js", match: "never", text: "localStorage" }).hits.length, 20, "at most 20 hits");
+});
+
+test("lessons check-input: a lesson with a search carries its searchResult", () => {
+  const { dir, store } = checkRepo();
+  write(dir, "src/c.js", "localStorage.getItem('x');\n");
+  putLesson(dir, store, "w01", daysBefore(5), { search: { glob: "src/**/*.js", match: "never", text: "localStorage" } });
+  putLesson(dir, store, "w02", daysBefore(4));
+  const [a, b] = L(dir, ["check-input"], store).json.lessons;
+  assert.deepEqual(a.searchResult, { matched: true, hits: [{ file: "src/c.js", line: 1 }], filesSearched: 2 });
+  assert.equal(b.searchResult, undefined);
+});
+
+test("lessons check-record: a good record stores check on each item and removes the check file", () => {
+  const { dir, store } = checkRepo();
+  putLesson(dir, store, "w01", daysBefore(5));
+  putLesson(dir, store, "w02", daysBefore(4));
+  const input = L(dir, ["check-input"], store).json;
+  const file = recordFile({
+    checkId: input.checkId,
+    how: "helper",
+    verdicts: [
+      { id: "w01", tests: passAll({ clear: { verdict: "Doubt", reason: "It could name the file." } }), suggestion: "Use the flat keys for saved numbers" },
+      { id: "w02", tests: passAll() },
+    ],
+  });
+  const r = L(dir, ["check-record", "--file", file], store);
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.equal(r.json.recorded, 2);
+  const one = storedItem(dir, store, "w01").check;
+  assert.equal(one.how, "helper");
+  assert.equal(one.suggestion, "Use the flat keys for saved numbers");
+  assert.equal(one.tests.clear.verdict, "Doubt");
+  assert.deepEqual(one.files, { "src/a.js": sha("export const a = 1;\n") });
+  assert.ok(Number.isFinite(Date.parse(one.checked)) && Number.isInteger(one.seconds));
+  assert.equal(storedItem(dir, store, "w02").check.suggestion, undefined);
+  assert.deepEqual(checkFilesIn(dir, store), [], "the check file is gone");
+  assert.equal(L(dir, ["check-record", "--file", file], store).code, 4, "a check records once");
+});
+
+test("lessons check-record: each malformed verdict exits 4 naming the fault and stores nothing", () => {
+  const { dir, store } = checkRepo();
+  putLesson(dir, store, "w01", daysBefore(5));
+  const { checkId } = L(dir, ["check-input"], store).json;
+  const bad = (body, pattern) => {
+    const r = L(dir, ["check-record", "--file", recordFile({ checkId, how: "helper", verdicts: [{ id: "w01", tests: passAll() }], ...body })], store);
+    assert.equal(r.code, 4, r.stdout);
+    assert.match(r.json.problems.map((p) => p.message).join(" "), pattern);
+    assert.equal(storedItem(dir, store, "w01").check, undefined, "nothing stored");
+  };
+  bad({ checkId: "zzz-0000" }, /checkId/);
+  bad({ checkId: "../x" }, /checkId/);
+  bad({ how: "robot" }, /how must be helper or same-agent/);
+  bad({ verdicts: [{ id: "nope", tests: passAll() }] }, /not in this check's lessons/);
+  bad({ verdicts: [{ id: "w01", tests: { true: { verdict: "Pass", reason: "Ok." } } }] }, /w01\.worth is missing/);
+  bad({ verdicts: [{ id: "w01", tests: passAll({ worth: { verdict: "Maybe", reason: "Ok." } }) }] }, /worth\.verdict must be Pass, Doubt or Fail/);
+  bad({ verdicts: [{ id: "w01", tests: passAll({ worth: { verdict: "Pass", reason: "" } }) }] }, /worth\.reason is empty/);
+  bad({ verdicts: [{ id: "w01", tests: passAll({ worth: { verdict: "Pass", reason: "It holds. It also helps." } }) }] }, /one sentence/);
+  bad({ verdicts: [{ id: "w01", tests: passAll({ worth: { verdict: "Pass", reason: "x".repeat(201) } }) }] }, /at most 200/);
+  bad({ verdicts: [{ id: "w01", tests: passAll() }, { id: "w01", tests: passAll() }] }, /more than one verdict/);
+  bad({ verdicts: [{ id: "w01", tests: passAll({ worth: { verdict: "Pass", reason: 7 } }) }] }, /worth\.reason must be one sentence of text/);
+  const secretReason = "Uses " + "ghp_" + "a1B2".repeat(8) + " in the file.";
+  const leaked = L(dir, ["check-record", "--file", recordFile({ checkId, how: "helper", verdicts: [{ id: "w01", tests: passAll({ worth: { verdict: "Pass", reason: secretReason } }) }] })], store);
+  assert.equal(leaked.code, 4);
+  assert.match(leaked.json.problems[0].message, /secret-shaped/);
+  assert.doesNotMatch(leaked.stdout + leaked.stderr, /ghp_/, "the secret is never echoed");
+  assert.equal(L(dir, ["check-record", "--file", path.join(tmp("lessons-check"), "missing.json")], store).code, 3);
+});
+
+test("lessons check-record: a secret-shaped or invalid suggestion is dropped with a warning, the record still lands", () => {
+  const { dir, store } = checkRepo();
+  putLesson(dir, store, "w01", daysBefore(5));
+  putLesson(dir, store, "w02", daysBefore(4));
+  const { checkId } = L(dir, ["check-input"], store).json;
+  const secret = "Use the token " + "ghp_" + "a1B2".repeat(8);
+  const r = L(dir, ["check-record", "--file", recordFile({ checkId, how: "same-agent", verdicts: [{ id: "w01", tests: passAll(), suggestion: secret }, { id: "w02", tests: passAll(), suggestion: "Two sentences. Not allowed." }] })], store);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.recorded, 2);
+  assert.equal(r.json.problems.length, 2);
+  assert.doesNotMatch(r.stdout + r.stderr, /ghp_/, "the secret is never echoed");
+  assert.equal(storedItem(dir, store, "w01").check.suggestion, undefined);
+  assert.equal(storedItem(dir, store, "w02").check.suggestion, undefined);
+  assert.equal(storedItem(dir, store, "w01").check.how, "same-agent");
+});
+
+// Four waiting lessons, three of them checked the way End does (w04 left out).
+function checkedList() {
+  const { dir, store } = checkRepo();
+  putLesson(dir, store, "w01", daysBefore(5), { text: "Fails a test" });
+  putLesson(dir, store, "w02", daysBefore(4), { text: "Passes all" });
+  putLesson(dir, store, "w03", daysBefore(3), { text: "Doubts only" });
+  putLesson(dir, store, "w04", daysBefore(2), { text: "Never checked" });
+  const input = L(dir, ["check-input"], store).json;
+  const file = recordFile({
+    checkId: input.checkId,
+    how: "helper",
+    verdicts: [
+      { id: "w01", tests: passAll({ true: { verdict: "Fail", reason: "The file does not say so." } }), suggestion: "Say what the file says" },
+      { id: "w02", tests: passAll() },
+      { id: "w03", tests: passAll({ clear: { verdict: "Doubt", reason: "It could be sharper." } }) },
+    ],
+  });
+  const r = L(dir, ["check-record", "--file", file], store);
+  assert.equal(r.code, 0, r.stdout);
+  return { dir, store, input };
+}
+
+test("lessons list: fresh verdicts become row fields and outlines, a Fail suggests Drop, all Pass Keep, Doubts nothing", () => {
+  const { dir, store } = checkedList();
+  const r = L(dir, ["list", "--check", `${(Date.now() - 3_600_000).toString(36)}-abcd`], store).json;
+  const row = (id) => r.card.rows.find((x) => x.id === id);
+  assert.deepEqual(row("w01").check.fails, [{ test: "True against the code", reason: "The file does not say so." }]);
+  assert.equal(row("w01").check.suggestion, "Say what the file says");
+  assert.deepEqual(row("w03").check.doubts, [{ test: "Clear enough", reason: "It could be sharper." }]);
+  assert.equal(row("w02").check.passed, 4);
+  assert.deepEqual(r.card.suggested, { w01: "Drop", w02: "Keep" });
+  assert.equal(row("w01").tag, undefined);
+  assert.equal(row("w04").tag, "Not checked yet");
+  assert.equal(row("w04").check, undefined);
+  assert.deepEqual(Object.keys(r.card.checked), ["how", "count", "seconds"]);
+  assert.equal(r.card.checked.count, 3);
+  assert.equal(r.card.checked.how, "helper");
+  const items = r.rounds.find((x) => x.type === "lesson").items;
+  assert.equal(items.find((i) => i.id === "w01").check.fails.length, 1, "terminal rounds carry the same fields");
+  assert.equal(items.find((i) => i.id === "w04").tag, "Not checked yet");
+});
+
+test("lessons list: --check tags an older verdict, --check-failed says the check could not run", () => {
+  const { dir, store } = checkedList();
+  const later = `${(Date.now() + 3_600_000).toString(36)}-abcd`;
+  const r = L(dir, ["list", "--check", later, "--check-failed", "The helper timed out"], store).json;
+  assert.equal(r.card.rows.find((x) => x.id === "w02").tag, "Checked in an earlier run");
+  assert.deepEqual(r.card.checked, { failed: "The helper timed out" });
+  const earlier = L(dir, ["list", "--check", `${(Date.now() - 3_600_000).toString(36)}-abcd`], store).json;
+  assert.equal(earlier.card.rows.find((x) => x.id === "w02").tag, undefined, "a verdict newer than the run's check has no tag");
+});
+
+test("lessons list: editing a named file drops the verdict and tags the row Not checked yet", () => {
+  const { dir, store } = checkedList();
+  write(dir, "src/a.js", "export const a = 99;\n");
+  const r = L(dir, ["list"], store).json;
+  for (const id of ["w01", "w02", "w03"]) {
+    const row = r.card.rows.find((x) => x.id === id);
+    assert.equal(row.check, undefined);
+    assert.equal(row.tag, "Not checked yet");
+  }
+  assert.equal(r.card.suggested, undefined);
+  assert.equal(r.card.checked, undefined);
+});
+
+test("lessons decide: Keep over a Fail writes kept over the check, Keep over a pass does not", () => {
+  const { dir, store } = checkedList();
+  const r = decide(dir, store, [{ id: "w01", choice: "Keep" }, { id: "w02", choice: "Keep" }]);
+  assert.equal(r.code, 0, r.stdout);
+  const text = fs.readdirSync(path.join(dir, ".plan2code", "lessons")).map((f) => read(dir, `.plan2code/lessons/${f}`)).join("\n");
+  const noted = text.split("\n").filter((l) => l.startsWith("- Noted:"));
+  assert.equal(noted.length, 2);
+  assert.equal(noted.filter((l) => /kept over the check/.test(l)).length, 1);
+  assert.match(text, /### Fails a test\n(?:- [^\n]*\n)*- Noted: [^\n]*, kept over the check/);
+  assert.doesNotMatch(text, /### Passes all\n(?:- [^\n]*\n)*- Noted: [^\n]*kept over the check/);
+});
+
+test("lessons list and decide: a stored check of the wrong shape counts as not checked and never crashes", () => {
+  const { dir, store } = checkRepo();
+  const hash = sha("export const a = 1;\n");
+  const stamp = () => new Date().toISOString();
+  putLesson(dir, store, "w01", daysBefore(5), { text: "No tests object", check: { files: { "src/a.js": hash }, how: "helper", checked: stamp(), seconds: 1 } });
+  putLesson(dir, store, "w02", daysBefore(4), { text: "A null test", check: { tests: { ...passAll(), worth: null }, files: { "src/a.js": hash }, how: "helper", checked: stamp(), seconds: 1 } });
+  putLesson(dir, store, "w03", daysBefore(3), { text: "A path that climbs out", check: { tests: passAll(), files: { "../x": hash }, how: "helper", checked: stamp(), seconds: 1 } });
+  const r = L(dir, ["list"], store);
+  assert.equal(r.code, 0, r.stderr);
+  for (const row of r.json.card.rows) {
+    assert.equal(row.tag, "Not checked yet", row.id);
+    assert.equal(row.check, undefined);
+  }
+  assert.deepEqual(L(dir, ["check-input"], store).json.lessons.map((l) => l.id), ["w01", "w02", "w03"], "each is due a check again");
+  const d = decide(dir, store, [{ id: "w01", choice: "Keep" }, { id: "w02", choice: "Keep" }]);
+  assert.equal(d.code, 0, d.stderr);
+  assert.doesNotMatch(read(dir, ".plan2code/lessons/general.md"), /kept over the check/);
+});
+
+test("lessons decide: Reword over a Fail also writes kept over the check", () => {
+  const { dir, store } = checkedList();
+  const r = decide(dir, store, [{ id: "w01", choice: "Reword", text: "Say what the file says", why: "The file does." }]);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.results[0].outcome, "reworded");
+  const text = fs.readdirSync(path.join(dir, ".plan2code", "lessons")).map((f) => read(dir, `.plan2code/lessons/${f}`)).join("\n");
+  assert.match(text, /### Say what the file says\n(?:- [^\n]*\n)*- Noted: [^\n]*, kept over the check/);
+});
+
+test("lessons check brief: the dashboard and the seven noting skills ship lesson-check.md, no read-only skill does", () => {
+  const shipsBrief = (skill) => fs.existsSync(path.join(SKILLS, skill, "references", "lesson-check.md"));
+  for (const skill of ["plan2code", "plan2code-3-implement", "plan2code-3-implement-review", "plan2code-quick-task", "plan2code-diagnose", "plan2code-xray", "plan2code-review", "plan2code-test"]) {
+    assert.ok(shipsBrief(skill), `${skill} ships references/lesson-check.md`);
+  }
+  const noting = new Set(["plan2code", "plan2code-3-implement", "plan2code-3-implement-review", "plan2code-quick-task", "plan2code-diagnose", "plan2code-xray", "plan2code-review", "plan2code-test"]);
+  for (const skill of fs.readdirSync(SKILLS)) {
+    if (!noting.has(skill) && fs.statSync(path.join(SKILLS, skill)).isDirectory()) assert.ok(!shipsBrief(skill), `${skill} does not ship lesson-check.md`);
+  }
+});
+
+/* ------------------------------------------- read raises doubts for marked lessons */
+
+const SEARCH_AREA = (search, why = "A reason.") => `# Web\nPaths: src/**\n\n### Keep the handler small\n- Kind: convention\n- About: src/app.js\n${why ? `- Why: ${why}\n` : ""}${search ? `- Shows in: ${search}\n` : ""}- Noted: 2026-11-01, Implement\n`;
+// Learning on; the lesson committed with src/app.js, then (when `edit` is set) an edit to that file in a later commit, which marks it.
+const doubtRepo = (name, area, edit) =>
+  copyFixture(name, name, (dir) => {
+    const g = gitInit(dir);
+    write(dir, ".plan2code/settings.json", JSON.stringify({ format: 1, learning: "on" }));
+    write(dir, "README.md", "# Fixture\n");
+    write(dir, "src/app.js", "export const app = 1;\n");
+    write(dir, WEB_FILE, area);
+    commitAll(g, "lesson");
+    if (edit) {
+      write(dir, "src/app.js", edit);
+      commitAll(g, "edit");
+    }
+  });
+const waitingDoubts = (store) =>
+  waitingFiles(store)
+    .map((f) => JSON.parse(fs.readFileSync(path.join(store, f), "utf8")))
+    .filter((w) => w.type === "doubt");
+
+test("lessons read: a marked lesson whose never-matches search now hits raises one waiting doubt, and a second read raises none", () => {
+  const dir = doubtRepo("doubt-never", SEARCH_AREA("src/** | never matches | forbidden("), "export const app = forbidden(1);\n");
+  const store = learningDir();
+  const first = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.equal(first.code, 0, first.stderr);
+  assert.match(first.json.line, /Raised 1 doubt: its search no longer matches\.$/);
+  assert.equal(first.json.raised.length, 1);
+  const doubts = waitingDoubts(store);
+  assert.equal(doubts.length, 1);
+  assert.equal(doubts[0].target, LESSON_ID);
+  assert.match(doubts[0].found, /^Its search no longer matches: 1 line now holds the text, the first in src\/app\.js at line 1\.$/);
+  const second = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.equal(second.json.raised, undefined);
+  assert.doesNotMatch(second.json.line, /Raised/);
+  assert.equal(waitingDoubts(store).length, 1);
+});
+
+test("lessons read: a marked should-match search with no hit raises a doubt", () => {
+  const dir = doubtRepo("doubt-should", SEARCH_AREA("src/** | should match | handler"), "export const app = 2;\n");
+  const store = learningDir();
+  const r = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.match(r.json.line, /Raised 1 doubt: its search no longer matches\./);
+  assert.match(waitingDoubts(store)[0].found, /^Its search no longer matches: nothing in the searched files holds the text now\.$/);
+});
+
+test("lessons read: an unmarked lesson's search never runs, even when it would contradict the lesson", () => {
+  const dir = doubtRepo("doubt-unmarked", SEARCH_AREA("src/** | never matches | export const"), null);
+  const store = learningDir();
+  const r = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.areas[0].lessons[0].marked, false);
+  assert.equal(r.json.raised, undefined);
+  assert.deepEqual(waitingFiles(store), []);
+});
+
+test("lessons read: a marked lesson whose search still agrees raises nothing", () => {
+  const dir = doubtRepo("doubt-agrees", SEARCH_AREA("src/** | never matches | forbidden("), "export const app = 2;\n");
+  const store = learningDir();
+  const r = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.equal(r.json.areas[0].lessons[0].marked, true);
+  assert.equal(r.json.raised, undefined);
+  assert.deepEqual(waitingFiles(store), []);
+});
+
+test("lessons read: a marked convention with no Why raises a Needs a Why doubt once, and Reword carries the Why", () => {
+  const dir = doubtRepo("doubt-why", SEARCH_AREA(null, ""), "export const app = 2;\n");
+  const store = learningDir();
+  const r = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.match(r.json.line, /Raised 1 doubt: a convention needs its Why\.$/);
+  const doubts = waitingDoubts(store);
+  assert.equal(doubts.length, 1);
+  assert.match(doubts[0].found, /^Needs a Why/);
+  assert.equal(L(dir, ["read", "--paths", "src/app.js"], store).json.raised, undefined);
+  const listed = L(dir, ["list"], store).json.items.find((i) => i.type === "doubt");
+  assert.deepEqual(listed.choices, ["Keep", "Reword", "Retire"]);
+  const done = decide(dir, store, [{ id: listed.id, choice: "Reword", text: "Keep the handler small", why: "Small handlers are easy to test." }]);
+  assert.equal(done.code, 0, done.stdout);
+  assert.equal(done.json.results[0].outcome, "reworded");
+  assert.match(read(dir, WEB_FILE), /- Why: Small handlers are easy to test\./);
+});
+
+test("lessons read: one doubt per lesson, so a search doubt means no Needs a Why doubt beside it", () => {
+  const dir = doubtRepo("doubt-one", SEARCH_AREA("src/** | never matches | forbidden(", ""), "export const app = forbidden(1);\n");
+  const store = learningDir();
+  const r = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.equal(r.json.raised.length, 1);
+  assert.equal(waitingDoubts(store).length, 1);
+  assert.match(waitingDoubts(store)[0].found, /^Its search/);
+});
+
+/* ---------------------------------------------- teach it now: said lessons from read-only skills */
+
+test("lessons note: from a read-only skill, said is written waiting and inferred exits 5 end to end", () => {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  const said = L(dir, ["note", "--type", "lesson", "--text", "Never edit the generated skills folder by hand", "--kind", "correction", "--about", "skills/", "--source", "said", "--why", "Builds overwrite it.", "--skill", "pathfinder"], store);
+  assert.equal(said.code, 0, said.stdout);
+  assert.match(said.json.line, /^Noted for the end of the run: Never edit the generated skills folder by hand$/);
+  assert.equal(waitingFiles(store).length, 1);
+  const inferred = L(dir, ["note", "--type", "lesson", "--text", "Another fact", "--kind", "how-it-works", "--about", "src/a.js", "--source", "inferred", "--seen", "src/a.js", "--skill", "pathfinder"], store);
+  assert.equal(inferred.code, 5, inferred.stdout);
+  assert.equal(inferred.json.error, "inferred-from-read-only");
+  assert.equal(waitingFiles(store).length, 1, "the refused lesson wrote nothing");
+});
+
+test("lessons note: the same words noted again with a Why replace the waiting item, not add a second", () => {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  const args = (extra) => ["note", "--type", "lesson", "--text", "Run the lint step before the build", "--kind", "convention", "--about", "package.json", "--source", "said", "--skill", "plan", ...extra];
+  // A convention needs its Why at note time, so the first note is a command lesson with the same words.
+  const first = L(dir, ["note", "--type", "lesson", "--text", "Run the lint step before the build", "--kind", "command", "--about", "package.json", "--source", "said", "--skill", "plan"], store);
+  assert.equal(first.code, 0, first.stdout);
+  const again = L(dir, args(["--why", "The build hides lint errors."]), store);
+  assert.equal(again.code, 0, again.stdout);
+  assert.equal(again.json.id, first.json.id);
+  const files = waitingFiles(store);
+  assert.equal(files.length, 1);
+  const item = JSON.parse(fs.readFileSync(path.join(store, files[0]), "utf8"));
+  assert.equal(item.why, "The build hides lint errors.");
+  assert.equal(item.kind, "convention");
+});
+
+test("lessons read: a hit in a very long path still raises a doubt, naming the line without the path", () => {
+  const long = "src/" + "deep-folder-name/".repeat(8) + "file.js";
+  const dir = copyFixture("doubt-long", "doubt-long", (d) => {
+    const g = gitInit(d);
+    write(d, ".plan2code/settings.json", JSON.stringify({ format: 1, learning: "on" }));
+    write(d, "src/app.js", "export const app = 1;\n");
+    write(d, long, "ok\n");
+    write(d, WEB_FILE, SEARCH_AREA("src/** | never matches | forbidden("));
+    commitAll(g, "lesson");
+    write(d, long, "forbidden(1)\n");
+    commitAll(g, "edit");
+    write(d, "src/app.js", "export const app = 2;\n");
+    commitAll(g, "edit app");
+  });
+  const store = learningDir();
+  const r = L(dir, ["read", "--paths", "src/app.js"], store);
+  assert.equal(r.json.raised.length, 1, r.stdout);
+  const found = waitingDoubts(store)[0].found;
+  assert.ok(found.length <= 200);
+  assert.match(found, /^Its search no longer matches: 1 line now holds the text, the first at line 1 of a searched file.$/);
+});
+
+test("lessons note: the same words from another skill do not replace a waiting item", () => {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  const text = "Run the lint step before the build";
+  const base = ["note", "--type", "lesson", "--text", text, "--kind", "command", "--about", "package.json", "--source", "said"];
+  const first = L(dir, [...base, "--skill", "plan"], store);
+  const other = L(dir, [...base, "--skill", "document", "--why", "Different skill."], store);
+  assert.notEqual(other.json.id, first.json.id);
+  assert.equal(waitingFiles(store).length, 2);
+});
+
+/* ---------------------------------------------------------------- follow */
+
+const followsFile = (dir, store) => path.join(store, core.repositoryKey(dir), "follows.ndjson");
+
+test("lessons follow: appends one line per call, on this machine only", () => {
+  const dir = doubtRepo("follow-lines", SEARCH_AREA("", "A reason."));
+  const store = learningDir();
+  const a = L(dir, ["follow", "--lesson", LESSON_ID, "--skill", "implement"], store);
+  assert.equal(a.code, 0, a.stderr);
+  assert.equal(a.json.noted, true);
+  const b = L(dir, ["follow", "--lesson", LESSON_ID, "--skill", "quick-task"], store);
+  assert.equal(b.code, 0, b.stderr);
+  const lines = fs.readFileSync(followsFile(dir, store), "utf8").split("\n").filter(Boolean).map((x) => JSON.parse(x));
+  assert.equal(lines.length, 2);
+  assert.deepEqual(lines.map((l) => l.skill), ["implement", "quick-task"]);
+  assert.equal(lines[0].lesson, LESSON_ID);
+  assert.equal(lines[0].at, nowDate().toISOString());
+  assert.equal(fs.existsSync(path.join(dir, "follows.ndjson")), false);
+  assert.equal(String(gitIn(dir)("status", "--porcelain")).includes("follows"), false, "nothing written into the project");
+});
+
+test("lessons follow: an unknown lesson id exits 4 and writes nothing", () => {
+  const dir = doubtRepo("follow-unknown", SEARCH_AREA("", "A reason."));
+  const store = learningDir();
+  const r = L(dir, ["follow", "--lesson", "web/no-such-lesson", "--skill", "implement"], store);
+  assert.equal(r.code, 4);
+  assert.equal(fs.existsSync(followsFile(dir, store)), false);
+});
+
+test("lessons follow: with Learning off or paused nothing is written and it exits 0", () => {
+  const dir = doubtRepo("follow-off", SEARCH_AREA("", "A reason."));
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "off" });
+  const off = L(dir, ["follow", "--lesson", LESSON_ID, "--skill", "implement"], store);
+  assert.equal(off.code, 0, off.stderr);
+  assert.equal(off.json.noted, false);
+  settings(dir, { format: 1, learning: "on" });
+  assert.equal(L(dir, ["pause", "on"], store).code, 0);
+  const paused = L(dir, ["follow", "--lesson", LESSON_ID, "--skill", "implement"], store);
+  assert.equal(paused.json.noted, false);
+  assert.equal(fs.existsSync(followsFile(dir, store)), false);
+});
+
+/* ------------------------------------------------------------------ tidy */
+
+const GEN_US = "general/answer-in-us-english";
+const GEN_SUITES = "general/run-the-targeted-suites";
+const WEB_PAGE = "web/draw-the-page-from-state";
+const SRC_SMALL = "source/keep-modules-small";
+const SRC_KEBAB = "source/name-files-in-kebab-case";
+
+const tidyNote = (dir, store, change, targets, extra = [], reason = "They say the same thing twice.") => L(dir, ["note", "--type", "tidy", "--change", change, "--targets", targets.join(","), "--reason", reason, "--skill", "dashboard", ...extra], store);
+const waitingTidy = (store) =>
+  waitingFiles(store)
+    .map((f) => JSON.parse(fs.readFileSync(path.join(store, f), "utf8")))
+    .filter((w) => w.type === "tidy");
+const lessonFiles = (dir) => Object.fromEntries(fs.readdirSync(path.join(dir, ".plan2code", "lessons")).map((n) => [n, fs.readFileSync(path.join(dir, ".plan2code", "lessons", n), "utf8")]));
+const headings = (text) => text.split(/\r?\n/).filter((l) => l.startsWith("### ")).map((l) => l.slice(4));
+
+test("lessons tidy-input: every saved lesson with its follow count, last follow and mark, plus how full the areas are", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  assert.equal(L(dir, ["follow", "--lesson", GEN_US, "--skill", "implement"], store).code, 0);
+  assert.equal(L(dir, ["follow", "--lesson", GEN_US, "--skill", "plan"], store).code, 0);
+  // A commit touching what a lesson is About marks it.
+  write(dir, "src/web/page.js", "changed\n");
+  commitAll(gitIn(dir), "edit page");
+  const r = L(dir, ["tidy-input"], store);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.lessons.length, 5);
+  const by = Object.fromEntries(r.json.lessons.map((l) => [l.id, l]));
+  assert.equal(by[GEN_US].followed, 2);
+  assert.equal(by[GEN_US].lastFollowed, nowDate().toISOString());
+  assert.equal(by[GEN_US].area, "General");
+  assert.equal(by[SRC_SMALL].followed, 0);
+  assert.equal(by[SRC_SMALL].lastFollowed, null);
+  assert.equal(by[WEB_PAGE].marked, true);
+  assert.equal(by[SRC_SMALL].marked, false);
+  assert.equal(by[GEN_SUITES].why, "The full run is slow.");
+  assert.deepEqual(Object.keys(by[GEN_US]).sort(), ["about", "area", "followed", "gone", "id", "keptOverCheck", "kind", "lastFollowed", "marked", "noted", "search", "text", "why"]);
+  assert.deepEqual(r.json.general, { count: 2, max: 25 });
+  assert.deepEqual(r.json.areas.map((a) => [a.slug, a.count]), [["source", 2], ["web", 1]]);
+  assert.equal(String(gitIn(dir)("status", "--porcelain")).includes("follows"), false, "reads only");
+});
+
+test("lessons note --type tidy: each change kind validates its targets, wording, area and reason", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const bad = (r, field) => {
+    assert.equal(r.code, 4, r.stdout);
+    assert.equal(r.json.error, "invalid-tidy");
+    assert.ok(r.json.problems.some((p) => p.field === field), `${field} in ${JSON.stringify(r.json.problems)}`);
+  };
+  // merge: two or more targets, a wording that passes the lesson rules (a convention needs its why)
+  bad(tidyNote(dir, store, "merge", [SRC_SMALL], ["--text", "Keep modules small."]), "targets");
+  bad(tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case."]), "why");
+  bad(tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan."]), "about");
+  bad(tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--why", "Both keep the tree easy to scan.", "--about", "src/"]), "text");
+  bad(tidyNote(dir, store, "merge", [SRC_SMALL, SRC_SMALL], ["--text", "Keep modules small.", "--why", "It reads better."]), "targets");
+  bad(tidyNote(dir, store, "merge", [SRC_SMALL, "source/no-such-lesson"], ["--text", "Keep modules small.", "--why", "It reads better."]), "targets");
+  assert.equal(waitingTidy(store).length, 0, "nothing invalid was written");
+  const merged = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  assert.equal(merged.code, 0, merged.stdout);
+  assert.equal(merged.json.noted, true);
+  const w = waitingTidy(store)[0];
+  assert.deepEqual([w.change, w.targets, w.kind, w.skill], ["merge", [SRC_SMALL, SRC_KEBAB], "convention", "dashboard"]);
+  assert.deepEqual(w.about, ["src/"]);
+  assert.equal(w.reason, "They say the same thing twice.");
+  // reword: one target, a new wording; why and kind default from it
+  bad(tidyNote(dir, store, "reword", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small."]), "targets");
+  bad(tidyNote(dir, store, "reword", [GEN_SUITES], []), "text");
+  assert.equal(tidyNote(dir, store, "reword", [GEN_SUITES], ["--text", "Run the targeted suites, not the whole run."]).code, 0);
+  assert.equal(waitingTidy(store).find((x) => x.change === "reword").why, "The full run is slow.");
+  // retire needs its reason
+  bad(L(dir, ["note", "--type", "tidy", "--change", "retire", "--targets", WEB_PAGE, "--skill", "dashboard"], store), "reason");
+  assert.equal(tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it and the page no longer draws from state.").code, 0);
+  // move names an area that exists and is not where the lesson already is
+  bad(tidyNote(dir, store, "move", [GEN_SUITES], []), "area");
+  bad(tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "Nowhere"]), "area");
+  bad(tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "General"]), "area");
+  assert.equal(tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "Web"]).code, 0);
+  bad(tidyNote(dir, store, "sideways", [GEN_SUITES], []), "change");
+  assert.equal(waitingTidy(store).length, 4);
+});
+
+test("lessons note --type tidy: a secret in the wording or reason exits 5 and writes nothing, and the same change twice is one proposal", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const key = "AKIA" + "ABCDEFGHIJKLMNOP";
+  const inReason = tidyNote(dir, store, "retire", [WEB_PAGE], [], `The key ${key} is in it.`);
+  assert.equal(inReason.code, 5, inReason.stdout);
+  assert.equal(inReason.json.error, "secret");
+  const inText = tidyNote(dir, store, "reword", [GEN_SUITES], ["--text", `Use ${key} for the suites.`]);
+  assert.equal(inText.code, 5, inText.stdout);
+  assert.equal(waitingTidy(store).length, 0);
+  const first = tidyNote(dir, store, "retire", [WEB_PAGE], [], "Not followed in 90 days.");
+  const again = tidyNote(dir, store, "retire", [WEB_PAGE], [], "A different sentence about it.");
+  assert.equal(again.json.already, true);
+  assert.equal(again.json.id, first.json.id);
+  assert.equal(waitingTidy(store).length, 1);
+});
+
+test("lessons check-input --tidy: tidy-ups join the lessons under the cap of 10, and only with the flag", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  // Newer than the tidy-ups, which are noted at the pinned clock, so the tidy-ups come first.
+  for (let i = 0; i < 8; i++) putLesson(dir, store, `w${String(i).padStart(2, "0")}`, new Date(nowDate().getTime() + (i + 1) * 1000));
+  assert.equal(tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]).code, 0);
+  assert.equal(tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it.").code, 0);
+  assert.equal(tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "Web"]).code, 0);
+  const plain = L(dir, ["check-input"], store).json;
+  assert.equal(plain.lessons.length, 8, "without --tidy only the lessons");
+  const r = L(dir, ["check-input", "--tidy"], store);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.lessons.length, 10);
+  assert.equal(r.json.notChecked.length, 1, "the 11th is left for the next run");
+  const tidy = r.json.lessons.filter((l) => l.type === "tidy");
+  assert.equal(tidy.length, 3, "oldest first: the three tidy-ups, then the lessons");
+  const merge = tidy.find((l) => l.change === "merge");
+  assert.equal(merge.text, "Keep modules small and name files in kebab case.");
+  assert.deepEqual(merge.targets.map((t) => t.id), [SRC_SMALL, SRC_KEBAB]);
+  assert.equal(merge.reason, "They say the same thing twice.");
+  assert.ok(merge.files.length > 0, "its files are listed with hashes");
+  assert.ok(!r.json.context.saved.some((s) => s.id === SRC_SMALL || s.id === SRC_KEBAB), "a merge's own targets are not overlaps of it");
+  assert.ok(r.json.context.saved.some((s) => s.id === GEN_US));
+});
+
+test("lessons check-record: a tidy-up's verdicts are stored on it and show on its row", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const noted = tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it.");
+  const input = L(dir, ["check-input", "--tidy"], store).json;
+  const rec = L(dir, ["check-record", "--file", recordFile({ checkId: input.checkId, how: "same-agent", verdicts: [{ id: noted.json.id, tests: passAll() }] })], store);
+  assert.equal(rec.code, 0, rec.stdout);
+  assert.equal(rec.json.recorded, 1);
+  const row = L(dir, ["list", "--check", input.checkId], store).json.items.find((i) => i.id === noted.json.id);
+  assert.equal(row.type, "tidy");
+  assert.equal(row.check.passed, 4);
+  assert.equal(L(dir, ["check-input", "--tidy"], store).json.lessons.length, 0, "a fresh check is not run again");
+});
+
+test("lessons list: a tidy row says the change in words, offers Reword only where there is a wording, and carries its reason", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it.");
+  tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "Web"]);
+  tidyNote(dir, store, "reword", [GEN_US], ["--text", "Answer in US English everywhere.", "--why", "US spelling is the project's."]);
+  const list = L(dir, ["list"], store).json;
+  const row = (change) => list.items.find((i) => i.type === "tidy" && i.change === change);
+  assert.equal(row("merge").text, "Merge 2 lessons into: Keep modules small and name files in kebab case.");
+  assert.deepEqual(row("merge").choices, ["Apply", "Reword", "Leave"]);
+  assert.equal(row("merge").why, "They say the same thing twice.");
+  assert.equal(row("merge").wording, "Keep modules small and name files in kebab case.");
+  assert.equal(row("retire").text, "Retire: Draw the page from state Reason: Git marks it.");
+  assert.deepEqual(row("retire").choices, ["Apply", "Leave"]);
+  assert.equal(row("move").text, "Move to Web: Run the targeted suites");
+  assert.deepEqual(row("move").choices, ["Apply", "Leave"]);
+  assert.equal(row("reword").text, "Reword to: Answer in US English everywhere.");
+  assert.equal(row("reword").area, "General", "a reword stays where it is unless the person picks another area");
+  assert.ok(list.rounds.some((r) => r.type === "tidy" && r.items.length === 4));
+  const card = list.card.rows.filter((r) => r.type === "tidy");
+  assert.equal(card.length, 4);
+  assert.deepEqual(card.find((r) => r.change === "merge").targets.map((t) => t.id), [SRC_SMALL, SRC_KEBAB]);
+  // A proposal whose target is gone is not listed.
+  fs.rmSync(path.join(dir, ".plan2code", "lessons", "web.md"));
+  assert.ok(!L(dir, ["list"], store).json.items.some((i) => i.change === "retire"));
+});
+
+test("lessons decide tidy: Apply on a merge writes one block and removes both targets, and stages nothing", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const n = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  const r = decide(dir, store, [{ id: n.json.id, choice: "Apply" }]);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.results[0].outcome, "applied");
+  assert.equal(r.json.results[0].change, "merge");
+  assert.deepEqual(r.json.written, [".plan2code/lessons/source.md"]);
+  assert.deepEqual(headings(lessonFiles(dir)["source.md"]), ["Keep modules small and name files in kebab case."]);
+  assert.match(r.json.closing, /^Tidied 1\. 0 still waiting\.$/);
+  assert.equal(waitingTidy(store).length, 0);
+  assert.equal(String(gitIn(dir)("diff", "--cached", "--name-only")).trim(), "", "nothing is staged");
+});
+
+test("lessons decide tidy: Reword on a merge writes the person's wording, and Reword on a retire is an invalid choice", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const m = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  const t = tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it.");
+  const r = decide(dir, store, [
+    { id: m.json.id, choice: "Reword", text: "Keep modules small and kebab-case their files.", why: "The tree stays easy to scan." },
+    { id: t.json.id, choice: "Reword", text: "Nope." },
+  ]);
+  assert.equal(r.json.results[0].outcome, "applied");
+  assert.equal(r.json.results[1].outcome, "invalid-choice");
+  assert.deepEqual(headings(lessonFiles(dir)["source.md"]), ["Keep modules small and kebab-case their files."]);
+  assert.ok(lessonFiles(dir)["web.md"], "the retire was not applied");
+  assert.equal(waitingTidy(store).length, 1, "the invalid choice keeps waiting");
+});
+
+test("lessons decide tidy: Apply on a retire removes the block, and the area file with it when it was the last", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const a = tidyNote(dir, store, "retire", [SRC_KEBAB], [], "The folder was renamed.");
+  const b = tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it.");
+  const r = decide(dir, store, [{ id: a.json.id, choice: "Apply" }, { id: b.json.id, choice: "Apply" }]);
+  assert.deepEqual(r.json.results.map((x) => x.outcome), ["applied", "applied"]);
+  const files = lessonFiles(dir);
+  assert.deepEqual(headings(files["source.md"]), ["Keep modules small"]);
+  assert.equal(files["web.md"], undefined, "an emptied area file goes");
+  assert.ok(files["general.md"]);
+  assert.match(r.json.closing, /^Tidied 2\./);
+});
+
+test("lessons decide tidy: Apply on a move relocates the lesson with its Why and removes it from the old area", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const n = tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "Web"], "It only matters for the page.");
+  const r = decide(dir, store, [{ id: n.json.id, choice: "Apply" }]);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.results[0].outcome, "applied");
+  assert.equal(r.json.results[0].change, "move");
+  const files = lessonFiles(dir);
+  assert.ok(!headings(files["general.md"]).includes("Run the targeted suites"));
+  assert.deepEqual(headings(files["web.md"]), ["Draw the page from state", "Run the targeted suites"]);
+  assert.match(files["web.md"], /### Run the targeted suites\n- Kind: convention\n- About: scripts\/\n- Why: The full run is slow\.\n- Noted: 2026-11-01, Implement\n/);
+});
+
+test("lessons decide tidy: Apply on a reword replaces the wording in place", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const n = tidyNote(dir, store, "reword", [GEN_US], ["--text", "Answer in US English everywhere.", "--why", "US spelling is the project's."], "Sharper.");
+  const r = decide(dir, store, [{ id: n.json.id, choice: "Apply" }]);
+  assert.equal(r.json.results[0].outcome, "applied");
+  assert.deepEqual(headings(lessonFiles(dir)["general.md"]), ["Answer in US English everywhere.", "Run the targeted suites"]);
+});
+
+test("lessons decide tidy: Leave changes no file and settles the proposal", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const n = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  const before = lessonFiles(dir);
+  const r = decide(dir, store, [{ id: n.json.id, choice: "Leave" }]);
+  assert.equal(r.json.results[0].outcome, "left");
+  assert.deepEqual(r.json.written, []);
+  assert.deepEqual(lessonFiles(dir), before);
+  assert.equal(waitingTidy(store).length, 0);
+  assert.match(r.json.closing, /^Left 1 as it was\./);
+  assert.equal(String(gitIn(dir)("status", "--porcelain")), "", "nothing changed in the project");
+});
+
+test("lessons decide tidy: a proposal whose target an earlier decision removed is out of date, and a merge into a full General is undone", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const retire = tidyNote(dir, store, "retire", [SRC_SMALL], [], "Gone from the code.");
+  const merge = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  const r = decide(dir, store, [{ id: retire.json.id, choice: "Apply" }, { id: merge.json.id, choice: "Apply" }]);
+  assert.equal(r.json.results.find((x) => x.id === retire.json.id).outcome, "applied");
+  assert.equal(r.json.results.find((x) => x.id === merge.json.id).outcome, "outOfDate");
+  assert.deepEqual(headings(lessonFiles(dir)["source.md"]), ["Name files in kebab case"], "the out of date merge changed nothing");
+  assert.equal(waitingTidy(store).length, 0, "both are settled");
+
+  // General is full at 25: a merge into it that does not make room is refused and undone.
+  const full = readRepo();
+  const many = Array.from({ length: 25 }, (_, i) => block(`General lesson number ${String(i).padStart(2, "0")}`, "README.md")).join("\n");
+  write(full, ".plan2code/lessons/general.md", "# General\n\n" + many);
+  const m = tidyNote(full, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/", "--area", "General"]);
+  assert.equal(m.code, 0, m.stdout);
+  const before = lessonFiles(full);
+  const d = decide(full, store, [{ id: m.json.id, choice: "Apply" }]);
+  assert.equal(d.json.results[0].outcome, "needsRoom");
+  assert.deepEqual(lessonFiles(full), before, "a refused merge writes nothing");
+  assert.equal(waitingTidy(store).length, 1, "it keeps waiting");
+});
+
+test("lessons check-record: a suggested wording is kept on a merge and dropped, with a warning, on a retire or a move", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const merge = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  const retire = tidyNote(dir, store, "retire", [WEB_PAGE], [], "Git marks it.");
+  const move = tidyNote(dir, store, "move", [GEN_SUITES], ["--area", "Web"]);
+  const input = L(dir, ["check-input", "--tidy"], store).json;
+  const wording = "Keep modules small and kebab-case their files.";
+  const rec = L(dir, ["check-record", "--file", recordFile({ checkId: input.checkId, how: "same-agent", verdicts: [merge, retire, move].map((n) => ({ id: n.json.id, tests: passAll({ clear: { verdict: "Doubt", reason: "It could be shorter." } }), suggestion: wording })) })], store);
+  assert.equal(rec.code, 0, rec.stdout);
+  assert.equal(rec.json.recorded, 3);
+  assert.deepEqual(rec.json.problems.map((p) => p.id).sort(), [move.json.id, retire.json.id].sort());
+  assert.match(rec.json.problems[0].message, /a retire or a move has no wording to change/);
+  const rows = Object.fromEntries(L(dir, ["list", "--check", input.checkId], store).json.items.filter((i) => i.type === "tidy").map((i) => [i.change, i]));
+  assert.equal(rows.merge.check.suggestion, wording);
+  assert.equal(rows.retire.check.suggestion, undefined);
+  assert.equal(rows.move.check.suggestion, undefined);
+});
+
+/* ------------------------------------------------- final review fixes */
+
+test("lessons record: a search glob over its limits is refused by searchProblems and never parsed from a file", () => {
+  const busy = "**/".repeat(4) + "*.js";
+  assert.equal(record.globTooBusy("src/**/*.js"), null);
+  assert.equal(record.globTooBusy("**/a/**/b/**/*.js"), null, "three ** is the most");
+  assert.match(record.globTooBusy(busy), /has 4 \*\*; at most 3/);
+  assert.match(record.globTooBusy("a/".repeat(60) + "x.js"), /at most 120/);
+  assert.ok(record.searchProblems({ glob: busy, match: "never", text: "a" }).some((p) => p.field === "shows-in"));
+  // A committed line with a hostile glob stays in the file but is never run.
+  const text = ["# A", "", "### One", "- Kind: command", "- About: a.js", `- Shows in: ${"**/".repeat(22)}z | never matches | x`, "- Noted: 2026-11-01, I", ""].join("\n");
+  const area = record.parseAreaFile(text);
+  assert.equal(area.blocks[0].search, undefined);
+  assert.equal(area.blocks[0].badLines.length, 1);
+  assert.equal(record.renderAreaFile(area), text);
+  // A stored item from before the limits is refused at once, not walked.
+  const started = Date.now();
+  const r = record.runSearch(repo(), { glob: "**/".repeat(22) + "z", match: "never", text: "x" });
+  assert.equal(r.refused, true);
+  assert.ok(Date.now() - started < 2000, "returns at once");
+});
+
+test("lessons note: a search glob with more than three ** exits 4", () => {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  const r = L(dir, lesson("Never use localStorage", ["--shows-in", "**/**/**/**/*.js", "--match", "never", "--text-match", "localStorage"]), store);
+  assert.equal(r.code, 4, r.stdout);
+  assert.deepEqual(waitingFiles(store), []);
+});
+
+test("lessons: a said lesson noted with the placeholder Why asks for a Reword on its row, and only a Reword with a reason saves it", () => {
+  const dir = repo();
+  const store = learningDir();
+  settings(dir, { format: 1, learning: "on" });
+  write(dir, "src/a.js", "x\n");
+  const n = L(dir, ["note", "--type", "lesson", "--text", "Keep the header short", "--kind", "convention", "--about", "src/a.js", "--source", "said", "--skill", "Implement", "--why", record.SAID_NO_WHY], store);
+  assert.equal(n.code, 0, n.stdout);
+  const row = L(dir, ["list"], store).json.card.rows[0];
+  assert.match(row.note, /No reason given yet: use Reword/);
+  assert.ok(!row.choices.includes("Keep"), "Keep is left off the card, since decide refuses it");
+  assert.deepEqual(row.choices, ["Reword", "Drop"]);
+  const id = row.id;
+  const kept = decide(dir, store, [{ id, choice: "Keep" }]);
+  assert.equal(kept.json.results[0].outcome, "invalid");
+  assert.equal(kept.json.results[0].problems[0].field, "why");
+  assert.equal(waitingFiles(store).length, 1, "still waiting");
+  const bare = decide(dir, store, [{ id, choice: "Reword", text: "Keep the header to one line" }]);
+  assert.equal(bare.json.results[0].outcome, "invalid", "a Reword that keeps the placeholder is refused too");
+  const reworded = decide(dir, store, [{ id, choice: "Reword", why: "A long header wraps on phones." }]);
+  assert.equal(reworded.json.results[0].outcome, "reworded");
+  assert.equal(waitingFiles(store).length, 0);
+});
+
+test("lessons list: a plain list carries no how-checked line, and a --check-failed reason is cut to one line of 200", () => {
+  const { dir, store, input } = checkedList();
+  assert.equal(L(dir, ["list"], store).json.card.checked, undefined, "nothing was checked in this run");
+  assert.equal(L(dir, ["list", "--check", input.checkId], store).json.card.checked.count, 3);
+  const long = "The helper\nstopped " + "x".repeat(300);
+  const failed = L(dir, ["list", "--check-failed", long], store).json.card.checked.failed;
+  assert.equal(failed.length, 200);
+  assert.doesNotMatch(failed, /\n/);
+});
+
+test("lessons decide tidy: a merge carries the one search its targets hold", () => {
+  const dir = readRepo();
+  const store = learningDir();
+  const file = path.join(dir, ".plan2code", "lessons", "source.md");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("- About: src/core.js\n", "- About: src/core.js\n- Shows in: src/**/*.js | should match | x\n"));
+  const n = tidyNote(dir, store, "merge", [SRC_SMALL, SRC_KEBAB], ["--text", "Keep modules small and name files in kebab case.", "--why", "Both keep the tree easy to scan.", "--about", "src/"]);
+  const r = decide(dir, store, [{ id: n.json.id, choice: "Apply" }]);
+  assert.equal(r.json.results[0].outcome, "applied", r.stdout);
+  assert.match(lessonFiles(dir)["source.md"], /- Shows in: src\/\*\*\/\*\.js \| should match \| x\n/);
+});
+
+/* ------------------------------------------------- review of the uncommitted change */
+
+test("lessons record: a glob of single wildcards is over its limits too", () => {
+  assert.equal(record.globTooBusy("src/*/*.js"), null);
+  assert.equal(record.globTooBusy("src/**/a*b*c?.js"), null, "four wildcards and one ** fit");
+  const crafted = "*a".repeat(14) + "*b";
+  assert.match(record.globTooBusy(crafted), /has 15 wildcards; at most 6/);
+  assert.ok(record.searchProblems({ glob: crafted, match: "never", text: "a" }).some((p) => p.field === "shows-in"));
+  const started = Date.now();
+  assert.equal(record.runSearch(repo(), { glob: crafted, match: "never", text: "x" }).refused, true);
+  assert.ok(Date.now() - started < 2000, "refused at once, never walked");
+});
+
+test("lessons record: a search glob holding ' | ' is refused, since the saved line could not be read back", () => {
+  const problems = record.searchProblems({ glob: "src/a | b/*.js", match: "should", text: "foo" });
+  assert.ok(problems.some((p) => p.field === "shows-in" && /cannot contain/.test(p.message)), JSON.stringify(problems));
+});
+
+test("lessons check-input: with nothing to grade it keeps no check file", () => {
+  const { dir, store } = checkRepo();
+  const r = L(dir, ["check-input"], store);
+  assert.equal(r.code, 0, r.stdout);
+  assert.deepEqual(r.json.lessons, []);
+  assert.deepEqual(checkFilesIn(dir, store), []);
+  putLesson(dir, store, "w01", daysBefore(1));
+  const one = L(dir, ["check-input"], store).json;
+  assert.deepEqual(checkFilesIn(dir, store), [`${one.checkId}.json`], "a check with a lesson still keeps its file");
+});
+
+test("lessons list: a lesson still on the placeholder Why is never outlined Keep, even when all four tests pass", () => {
+  const { dir, store } = checkRepo();
+  putLesson(dir, store, "w01", daysBefore(1), { kind: "convention", why: record.SAID_NO_WHY });
+  const input = L(dir, ["check-input"], store).json;
+  const rec = L(dir, ["check-record", "--file", recordFile({ checkId: input.checkId, how: "helper", verdicts: [{ id: "w01", tests: passAll() }] })], store);
+  assert.equal(rec.code, 0, rec.stdout);
+  const card = L(dir, ["list", "--check", input.checkId], store).json.card;
+  assert.deepEqual(card.rows[0].choices, ["Reword", "Drop"]);
+  assert.equal(card.suggested?.w01, undefined);
 });

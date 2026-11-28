@@ -1,5 +1,5 @@
 # Helper Strength
-> Shared by the skills that start helpers (subagents): Init, Init Update, Pathfinder, Plan, Revise Plan, Document, Quick Task, Implement, Implement + Review, Review, Finalize, X-ray, Diagnose, PR Prep, Test, Dead Code and Update Dependencies. Read it when you first start a helper in a session. Never invoked as a skill.
+> Shared by the skills that start helpers (subagents): the dashboard (lesson check only), Init, Init Update, Pathfinder, Plan, Revise Plan, Document, Quick Task, Implement, Implement + Review, Review, Finalize, X-ray, Diagnose, PR Prep, Test, Dead Code and Update Dependencies. Read it when you first start a helper in a session. Never invoked as a skill.
 
 ## The words
 
@@ -24,6 +24,7 @@ Never write a model or vendor name in a brief, a report or a file, and never inv
 | Build task needing a design decision the spec leaves open | strongest (or keep it yourself) | high |
 | Pathfinder research question, sketch | standard | medium |
 | Plan's PLAN-DRAFT cross-check against the conversation | standard | medium |
+| Lesson check (`lesson-check.md`) | standard | medium |
 | Review analysis, focused scope | standard | high |
 | Review analysis, branch or full scope, or touching security, auth or data | strongest | high |
 

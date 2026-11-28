@@ -13,7 +13,7 @@ The FIRST thing you do, before anything else in this file — before Step 1, bef
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
-- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
+- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`); note only what the person asks you to remember (references/lessons.md, While working).
 - Never remove completed `[x]` tasks without explicit approval
 - Warn if changes invalidate completed work
 - Keep task numbers sequential

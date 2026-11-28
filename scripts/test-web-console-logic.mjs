@@ -104,6 +104,8 @@ import {
   loopLessonsLine,
 } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
+import { LEARNING_BUSY_MS, LEARNING_CHECK_MS, learningBusyLimit, learningBusyNow } from "../src/web-console/public/selectors.js";
+import { page } from "../src/web-console/public/state.js";
 import { agoWords, whenTitle, whenWords } from "../src/web-console/public/labels.js";
 import { ACCENTS, DEFAULT_ACCENT, RETIRED_ACCENTS, accentId } from "../src/web-console/public/palette.js";
 import {
@@ -1672,7 +1674,7 @@ test("validate: a lessons item takes rows each with a type and its own choices, 
   const one = (extra) => validate({ items: [item(extra)] });
   assert.deepEqual(one({ opening: "You are on main: kept lessons will be uncommitted changes here.", rows: [row({ why: "A full run hides it.", origin: "You said this.", note: "", flags: [], refused: null, area: "General", areas: ["General"] })] }), []);
   assert.deepEqual(
-    one({ rows: ["lesson", "doubt", "gone", "agents-fix", "log-line", "area"].map((type, i) => row({ id: `w${i}`, type })) }),
+    one({ rows: ["lesson", "doubt", "gone", "agents-fix", "tidy", "log-line", "area"].map((type, i) => row({ id: `w${i}`, type })) }),
     [],
     "every row type the list gives"
   );
@@ -1703,6 +1705,53 @@ test("validate: a lessons item takes rows each with a type and its own choices, 
   assert.ok(two.some((p) => p.includes("2 lessons cards are open at once")), two.join(" | "));
   const answered = validate({ items: [item({ rows: [row()], status: "answered" }), item({ id: "lessons-2", rows: [row()] })] });
   assert.deepEqual(answered, [], "an answered card does not count");
+});
+
+test("validate: a lessons row takes the check's verdicts and a tag, and the card how it was checked", () => {
+  const check = { fails: [{ test: "Search", reason: "It matches 3 files." }], doubts: [{ test: "Why", reason: "No reason given." }], passed: 2, suggestion: "A shorter wording." };
+  const row = (extra = {}) => ({ id: "w1", type: "lesson", text: "A lesson.", choices: ["Keep", "Reword", "Drop"], ...extra });
+  const item = (extra) => ({ id: "lessons", kind: "lessons", title: "Lessons to keep", status: "open", rows: [row()], ...extra });
+  const one = (extra) => validate({ items: [item(extra)] });
+  const refused = (extra, field) => {
+    const problems = one(extra);
+    assert.ok(problems.some((p) => p.includes(field)), `${field}: ${problems.join(" | ")}`);
+  };
+  assert.deepEqual(one({ rows: [row({ check, tag: "Checked in an earlier run" })], checked: { how: "helper", count: 6, seconds: 40 } }), [], "a good check, tag and how");
+  assert.deepEqual(one({ rows: [row({ check: { fails: [], doubts: [], passed: 4 }, tag: "Not checked yet" })], checked: { how: "same-agent", count: 1, seconds: 0 } }), []);
+  assert.deepEqual(one({ checked: { failed: "The checker answered with nothing usable." } }), [], "a check that could not run");
+  refused({ rows: [row({ check: { ...check, extra: 1 } })] }, 'row "w1" check "extra"');
+  refused({ rows: [row({ check: { ...check, passed: 5 } })] }, 'row "w1" check passed');
+  refused({ rows: [row({ check: { ...check, fails: [{ test: "Search", reason: 7 }] } })] }, 'row "w1" check fails[0]');
+  refused({ rows: [row({ check: { ...check, doubts: Array.from({ length: 5 }, () => ({ test: "a", reason: "b" })) } })] }, 'row "w1" check doubts');
+  refused({ rows: [row({ check: { ...check, suggestion: "x".repeat(201) } })] }, 'row "w1" check suggestion');
+  refused({ rows: [row({ tag: "Old" })] }, 'row "w1" tag');
+  refused({ checked: { how: "robot", count: 1, seconds: 1 } }, "checked");
+  refused({ checked: { how: "helper", count: -1, seconds: 1 } }, "checked");
+  refused({ checked: { failed: "x".repeat(201) } }, "checked");
+});
+
+test("learning busy: a Review or Tidy up the agent is still working on outlasts LEARNING_BUSY_MS, a switch never does", () => {
+  const saved = { S: page.S, learningBusy: page.learningBusy, pendingResult: page.pendingResult };
+  try {
+    page.pendingResult = null;
+    const at = (what, agoMs, status) => {
+      page.S = { agent: { status }, items: [] };
+      page.learningBusy = { what, from: "on", at: Date.now() - agoMs, seen: true };
+      return learningBusyNow("on");
+    };
+    page.S = { agent: { status: "working" }, items: [] };
+    assert.equal(learningBusyLimit({ what: "review" }), LEARNING_CHECK_MS);
+    assert.equal(learningBusyLimit({ what: "tidy" }), LEARNING_CHECK_MS);
+    assert.equal(learningBusyLimit({ what: "switch-on" }), LEARNING_BUSY_MS, "a switch keeps the short limit");
+    assert.ok(at("review", LEARNING_BUSY_MS + 10000, "working"), "a Review still being checked stays busy past 30 seconds");
+    assert.ok(at("tidy", LEARNING_BUSY_MS + 10000, "working"), "so does a Tidy up");
+    assert.equal(at("review", LEARNING_CHECK_MS + 1000, "working"), null, "but not past the check limit");
+    assert.equal(at("review", LEARNING_BUSY_MS + 10000, "waiting"), null, "an agent back to waiting ends it at the short limit");
+    page.pendingResult = { id: "x" };
+    assert.equal(learningBusyLimit({ what: "review" }), LEARNING_CHECK_MS, "a send not yet picked up counts as working");
+  } finally {
+    Object.assign(page, saved);
+  }
 });
 
 test("validate: a lesson's own words never get the lessons card refused, but the card's own text still can", () => {

@@ -170,7 +170,9 @@ const SOURCE_PROMPTS = [
     scripts: ['lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -240,7 +242,8 @@ const SOURCE_PROMPTS = [
       { source: 'plan2code-review-references' },
       { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
       { source: 'plan2code-ui-prototype-references' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -310,7 +313,8 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -329,7 +333,8 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -347,7 +352,8 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -392,7 +398,8 @@ const SOURCE_PROMPTS = [
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -409,7 +416,8 @@ const SOURCE_PROMPTS = [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {
@@ -444,7 +452,8 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
-      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+      { source: 'shared-references/lessons.md', target: 'lessons.md' },
+      { source: 'shared-references/lesson-check.md', target: 'lesson-check.md' }
     ]
   },
   {

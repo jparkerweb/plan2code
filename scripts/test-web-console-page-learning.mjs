@@ -13,7 +13,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, tempProject, textOf, styleOf, stylesOf, itemCard, sendAndCollect, settled, scrollCard } from "./page-test-helpers.mjs";
 import { cli, until } from "./web-console-test-helpers.mjs";
-import { writePause, writeWaiting } from "../src/web-console/learning.mjs";
+import { recordFollow, writePause, writeWaiting } from "../src/web-console/learning.mjs";
 
 const suite = pageSuite(test);
 
@@ -126,6 +126,32 @@ test("on: the row is after the last card group, before the tip, with no count of
   assert.match(await textOf(dlg), /The project's lessons \(\.plan2code\/lessons\/, saved with the repository\)/);
 });
 
+test("the lessons reader draws a quiet follow line under each lesson's heading", async (t) => {
+  const lesson = (title) => `### ${title}\n- Kind: how-it-works\n- About: src/x.js\n- Noted: 2026-11-01, Implement\n\n`;
+  const { main } = await dashboard(
+    t,
+    { ...PROJECT("on"), ".plan2code/lessons/general.md": `# General\n\n${lesson("Followed lesson")}${lesson("Untouched lesson")}${lesson("Once lesson")}` },
+    (project) => {
+      recordFollow(project, { lesson: "general/followed-lesson", skill: "implement" }, new Date("2026-11-10T12:00:00Z"));
+      recordFollow(project, { lesson: "general/followed-lesson", skill: "quick-task" }, new Date("2026-11-20T12:00:00Z"));
+      recordFollow(project, { lesson: "general/once-lesson", skill: "implement" }, new Date("2026-11-12T12:00:00Z"));
+    }
+  );
+  const row = main.locator("section.learn-row");
+  await row.waitFor();
+  await row.getByRole("button", { name: "Open the lessons" }).click();
+  const dlg = main.page().locator("#learn-lessons-modal");
+  await dlg.locator(".learn-follow").first().waitFor();
+  const lines = await dlg.locator(".learn-follow").allInnerTexts();
+  assert.equal(lines.length, 3, "one line per lesson");
+  assert.match(lines[0], /^Followed 2 times, last on Nov 2[01]$/);
+  assert.equal(lines[1], "Not followed yet");
+  assert.match(lines[2], /^Followed once, last on Nov 1[123]$/);
+  // The line sits right under its heading.
+  const order = await dlg.locator(".learn-lessons-file").evaluate((n) => [...n.children].map((c) => (c.classList.contains("learn-follow") ? "follow" : c.textContent.includes("Followed lesson") ? "heading" : "other")));
+  assert.equal(order.indexOf("follow"), order.indexOf("heading") + 1);
+});
+
 test("Pause for me repaints the row with no agent listening, both ways", async (t) => {
   const { s, main } = await dashboard(t, PROJECT("on"));
   const bottom = main.locator("section.learn-row.is-bottom");
@@ -153,6 +179,7 @@ test("More opens upward and closes on Escape and on a click outside", async (t) 
   assert.ok(m.y + m.height <= b.y + 1, `the menu opens above its button: ${JSON.stringify({ m, b })}`);
   assert.deepEqual(await menu.getByRole("menuitem").allInnerTexts(), [
     "Switch off for this project",
+    "Tidy up lessons",
     "Move the failure log into lessons",
     "Remove all lessons…",
   ]);
@@ -209,6 +236,50 @@ test("the banner shows only with lessons waiting, directly above the title", asy
   });
   await paused.main.locator("section.learn-row.is-paused").waitFor();
   assert.equal(await paused.main.locator(".learn-banner").count(), 0, "hidden while paused");
+});
+
+test("More has Tidy up lessons, which sends the tidy Learning action and shows working at once", async (t) => {
+  const { s, main } = await dashboard(t, PROJECT("on"));
+  const row = main.locator("section.learn-row.is-bottom");
+  await row.getByRole("button", { name: /More/ }).click();
+  await row.getByRole("menuitem", { name: "Tidy up lessons" }).click();
+  const got = s.wait(10);
+  assert.equal(got.code, 0, "the send reached the agent");
+  assert.deepEqual(got.actions, [{ i: "__learning", type: "learning", do: "tidy" }]);
+  await main.locator(".learn-banner").getByText("Looking over your lessons…").waitFor();
+});
+
+// An area file holding `n` lessons.
+const lessonFile = (title, n) =>
+  `# ${title}\n\n` + Array.from({ length: n }, (_, i) => `### Lesson number ${i}\n- Kind: how-it-works\n- About: src/a.js\n- Noted: 2026-11-01, Implement\n`).join("\n");
+
+test("the banner nudges a tidy-up when lessons are near their limit, and only then", async (t) => {
+  const full = await dashboard(t, { ...PROJECT("on"), ".plan2code/lessons/general.md": lessonFile("General", 22) });
+  const banner = full.main.locator(".learn-banner");
+  await banner.waitFor();
+  assert.match(await textOf(banner), /Lessons are nearing their limit\. Tidy up\?/);
+  assert.equal(await banner.getByRole("button", { name: "Review" }).count(), 0, "nothing waits, so no Review");
+  await banner.getByRole("button", { name: "Tidy up" }).click();
+  const got = full.s.wait(10);
+  assert.equal(got.code, 0);
+  assert.deepEqual(got.actions, [{ i: "__learning", type: "learning", do: "tidy" }]);
+
+  // Beside the waiting line when lessons wait too.
+  const both = await dashboard(t, { ...PROJECT("on"), ".plan2code/lessons/web.md": lessonFile("Web", 30) }, (p) =>
+    writeWaiting(p, { id: "20261113-120000-ffffff", type: "lesson", text: "Waits.", noted: new Date().toISOString() })
+  );
+  const two = both.main.locator(".learn-banner");
+  await two.waitFor();
+  const text = await textOf(two);
+  assert.match(text, /1 lesson is waiting for your review/);
+  assert.match(text, /Lessons are nearing their limit\. Tidy up\?/);
+  assert.equal(await two.getByRole("button", { name: "Review" }).count(), 1);
+  assert.equal(await two.getByRole("button", { name: "Tidy up" }).count(), 1);
+
+  // One short of the line, in general.md and in an area: no nudge.
+  const below = await dashboard(t, { ...PROJECT("on"), ".plan2code/lessons/general.md": lessonFile("General", 21), ".plan2code/lessons/web.md": lessonFile("Web", 29) });
+  await below.main.locator("section.learn-row").waitFor();
+  assert.equal(await below.main.locator(".learn-banner").count(), 0, "no banner below the line");
 });
 
 test("a launch from a dashboard showing lessons waiting carries fromBanner", async (t) => {
@@ -291,6 +362,29 @@ test("lessons card: each row shows its own choice words, and nothing is chosen",
   assert.match(await textOf(rowOf(card, "log:abc")), /It would become this lesson:\s+Run npm run fix:eol for line endings\./);
   assert.match(await textOf(rowOf(card, "w-lesson")), /You said this\./);
   assert.match(await textOf(rowOf(card, "w-area")), /Noted on feature\/x\./);
+});
+
+test("lessons card: a tidy row shows the change, the lessons it replaces and its reason, and Reword edits the new wording", async (t) => {
+  const merge = { id: "w-merge", type: "tidy", change: "merge", text: "Merge 2 lessons into: Keep modules small and kebab-case their files.", why: "They say the same thing twice.", origin: "", note: "", flags: [], refused: null, area: "Source", areas: ["General", "Source"], targets: [{ id: "source/keep-modules-small", text: "Keep modules small", area: "Source" }, { id: "source/name-files-in-kebab-case", text: "Name files in kebab case", area: "Source" }], wording: "Keep modules small and kebab-case their files.", wordingWhy: "Both keep the tree easy to scan.", choices: ["Apply", "Reword", "Leave"] };
+  const retire = { id: "w-retire", type: "tidy", change: "retire", text: "Retire: Draw the page from state Reason: Git marks it.", why: "", origin: "", note: "", flags: [], refused: null, area: "", areas: ["General", "Source"], targets: [{ id: "web/draw-the-page-from-state", text: "Draw the page from state", area: "Web" }], choices: ["Apply", "Leave"] };
+  const { s, card } = await lessonsCard(t, CARD([merge, retire]));
+  assert.deepEqual(await choicesOf(rowOf(card, "w-merge")).allInnerTexts(), ["Apply", "Reword", "Leave"]);
+  assert.deepEqual(await choicesOf(rowOf(card, "w-retire")).allInnerTexts(), ["Apply", "Leave"], "no Reword where there is no wording");
+  const text = await textOf(rowOf(card, "w-merge"));
+  assert.match(text, /Merge 2 lessons into: Keep modules small and kebab-case their files\./);
+  assert.match(text, /It replaces these lessons:\s+Keep modules small\s+Name files in kebab case/);
+  assert.match(text, /Why: They say the same thing twice\./);
+  assert.match(await textOf(rowOf(card, "w-retire")), /Retire: Draw the page from state Reason: Git marks it\./);
+  // Reword opens on the new wording and its own Why, not on the sentence describing the change.
+  await rowOf(card, "w-merge").getByRole("button", { name: "Reword" }).click();
+  const words = rowOf(card, "w-merge").getByLabel("The lesson");
+  assert.equal(await words.inputValue(), "Keep modules small and kebab-case their files.");
+  assert.equal(await rowOf(card, "w-merge").getByLabel("Why").inputValue(), "Both keep the tree easy to scan.");
+  await words.fill("Keep modules small and name their files in kebab case.");
+  await rowOf(card, "w-retire").getByRole("button", { name: "Apply" }).click();
+  const got = await sendAndCollect(s);
+  const decisions = got.actions.find((a) => a.i === "lessons").decisions;
+  assert.deepEqual(decisions, [{ id: "w-merge", choice: "Reword", text: "Keep modules small and name their files in kebab case.", why: "Both keep the tree easy to scan." }, { id: "w-retire", choice: "Apply" }]);
 });
 
 test("lessons card: Keep on one row sends only that row, and the rest are left waiting", async (t) => {
@@ -406,6 +500,71 @@ test("lessons card: a refused row's Keep still chooses after its words go back a
   const got = await sendAndCollect(s);
   assert.deepEqual(got.actions.find((a) => a.i === "lessons").decisions, [
     { id: "w-bad", choice: "Reword", text: "Keys live in the team vault, never in the code.", why: "A full run hides the race." },
+  ]);
+});
+
+const CHECKED_ROWS = [
+  { ...ROWS[0], id: "c-fail", text: "Never run the full suite.", check: { fails: [{ test: "Search", reason: "It matches 3 files." }], doubts: [], passed: 3 } },
+  { ...ROWS[0], id: "c-doubt", text: "The handler is small.", tag: "Checked in an earlier run", check: { fails: [], doubts: [{ test: "Why", reason: "The reason repeats the lesson." }], passed: 3 } },
+  { ...ROWS[0], id: "c-pass", text: "Use the helper.", check: { fails: [], doubts: [], passed: 4 } },
+  { ...ROWS[0], id: "c-none", text: "Not looked at.", tag: "Not checked yet" },
+  { ...ROWS[0], id: "c-all", text: "Every test flagged.", check: { fails: [{ test: "Search", reason: "No match." }, { test: "Worth", reason: "Already in AGENTS.md." }], doubts: [{ test: "Why", reason: "Thin." }, { test: "Clear", reason: "Vague." }], passed: 0 } },
+];
+
+test("lessons card: a Fail, a Doubt and a pass show their lines, and the outline follows suggested without choosing", async (t) => {
+  const { card } = await lessonsCard(t, CARD(CHECKED_ROWS, { suggested: { "c-fail": "Drop", "c-pass": "Keep" }, checked: { how: "helper", count: 4, seconds: 40 } }));
+  const fail = rowOf(card, "c-fail");
+  assert.match(await textOf(fail.locator(".lesson-check.fail")), /^Fail Search: It matches 3 files\.$/);
+  assert.equal(await fail.locator(".lesson-check.doubt").count(), 0);
+  assert.match(await textOf(fail.locator(".lesson-check-pass")), /^Passed the other 3$/);
+  const doubt = rowOf(card, "c-doubt");
+  assert.match(await textOf(doubt.locator(".lesson-check.doubt")), /^Doubt Why: The reason repeats the lesson\.$/);
+  assert.equal(await doubt.locator(".lesson-check.fail").count(), 0);
+  assert.match(await textOf(doubt.locator(".lessons-tag")), /^Checked in an earlier run$/);
+  const pass = rowOf(card, "c-pass");
+  assert.equal(await pass.locator(".lesson-check.fail, .lesson-check.doubt").count(), 0, "a pass lists no verdicts");
+  assert.match(await textOf(pass.locator(".lesson-check-pass")), /^Passed the check$/);
+  const none = rowOf(card, "c-none");
+  assert.equal(await none.locator(".lesson-checks").count(), 0, "a row never checked draws nothing");
+  assert.match(await textOf(none.locator(".lessons-tag")), /^Not checked yet$/);
+  const all = rowOf(card, "c-all");
+  assert.equal(await all.locator(".lesson-check.fail, .lesson-check.doubt").count(), 4);
+  assert.equal(await all.locator(".lesson-check-pass").count(), 0, "no pass line when nothing passed");
+  const outlined = async (row) => row.locator(".lessons-choices button.is-suggested").allInnerTexts();
+  assert.deepEqual(await outlined(fail), ["Drop"]);
+  assert.deepEqual(await outlined(doubt), [], "a Doubt outlines nothing");
+  assert.deepEqual(await outlined(pass), ["Keep"]);
+  assert.equal(await card.locator('.lessons-choices [aria-pressed="true"]').count(), 0, "nothing is chosen for the person");
+  assert.notEqual(await styleOf(fail.locator(".lesson-check.fail"), "color"), await styleOf(pass.locator(".lesson-check-pass"), "color"), "a Fail is not drawn like the quiet pass line");
+  const px = async (loc) => parseFloat(await styleOf(loc, "fontSize"));
+  assert.ok((await px(pass.locator(".lesson-check-pass"))) < (await px(fail.locator(".lesson-check.fail"))), "the pass line is smaller than a verdict line");
+  assert.match(await textOf(card.locator(".lessons-checked")), /^Checked 4 lessons in 40 seconds by a fresh helper that could only read$/);
+});
+
+test("lessons card: the how-checked line names the same agent, or why the check could not run", async (t) => {
+  const same = await lessonsCard(t, CARD(CHECKED_ROWS.slice(2, 3), { checked: { how: "same-agent", count: 1, seconds: 1 } }));
+  assert.match(await textOf(same.card.locator(".lessons-checked")), /^Checked 1 lesson in 1 second by the same agent that noted them$/);
+  const failed = await lessonsCard(t, CARD(CHECKED_ROWS.slice(3, 4), { checked: { failed: "the checker answered with nothing usable." } }));
+  assert.match(await textOf(failed.card.locator(".lessons-checked")), /^The check could not run: the checker answered with nothing usable\.$/);
+  const bare = await lessonsCard(t, CARD(CHECKED_ROWS.slice(3, 4)));
+  assert.equal(await bare.card.locator(".lessons-checked").count(), 0, "no line without a check");
+});
+
+test("lessons card: Use this wording opens Reword filled with the suggestion, and what is sent is a normal Reword", async (t) => {
+  const row = { ...ROWS[0], id: "c-sug", check: { fails: [], doubts: [{ test: "Search", reason: "Two files match." }], passed: 3, suggestion: "Run one page test file alone first." } };
+  const { s, card } = await lessonsCard(t, CARD([row]));
+  const li = rowOf(card, "c-sug");
+  assert.match(await textOf(li.locator(".lesson-suggestion")), /^Suggested wording: Run one page test file alone first\./);
+  await li.getByRole("button", { name: "Use this wording" }).click();
+  const edit = li.locator(".lessons-edit");
+  await edit.waitFor();
+  assert.equal(await li.getByRole("button", { name: "Reword" }).getAttribute("aria-pressed"), "true");
+  const text = edit.getByLabel("The lesson");
+  assert.equal(await text.inputValue(), "Run one page test file alone first.", "it opens on the suggestion, not the row's own words");
+  await text.fill("Run one page test file alone first, then the rest.");
+  const got = await sendAndCollect(s);
+  assert.deepEqual(got.actions.find((a) => a.i === "lessons").decisions, [
+    { id: "c-sug", choice: "Reword", text: "Run one page test file alone first, then the rest.", why: "A full run hides the race." },
   ]);
 });
 

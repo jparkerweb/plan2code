@@ -126,6 +126,49 @@ export function writePause(cwd, paused, now) {
   return { paused: true, since };
 }
 
+/* ------------------------------------------------------------ follow counts */
+
+/** One line per "Following a lesson" moment, on this machine only. */
+function followsFile(cwd) {
+  return path.join(storeDir(cwd), "follows.ndjson");
+}
+
+/**
+ * Append one follow: `{"lesson":"<area>/<slug>","at":"<ISO>","skill":"<name>"}`.
+ * The file is only ever appended to, so two runs at once cannot lose a count.
+ */
+export function recordFollow(cwd, { lesson, skill }, now) {
+  const file = followsFile(cwd);
+  ensureDir(path.dirname(file));
+  const line = JSON.stringify({ lesson: String(lesson), at: toDate(now).toISOString(), skill: String(skill) });
+  fs.appendFileSync(file, line + "\n");
+}
+
+/** `{ <lesson id>: { count, last } }`, summed on read; an unreadable line is skipped. */
+export function followCounts(cwd) {
+  let text;
+  try {
+    text = fs.readFileSync(followsFile(cwd), "utf8");
+  } catch {
+    return {};
+  }
+  const counts = {};
+  for (const raw of text.split("\n")) {
+    if (!raw.trim()) continue;
+    let row;
+    try {
+      row = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (!row || typeof row.lesson !== "string" || typeof row.at !== "string" || Number.isNaN(Date.parse(row.at))) continue;
+    const c = counts[row.lesson] || (counts[row.lesson] = { count: 0, last: row.at });
+    c.count += 1;
+    if (Date.parse(row.at) > Date.parse(c.last)) c.last = row.at;
+  }
+  return counts;
+}
+
 /* ------------------------------------------------------ the waiting store */
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -232,9 +275,42 @@ export function learningState(cwd = process.cwd(), now, { prune = true } = {}) {
 
 /* ------------------------------------------------------- the console's view */
 
+// Where the dashboard starts to nudge a tidy-up: general.md holds at most 25
+// lessons (GENERAL_MAX in lessons.mjs, which the installed console does not
+// carry), so 22 is close; an area file has no cap, so 30 is a long file.
+export const NEAR_CAP_GENERAL = 22;
+export const NEAR_CAP_AREA = 30;
+
+/**
+ * Whether the project's saved lessons are crowded: general.md at 22 or more,
+ * or any other area file at 30 or more (counted as `### ` headings). Reads
+ * only; a missing folder or an unreadable file counts as not crowded.
+ */
+export function lessonsNearCap(cwd = process.cwd()) {
+  const dir = path.join(worktreeOf(cwd), ".plan2code", "lessons");
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return false;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".md")) continue;
+    let text;
+    try {
+      text = fs.readFileSync(path.join(dir, name), "utf8");
+    } catch {
+      continue;
+    }
+    const count = text.split(/\r?\n/).filter((l) => l.startsWith("### ")).length;
+    if (count >= (name === "general.md" ? NEAR_CAP_GENERAL : NEAR_CAP_AREA)) return true;
+  }
+  return false;
+}
+
 /**
  * What the dashboard's scan carries as `scan.learning`:
- * `{ state, pausedSince, waiting, oldestDays }`, or null when the state is
+ * `{ state, pausedSince, waiting, oldestDays, nearCap }`, or null when the state is
  * `unknown` (a settings format this console does not know: the page then
  * draws no row) or when the core fails, so a broken store never fails `open`.
  * Reads without pruning: the console server writes nothing here but the pause.
@@ -254,5 +330,6 @@ export function learningScan(cwd = process.cwd(), { now, read = learningState } 
     pausedSince: s.pausedSince || null,
     waiting: Number.isInteger(waiting.count) ? waiting.count : 0,
     oldestDays: Number.isInteger(waiting.oldestDays) ? waiting.oldestDays : 0,
+    nearCap: s.state === "on" && lessonsNearCap(cwd),
   };
 }

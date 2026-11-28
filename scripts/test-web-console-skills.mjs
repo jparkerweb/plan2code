@@ -399,7 +399,7 @@ test("Implement's card launches Implement + Review when Review is ticked", () =>
   assert.equal(launchVariant(quick, true), quick, "a card with no Review box is unchanged");
 });
 
-test("helper-strength.md ships in the seventeen skills that start helpers, and in no other", () => {
+test("helper-strength.md ships in the eighteen skills that start helpers (the dashboard for its lesson check only), and in no other", () => {
   // npm test has just built skills/; a direct run builds it so the check never reads a stale tree.
   if (process.env.npm_lifecycle_event !== "test") {
     execFileSync(process.execPath, [path.join(ROOT, "install.js"), "--build-skills"], { stdio: "ignore" });
@@ -407,6 +407,7 @@ test("helper-strength.md ships in the seventeen skills that start helpers, and i
   const built = path.join(ROOT, "skills");
   const having = fs.readdirSync(built).filter((dir) => fs.existsSync(path.join(built, dir, "references", "helper-strength.md")));
   assert.deepEqual(having.sort(), [
+    "plan2code",
     "plan2code-0-pathfinder",
     "plan2code-1-plan",
     "plan2code-1b-revise-plan",

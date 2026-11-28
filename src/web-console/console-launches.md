@@ -26,7 +26,7 @@ The ✕ on a chip (after the page's two-step confirm) sends `session:[{"i":"__de
 
 ## A Learning action
 
-The Learning row and banner send `session:[{"i":"__learning","do":"switch-on"}]` (`do` is `review`, `switch-on`, `switch-off`, `move-log` or `remove`; Remove was confirmed on the page). No hop: you stay the dashboard. Run `lessons.mjs` as the dashboard skill's "A Learning action arrives" says (a `review` while Learning is not set up is `list --first-ask` and the first ask, before anything is kept; the lessons card is the only question this page shows), then `open --resume <sid> --no-open --workflow dashboard` and post the menu again with `--wait`. Pause for me never reaches you: the page saves it itself. A `__launch` with `fromBanner: true` came from a dashboard showing lessons waiting.
+The Learning row and banner send `session:[{"i":"__learning","do":"switch-on"}]` (`do` is `review`, `switch-on`, `switch-off`, `move-log`, `remove` or `tidy`; Remove was confirmed on the page). No hop: you stay the dashboard. Run `lessons.mjs` as the dashboard skill's "A Learning action arrives" says (a `review` while Learning is not set up is `list --first-ask` and the first ask, before anything is kept; the lessons card is the only question this page shows), then `open --resume <sid> --no-open --workflow dashboard` and post the menu again with `--wait`. Pause for me never reaches you: the page saves it itself. A `__launch` with `fromBanner: true` came from a dashboard showing lessons waiting.
 
 ## A strength suggestion
 

@@ -33,7 +33,7 @@ Check if `./AGENTS.md` exists:
 
    Do not proceed until user confirms continuing without `AGENTS.md`.
 
-**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`); `<S>` is `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally.
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`); note only what the person asks you to remember (references/lessons.md, While working); `<S>` is `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally.
 
 ## Rules
 

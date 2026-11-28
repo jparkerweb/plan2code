@@ -24,7 +24,7 @@ When this file is `references/ui-prototype.md` inside Pathfinder, Plan, Revise p
 
 Read `./AGENTS.md` when it exists: its stack, its style files and its conventions help Step 1 find the look. Its absence does not block this skill.
 
-**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`); note only what the person asks you to remember (references/lessons.md, While working).
 
 ## Scripts
 

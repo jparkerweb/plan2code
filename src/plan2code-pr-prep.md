@@ -14,7 +14,7 @@ The FIRST thing you do, before anything else in this file, before reading the br
 
 Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything it says about slow suites. PR Prep still works without one: the scripts find the project's commands from its config files, and nothing here needs Plan2Code's specs.
 
-**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`); note only what the person asks you to remember (references/lessons.md, While working).
 
 ## Scripts
 

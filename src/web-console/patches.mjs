@@ -856,9 +856,12 @@ export const ITEM_KINDS = new Set([
 // type and its choices, and nothing arrives already chosen (FR-14, FR-15).
 // `gone` is a saved lesson whose files no longer exist: the list offers it
 // with a doubt's words.
-export const LESSON_ROW_TYPES = ["lesson", "doubt", "gone", "agents-fix", "log-line", "area"];
-const LESSON_ROW_TEXT = ["why", "kind", "area", "origin", "note", "before", "after", "found", "heading", "file", "name"];
-const LESSON_ROW_LISTS = ["about", "areas", "flags", "lessons", "paths"];
+// `tidy` is a proposed change to saved lessons (merge, reword, retire or
+// move): `change` names it, `targets` the lessons it touches, and a merge or
+// reword carries its new `wording` and that wording's `wordingWhy`.
+export const LESSON_ROW_TYPES = ["lesson", "doubt", "gone", "agents-fix", "tidy", "log-line", "area"];
+const LESSON_ROW_TEXT = ["why", "kind", "area", "origin", "note", "before", "after", "found", "heading", "file", "name", "change", "wording", "wordingWhy"];
+const LESSON_ROW_LISTS = ["about", "areas", "flags", "lessons", "paths", "targets"];
 const LESSONS_RIGHT = {
   kind: "lessons",
   rows: [{ id: "w1", type: "lesson", text: "Run a page test with node scripts/node-test.mjs <file>.", choices: ["Keep", "Reword", "Drop"] }],
@@ -867,6 +870,49 @@ const FIRST_ASK_RIGHT = {
   kind: "lessons",
   firstAsk: { lesson: { id: "w1", text: "..." }, sentences: ["...", "...", "..."], yes: "Switch Learning on", no: "Not for this project", later: "..." },
 };
+
+// What the check found, as lessons.mjs list puts it on a row (`check`) and on
+// the card (`checked`), and the two words a row's `tag` may carry.
+export const LESSON_ROW_TAGS = ["Checked in an earlier run", "Not checked yet"];
+const LESSON_CHECK_KEYS = ["fails", "doubts", "passed", "suggestion"];
+const CHECK_RIGHT = { check: { fails: [{ test: "Search", reason: "It matches 3 files." }], doubts: [], passed: 3, suggestion: "A shorter wording." } };
+const CHECKED_RIGHT = { checked: { how: "helper", count: 6, seconds: 40 } };
+const isCount = (n) => Number.isInteger(n) && n >= 0;
+
+function lessonCheckProblems(check, name, at) {
+  if (!isPlainObject(check)) return [rule(at, name, "must be the { fails, doubts, passed, suggestion? } lessons.mjs gave", CHECK_RIGHT)];
+  const problems = [];
+  for (const key of Object.keys(check)) {
+    if (!LESSON_CHECK_KEYS.includes(key)) problems.push(rule(at, `${name} "${key}"`, `is not a field of a check. Use ${LESSON_CHECK_KEYS.join(", ")}`, CHECK_RIGHT));
+  }
+  for (const key of ["fails", "doubts"]) {
+    const list = check[key];
+    if (list == null) continue;
+    if (!Array.isArray(list) || list.length > 4) {
+      problems.push(rule(at, `${name} ${key}`, "must be an array of at most 4 { test, reason } entries", CHECK_RIGHT));
+      continue;
+    }
+    list.forEach((e, i) => {
+      const ok = isPlainObject(e) && typeof e.test === "string" && typeof e.reason === "string" && e.reason.length <= 240;
+      if (!ok) problems.push(rule(at, `${name} ${key}[${i}]`, "must be { test, reason }, two strings, the reason at most 240 characters", CHECK_RIGHT));
+    });
+  }
+  if (check.passed != null && !(Number.isInteger(check.passed) && check.passed >= 0 && check.passed <= 4)) {
+    problems.push(rule(at, `${name} passed`, "must be a whole number from 0 to 4", CHECK_RIGHT));
+  }
+  if (check.suggestion != null && (typeof check.suggestion !== "string" || check.suggestion.length > 200)) {
+    problems.push(rule(at, `${name} suggestion`, "must be a string of at most 200 characters, or left out", CHECK_RIGHT));
+  }
+  return problems;
+}
+
+function lessonsCheckedProblems(checked, at) {
+  const how = isPlainObject(checked) && ["helper", "same-agent"].includes(checked.how);
+  const ran = how && isCount(checked.count) && isCount(checked.seconds) && Object.keys(checked).every((k) => ["how", "count", "seconds"].includes(k));
+  const failed = isPlainObject(checked) && typeof checked.failed === "string" && checked.failed.length <= 200 && Object.keys(checked).length === 1;
+  if (ran || failed) return [];
+  return [rule(at, "checked", 'must be { how: "helper" or "same-agent", count, seconds } (whole numbers), or { failed } with a reason of at most 200 characters', CHECKED_RIGHT)];
+}
 
 // What is wrong with a lessons item, as rule() sentences.
 function lessonsProblems(item, at) {
@@ -923,7 +969,12 @@ function lessonsProblems(item, at) {
     if (row.refused != null && !isPlainObject(row.refused)) {
       problems.push(rule(at, `${name} refused`, "must be the { pattern, part } lessons.mjs gave, or null", { refused: { pattern: "aws-access-key", part: "AKIA" } }));
     }
+    if (row.check != null) problems.push(...lessonCheckProblems(row.check, `${name} check`, at));
+    if (row.tag != null && !LESSON_ROW_TAGS.includes(row.tag)) {
+      problems.push(rule(at, `${name} tag`, `must be one of ${LESSON_ROW_TAGS.map((t) => `"${t}"`).join(", ")}, or left out`, { tag: LESSON_ROW_TAGS[0] }));
+    }
   });
+  if (item.checked != null) problems.push(...lessonsCheckedProblems(item.checked, at));
   // The agent's answer to Ask for suggestions, readable by the page: row id to
   // one of that row's own choice words. It outlines a button; it never picks.
   const sug = item.suggested;
