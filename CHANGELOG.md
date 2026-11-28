@@ -4,6 +4,26 @@ All notable changes to Plan2Code will be documented in this file.
 
 <!-- Format from 3.1.0 on: `## vX.Y.Z (YYYY-MM-DD)` with the date from version.json; a minor release opens with a three-bullet `### Highlights`; sections run Added, Changed, Fixed; game changes sit under one Activities line; tooling and test lines go under "For contributors". Older headings have no date and are not backfilled. -->
 
+## v3.2.0 (2026-11-28)
+
+### Highlights
+
+- Every waiting lesson is graded by a separate check (true, worth keeping, overlap, clear) before the lessons card asks you to approve it.
+- Tidy up proposes merging, rewording, retiring or moving saved lessons when a file grows crowded.
+- The lessons reader shows how often each lesson was followed, and every skill can now remember what you ask it to.
+
+### ✨ Added
+
+- **Learning**: before the lessons card asks for approval, a fresh read-only helper (or the same agent in a separate step) grades every waiting lesson on four tests; each row shows its Fails and Doubts with reasons, the card says who checked and how long it took, and a suggested wording can be taken with Use this wording.
+- **Learning**: a Tidy up action (in the banner when lessons near their limit, and in the dashboard's menu) proposes merging, rewording, retiring or moving saved lessons, each graded by the same check before you decide.
+- **Learning**: the lessons reader shows under each lesson how often it was followed and when last (recorded on this machine only).
+- **Learning**: a lesson can carry a search (text that should always, or never, appear in some files), so the check and later reads test it against the code and raise a doubt when it stops agreeing.
+
+### 🔧 Changed
+
+- **Learning**: every skill that reads lessons now notes what you ask it to remember (asking why when you gave no reason); the read-only skills' lessons wait for the next lessons card or the dashboard's Review.
+- **For contributors**: new lessons script and page tests cover the check, tidy-ups, follow counts and the near-limit nudge.
+
 ## v3.1.5 (2026-11-23)
 
 ### 🐛 Fixed
